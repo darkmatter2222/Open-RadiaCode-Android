@@ -15,6 +15,9 @@ object Prefs {
     private const val KEY_POLL_INTERVAL_MS = "poll_interval_ms"
     private const val KEY_LAST_CSV_TS_MS = "last_csv_ts_ms"
 
+    private const val KEY_SERVICE_STATUS = "service_status"
+    private const val KEY_SERVICE_STATUS_TS_MS = "service_status_ts_ms"
+
     fun getPreferredAddress(context: Context): String? {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getString(KEY_PREFERRED_ADDRESS, null)
@@ -95,5 +98,26 @@ object Prefs {
             .edit()
             .putLong(KEY_LAST_CSV_TS_MS, timestampMs)
             .apply()
+    }
+
+    data class ServiceStatus(
+        val message: String,
+        val timestampMs: Long,
+    )
+
+    fun setServiceStatus(context: Context, message: String, timestampMs: Long = System.currentTimeMillis()) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SERVICE_STATUS, message)
+            .putLong(KEY_SERVICE_STATUS_TS_MS, timestampMs)
+            .apply()
+    }
+
+    fun getServiceStatus(context: Context): ServiceStatus? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val msg = prefs.getString(KEY_SERVICE_STATUS, null)?.trim().orEmpty()
+        val ts = prefs.getLong(KEY_SERVICE_STATUS_TS_MS, 0L)
+        if (msg.isEmpty() || ts <= 0L) return null
+        return ServiceStatus(message = msg, timestampMs = ts)
     }
 }

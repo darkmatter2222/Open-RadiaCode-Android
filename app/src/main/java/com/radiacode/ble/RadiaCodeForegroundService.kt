@@ -198,6 +198,7 @@ class RadiaCodeForegroundService : Service() {
     private fun notifyUpdate(title: String, text: String) {
         try {
             val nm = getSystemService(NotificationManager::class.java) ?: return
+            Prefs.setServiceStatus(this, text)
             nm.notify(NOTIF_ID, buildNotification(title, text))
         } catch (t: Throwable) {
             Log.e(TAG, "notify failed", t)

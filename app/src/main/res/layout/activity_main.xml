@@ -35,6 +35,52 @@
                 android:text="Status: —"
                 android:textSize="14sp" />
 
+            <TextView
+                android:id="@+id/serviceStatusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Service: —"
+                android:textSize="14sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/autoConnectSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Auto-connect"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/pollIntervalButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Poll interval: —"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/findDevicesButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Find devices" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/reconnectButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Reconnect" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/shareCsvButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Share readings CSV"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -127,6 +173,14 @@
                         android:layout_width="match_parent"
                         android:layout_height="140dp"
                         android:layout_marginTop="10dp" />
+
+                    <TextView
+                        android:id="@+id/chartStatsText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text=""
+                        android:textSize="12sp" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

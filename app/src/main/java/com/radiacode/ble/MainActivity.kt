@@ -14,12 +14,16 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.switchmaterial.SwitchMaterial
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : AppCompatActivity() {
 
@@ -32,10 +36,18 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
     private lateinit var statusText: TextView
+    private lateinit var serviceStatusText: TextView
     private lateinit var doseText: TextView
     private lateinit var cpsText: TextView
     private lateinit var readingText: TextView
     private lateinit var doseChart: SparklineView
+    private lateinit var chartStatsText: TextView
+
+    private lateinit var autoConnectSwitch: SwitchMaterial
+    private lateinit var pollIntervalButton: MaterialButton
+    private lateinit var findDevicesButton: MaterialButton
+    private lateinit var reconnectButton: MaterialButton
+    private lateinit var shareCsvButton: MaterialButton
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -78,14 +90,58 @@ class MainActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         statusText = findViewById(R.id.statusText)
+        serviceStatusText = findViewById(R.id.serviceStatusText)
         doseText = findViewById(R.id.doseText)
         cpsText = findViewById(R.id.cpsText)
         readingText = findViewById(R.id.readingText)
         doseChart = findViewById(R.id.doseChart)
+        chartStatsText = findViewById(R.id.chartStatsText)
+
+        autoConnectSwitch = findViewById(R.id.autoConnectSwitch)
+        pollIntervalButton = findViewById(R.id.pollIntervalButton)
+        findDevicesButton = findViewById(R.id.findDevicesButton)
+        reconnectButton = findViewById(R.id.reconnectButton)
+        shareCsvButton = findViewById(R.id.shareCsvButton)
 
         setSupportActionBar(toolbar)
 
         updateStatus("Starting")
+
+        autoConnectSwitch.isChecked = Prefs.isAutoConnectEnabled(this)
+        autoConnectSwitch.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setAutoConnectEnabled(this, isChecked)
+            if (isChecked) {
+                RadiaCodeForegroundService.start(this)
+                updateStatus("Auto-connect enabled")
+            } else {
+                RadiaCodeForegroundService.stop(this)
+                updateStatus("Auto-connect disabled")
+            }
+        }
+
+        pollIntervalButton.setOnClickListener {
+            val next = when (Prefs.getPollIntervalMs(this, 1000L)) {
+                1000L -> 2000L
+                2000L -> 5000L
+                else -> 1000L
+            }
+            Prefs.setPollIntervalMs(this, next)
+            RadiaCodeForegroundService.reconnect(this)
+            updatePollIntervalUi(next)
+        }
+
+        findDevicesButton.setOnClickListener {
+            findDevicesLauncher.launch(android.content.Intent(this, FindDevicesActivity::class.java))
+        }
+
+        reconnectButton.setOnClickListener {
+            RadiaCodeForegroundService.reconnect(this)
+            updateStatus("Reconnect requested")
+        }
+
+        shareCsvButton.setOnClickListener {
+            shareCsv()
+        }
 
         if (!hasAllPermissions()) {
             ActivityCompat.requestPermissions(this, requiredPermissions, PERMISSION_REQUEST_CODE)
@@ -232,6 +288,7 @@ class MainActivity : AppCompatActivity() {
         if (Prefs.isAutoConnectEnabled(this) && !preferred.isNullOrBlank()) {
             RadiaCodeForegroundService.start(this)
         }
+        updatePollIntervalUi(Prefs.getPollIntervalMs(this, 1000L))
         startUiLoop()
     }
 
@@ -243,6 +300,7 @@ class MainActivity : AppCompatActivity() {
                 val preferred = Prefs.getPreferredAddress(this@MainActivity)
                 val auto = Prefs.isAutoConnectEnabled(this@MainActivity)
                 val last = Prefs.getLastReading(this@MainActivity)
+                val svc = Prefs.getServiceStatus(this@MainActivity)
 
                 updateStatus(
                     when {
@@ -252,22 +310,31 @@ class MainActivity : AppCompatActivity() {
                     }
                 )
 
+                updateServiceStatus(svc)
+
+                if (autoConnectSwitch.isChecked != auto) {
+                    autoConnectSwitch.isChecked = auto
+                }
+
                 if (last == null) {
                     updateDose(null)
                     updateCps(null)
                     updateReading("Waiting for readings…")
+                    updateChartStats(emptyList())
                 } else {
                     updateDose(last.uSvPerHour)
                     updateCps(last.cps)
                     val localTime = Instant.ofEpochMilli(last.timestampMs)
                         .atZone(ZoneId.systemDefault())
                         .toLocalTime()
-                    updateReading("Updated: ${timeFmt.format(localTime)}")
+                    val ageSec = max(0L, (System.currentTimeMillis() - last.timestampMs) / 1000L)
+                    updateReading("Updated: ${timeFmt.format(localTime)} • ${ageSec}s ago")
 
                     if (last.timestampMs != lastReadingTimestampMs) {
                         lastReadingTimestampMs = last.timestampMs
                         addDoseSample(last.uSvPerHour)
                         updateDoseChart(doseHistory.toList())
+                        updateChartStats(doseHistory.toList())
                     }
                 }
 
@@ -322,9 +389,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateChartStats(samples: List<Float>) {
+        mainHandler.post {
+            if (samples.isEmpty()) {
+                chartStatsText.text = ""
+                return@post
+            }
+            var minV = Float.POSITIVE_INFINITY
+            var maxV = Float.NEGATIVE_INFINITY
+            var sum = 0.0f
+            for (v in samples) {
+                minV = min(minV, v)
+                maxV = max(maxV, v)
+                sum += v
+            }
+            val avg = sum / max(1, samples.size)
+            chartStatsText.text = String.format(Locale.US, "Min %.3f • Avg %.3f • Max %.3f μSv/h", minV, avg, maxV)
+        }
+    }
+
     private fun updateReading(msg: String) {
         mainHandler.post {
             readingText.text = msg
         }
+    }
+
+    private fun updateServiceStatus(status: Prefs.ServiceStatus?) {
+        mainHandler.post {
+            if (status == null) {
+                serviceStatusText.text = "Service: —"
+            } else {
+                val ageSec = max(0L, (System.currentTimeMillis() - status.timestampMs) / 1000L)
+                serviceStatusText.text = "Service: ${status.message} • ${ageSec}s ago"
+            }
+        }
+    }
+
+    private fun updatePollIntervalUi(intervalMs: Long) {
+        val s = when (intervalMs) {
+            1000L -> "1s"
+            2000L -> "2s"
+            5000L -> "5s"
+            else -> "${intervalMs}ms"
+        }
+        pollIntervalButton.text = "Poll interval: $s"
     }
 }
