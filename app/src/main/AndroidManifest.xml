@@ -40,6 +40,11 @@
             android:name=".FindDevicesActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ChartFocusActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

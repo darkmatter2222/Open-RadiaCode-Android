@@ -18,6 +18,16 @@ object Prefs {
     private const val KEY_SERVICE_STATUS = "service_status"
     private const val KEY_SERVICE_STATUS_TS_MS = "service_status_ts_ms"
 
+    private const val KEY_WINDOW_SECONDS = "window_seconds"
+    private const val KEY_SMOOTH_SECONDS = "smooth_seconds"
+    private const val KEY_PAUSE_LIVE = "pause_live"
+    private const val KEY_DOSE_UNIT = "dose_unit"
+    private const val KEY_COUNT_UNIT = "count_unit"
+    private const val KEY_COMPACT_LAYOUT = "compact_layout"
+
+    enum class DoseUnit { USV_H, NSV_H }
+    enum class CountUnit { CPS, CPM }
+
     fun getPreferredAddress(context: Context): String? {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getString(KEY_PREFERRED_ADDRESS, null)
@@ -79,6 +89,88 @@ object Prefs {
             v > 60_000L -> 60_000L
             else -> v
         }
+    }
+
+    fun getWindowSeconds(context: Context, defaultSeconds: Int = 60): Int {
+        val v = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_WINDOW_SECONDS, defaultSeconds)
+        return when (v) {
+            10, 60, 600, 3600 -> v
+            else -> defaultSeconds
+        }
+    }
+
+    fun setWindowSeconds(context: Context, seconds: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_WINDOW_SECONDS, seconds)
+            .apply()
+    }
+
+    fun getSmoothSeconds(context: Context, defaultSeconds: Int = 0): Int {
+        val v = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_SMOOTH_SECONDS, defaultSeconds)
+        return when (v) {
+            0, 5, 30 -> v
+            else -> defaultSeconds
+        }
+    }
+
+    fun setSmoothSeconds(context: Context, seconds: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_SMOOTH_SECONDS, seconds)
+            .apply()
+    }
+
+    fun isPauseLiveEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PAUSE_LIVE, false)
+    }
+
+    fun setPauseLiveEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_PAUSE_LIVE, enabled)
+            .apply()
+    }
+
+    fun getDoseUnit(context: Context, default: DoseUnit = DoseUnit.USV_H): DoseUnit {
+        val raw = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_DOSE_UNIT, default.name) ?: default.name
+        return runCatching { DoseUnit.valueOf(raw) }.getOrDefault(default)
+    }
+
+    fun setDoseUnit(context: Context, unit: DoseUnit) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DOSE_UNIT, unit.name)
+            .apply()
+    }
+
+    fun getCountUnit(context: Context, default: CountUnit = CountUnit.CPS): CountUnit {
+        val raw = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_COUNT_UNIT, default.name) ?: default.name
+        return runCatching { CountUnit.valueOf(raw) }.getOrDefault(default)
+    }
+
+    fun setCountUnit(context: Context, unit: CountUnit) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_COUNT_UNIT, unit.name)
+            .apply()
+    }
+
+    fun isCompactLayoutEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_COMPACT_LAYOUT, false)
+    }
+
+    fun setCompactLayoutEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_COMPACT_LAYOUT, enabled)
+            .apply()
     }
 
     fun setPollIntervalMs(context: Context, intervalMs: Long) {

@@ -36,6 +36,11 @@ class RadiaCodeForegroundService : Service() {
         private const val ACTION_STOP = "com.radiacode.ble.action.STOP"
         private const val ACTION_RECONNECT = "com.radiacode.ble.action.RECONNECT"
 
+        const val ACTION_READING = "com.radiacode.ble.action.READING"
+        const val EXTRA_TS_MS = "ts_ms"
+        const val EXTRA_USV_H = "usv_h"
+        const val EXTRA_CPS = "cps"
+
         private const val EXTRA_ADDRESS = "address"
 
         private const val DEFAULT_POLL_MS = 1000L
@@ -327,6 +332,18 @@ class RadiaCodeForegroundService : Service() {
                         val timestampMs = System.currentTimeMillis()
                         Prefs.setLastReading(this, uSvPerHour, rt.countRate, timestampMs)
                         appendReadingCsvIfNew(timestampMs, uSvPerHour, rt.countRate)
+
+                        // Live update for in-app charts/history.
+                        try {
+                            val i = Intent(ACTION_READING)
+                                .setPackage(packageName)
+                                .putExtra(EXTRA_TS_MS, timestampMs)
+                                .putExtra(EXTRA_USV_H, uSvPerHour)
+                                .putExtra(EXTRA_CPS, rt.countRate)
+                            sendBroadcast(i)
+                        } catch (_: Throwable) {
+                        }
+
                         RadiaCodeWidgetProvider.updateAll(this)
                         notifyUpdate(
                             "RadiaCode",
