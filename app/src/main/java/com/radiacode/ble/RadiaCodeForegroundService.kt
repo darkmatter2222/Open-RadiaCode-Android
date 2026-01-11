@@ -183,8 +183,8 @@ class RadiaCodeForegroundService : Service() {
         val existing = nm.getNotificationChannel(CHANNEL_ID)
         if (existing != null) return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "RadiaCode live", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "RadiaCode background connection and live reading"
+            NotificationChannel(CHANNEL_ID, "Open RadioCode live", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Open RadioCode background connection and live reading"
             }
         )
     }
@@ -243,7 +243,7 @@ class RadiaCodeForegroundService : Service() {
         client?.close()
         client = null
 
-        notifyUpdate("RadiaCode", reason)
+        notifyUpdate("Open RadioCode", reason)
     }
 
     private fun startOrRestartSession(why: String) {
@@ -259,12 +259,12 @@ class RadiaCodeForegroundService : Service() {
 
             val address = targetAddress
             if (address.isNullOrBlank()) {
-                notifyUpdate("RadiaCode", "No preferred device")
+                notifyUpdate("Open RadioCode", "No preferred device")
                 return@execute
             }
 
             if (!hasBlePermission()) {
-                notifyUpdate("RadiaCode", "Bluetooth permission missing; open app")
+                notifyUpdate("Open RadioCode", "Bluetooth permission missing; open app")
                 return@execute
             }
 
@@ -278,7 +278,7 @@ class RadiaCodeForegroundService : Service() {
             val device = try {
                 adapter.getRemoteDevice(address)
             } catch (t: Throwable) {
-                notifyUpdate("RadiaCode", "Bad preferred address")
+                notifyUpdate("Open RadioCode", "Bad preferred address")
                 return@execute
             }
 
@@ -287,7 +287,7 @@ class RadiaCodeForegroundService : Service() {
                 if (msg.startsWith("Disconnected") || msg.startsWith("GATT error") || msg.startsWith("Service discovery failed")) {
                     scheduleReconnect(msg)
                 }
-                notifyUpdate("RadiaCode", msg)
+                notifyUpdate("Open RadioCode", msg)
             }
 
             client = c
@@ -299,7 +299,7 @@ class RadiaCodeForegroundService : Service() {
                 .thenCompose { c.initializeSession() }
                 .thenRun {
                     reconnectAttempts = 0
-                    notifyUpdate("RadiaCode", "Connected")
+                    notifyUpdate("Open RadioCode", "Connected")
                     startPolling()
                 }
                 .exceptionally { t ->
@@ -346,7 +346,7 @@ class RadiaCodeForegroundService : Service() {
 
                         RadiaCodeWidgetProvider.updateAll(this)
                         notifyUpdate(
-                            "RadiaCode",
+                            "Open RadioCode",
                             "${"%.3f".format(uSvPerHour)} μSv/h • ${"%.1f".format(rt.countRate)} cps"
                         )
                     }
@@ -385,7 +385,7 @@ class RadiaCodeForegroundService : Service() {
         val addr = targetAddress ?: Prefs.getPreferredAddress(this)
         if (!addr.isNullOrBlank()) {
             targetAddress = addr
-            notifyUpdate("RadiaCode", "Reconnecting… ($reason)")
+            notifyUpdate("Open RadioCode", "Reconnecting… ($reason)")
             startOrRestartSession("forceReconnect")
         } else {
             updateForeground("No preferred device", "Open app and pick a preferred device")
@@ -437,7 +437,7 @@ class RadiaCodeForegroundService : Service() {
         reconnectAttempts += 1
         val backoff = min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * reconnectAttempts.toLong())
         Log.d(TAG, "service scheduleReconnect in ${backoff}ms: $reason")
-        notifyUpdate("RadiaCode", "Reconnecting… ($reason)")
+        notifyUpdate("Open RadioCode", "Reconnecting… ($reason)")
 
         reconnectTask = scheduler.schedule(
             { startOrRestartSession("reconnect") },

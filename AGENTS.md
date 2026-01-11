@@ -31,8 +31,12 @@ Optional checks:
 
 ## App identity
 
-- Launcher name: **RadiaCode Reader**
+- Launcher name: **Open RadioCode**
 - Package: `com.radiacode.ble`
+
+## UI spec
+
+See [docs/UI.md](docs/UI.md) for the canonical UI/UX spec.
 
 ## Notes
 

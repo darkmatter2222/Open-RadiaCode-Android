@@ -8,6 +8,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.TextView
+import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
 import androidx.core.content.FileProvider
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -15,6 +18,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.navigation.NavigationView
 import com.google.android.material.switchmaterial.SwitchMaterial
 import java.io.File
 import java.util.ArrayDeque
@@ -34,30 +38,49 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_CHART_POINTS = 800
     }
 
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var navView: NavigationView
     private lateinit var toolbar: MaterialToolbar
-    private lateinit var statusText: TextView
-    private lateinit var serviceStatusText: TextView
-    private lateinit var doseText: TextView
-    private lateinit var cpsText: TextView
-    private lateinit var readingText: TextView
+
+    private lateinit var panelDashboard: android.view.View
+    private lateinit var panelCharts: android.view.View
+    private lateinit var panelDevice: android.view.View
+    private lateinit var panelDisplay: android.view.View
+    private lateinit var panelLogs: android.view.View
+
+    private lateinit var statusLine: TextView
+    private lateinit var serviceLine: TextView
+    private lateinit var primaryDoseText: TextView
+    private lateinit var primaryCountText: TextView
+    private lateinit var ageText: TextView
+
+    private lateinit var dashboardDoseChart: SparklineView
+
     private lateinit var doseChart: SparklineView
     private lateinit var chartStatsText: TextView
-
     private lateinit var cpsChart: SparklineView
     private lateinit var cpsChartStatsText: TextView
     private lateinit var doseChartTitle: TextView
     private lateinit var cpsChartTitle: TextView
 
+    private lateinit var preferredDeviceText: TextView
     private lateinit var autoConnectSwitch: SwitchMaterial
-    private lateinit var pauseSwitch: SwitchMaterial
-    private lateinit var compactSwitch: SwitchMaterial
-    private lateinit var pollIntervalButton: MaterialButton
-    private lateinit var windowButton: MaterialButton
-    private lateinit var smoothingButton: MaterialButton
-    private lateinit var thresholdButton: MaterialButton
-    private lateinit var unitButton: MaterialButton
     private lateinit var findDevicesButton: MaterialButton
     private lateinit var reconnectButton: MaterialButton
+    private lateinit var stopServiceButton: MaterialButton
+
+    private lateinit var rowWindow: android.view.View
+    private lateinit var rowSmoothing: android.view.View
+    private lateinit var rowUnits: android.view.View
+    private lateinit var rowThreshold: android.view.View
+    private lateinit var rowPause: android.view.View
+
+    private lateinit var valueWindow: TextView
+    private lateinit var valueSmoothing: TextView
+    private lateinit var valueUnits: TextView
+    private lateinit var valueThreshold: TextView
+    private lateinit var valuePause: TextView
+
     private lateinit var shareCsvButton: MaterialButton
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -79,15 +102,6 @@ class MainActivity : AppCompatActivity() {
 
             val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
             if (paused) return
-
-            val ts = intent.getLongExtra(RadiaCodeForegroundService.EXTRA_TS_MS, 0L)
-            val uSvH = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_USV_H, Float.NaN)
-            val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, Float.NaN)
-            if (ts <= 0L || !uSvH.isFinite() || !cps.isFinite()) return
-
-            ensureHistoryCapacity()
-            doseHistory.add(ts, uSvH)
-            cpsHistory.add(ts, cps)
 
             // Trigger UI loop fast-path.
             lastReadingTimestampMs = 0L
@@ -129,82 +143,106 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        drawerLayout = findViewById(R.id.drawerLayout)
+        navView = findViewById(R.id.navView)
         toolbar = findViewById(R.id.toolbar)
-        statusText = findViewById(R.id.statusText)
-        serviceStatusText = findViewById(R.id.serviceStatusText)
-        doseText = findViewById(R.id.doseText)
-        cpsText = findViewById(R.id.cpsText)
-        readingText = findViewById(R.id.readingText)
+        setSupportActionBar(toolbar)
+
+        panelDashboard = findViewById(R.id.panelDashboard)
+        panelCharts = findViewById(R.id.panelCharts)
+        panelDevice = findViewById(R.id.panelDevice)
+        panelDisplay = findViewById(R.id.panelDisplay)
+        panelLogs = findViewById(R.id.panelLogs)
+
+        statusLine = findViewById(R.id.statusLine)
+        serviceLine = findViewById(R.id.serviceLine)
+        primaryDoseText = findViewById(R.id.primaryDoseText)
+        primaryCountText = findViewById(R.id.primaryCountText)
+        ageText = findViewById(R.id.ageText)
+
+        dashboardDoseChart = findViewById(R.id.dashboardDoseChart)
+
         doseChart = findViewById(R.id.doseChart)
         chartStatsText = findViewById(R.id.chartStatsText)
-
         cpsChart = findViewById(R.id.cpsChart)
         cpsChartStatsText = findViewById(R.id.cpsChartStatsText)
         doseChartTitle = findViewById(R.id.doseChartTitle)
         cpsChartTitle = findViewById(R.id.cpsChartTitle)
 
+        preferredDeviceText = findViewById(R.id.preferredDeviceText)
         autoConnectSwitch = findViewById(R.id.autoConnectSwitch)
-        pauseSwitch = findViewById(R.id.pauseSwitch)
-        compactSwitch = findViewById(R.id.compactSwitch)
-        pollIntervalButton = findViewById(R.id.pollIntervalButton)
-        windowButton = findViewById(R.id.windowButton)
-        smoothingButton = findViewById(R.id.smoothingButton)
-        thresholdButton = findViewById(R.id.thresholdButton)
-        unitButton = findViewById(R.id.unitButton)
         findDevicesButton = findViewById(R.id.findDevicesButton)
         reconnectButton = findViewById(R.id.reconnectButton)
+        stopServiceButton = findViewById(R.id.stopServiceButton)
+
+        rowWindow = findViewById(R.id.rowWindow)
+        rowSmoothing = findViewById(R.id.rowSmoothing)
+        rowUnits = findViewById(R.id.rowUnits)
+        rowThreshold = findViewById(R.id.rowThreshold)
+        rowPause = findViewById(R.id.rowPause)
+
+        valueWindow = findViewById(R.id.valueWindow)
+        valueSmoothing = findViewById(R.id.valueSmoothing)
+        valueUnits = findViewById(R.id.valueUnits)
+        valueThreshold = findViewById(R.id.valueThreshold)
+        valuePause = findViewById(R.id.valuePause)
+
         shareCsvButton = findViewById(R.id.shareCsvButton)
 
-        setSupportActionBar(toolbar)
+        val toggle = ActionBarDrawerToggle(
+            this,
+            drawerLayout,
+            toolbar,
+            R.string.navigation_drawer_open,
+            R.string.navigation_drawer_close,
+        )
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
 
-        updateStatus("Starting")
+        navView.setNavigationItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_dashboard -> setPanel(Panel.Dashboard)
+                R.id.nav_charts -> setPanel(Panel.Charts)
+                R.id.nav_device -> setPanel(Panel.Device)
+                R.id.nav_display -> setPanel(Panel.Display)
+                R.id.nav_logs -> setPanel(Panel.Logs)
+            }
+            item.isChecked = true
+            drawerLayout.closeDrawer(GravityCompat.START)
+            true
+        }
+
+        navView.setCheckedItem(R.id.nav_dashboard)
+        setPanel(Panel.Dashboard)
 
         autoConnectSwitch.isChecked = Prefs.isAutoConnectEnabled(this)
         autoConnectSwitch.setOnCheckedChangeListener { _, isChecked ->
             Prefs.setAutoConnectEnabled(this, isChecked)
             if (isChecked) {
                 RadiaCodeForegroundService.start(this)
-                updateStatus("Auto-connect enabled")
             } else {
                 RadiaCodeForegroundService.stop(this)
-                updateStatus("Auto-connect disabled")
             }
+            lastReadingTimestampMs = 0L
         }
 
-        pollIntervalButton.setOnClickListener {
-            val next = when (Prefs.getPollIntervalMs(this, 1000L)) {
-                1000L -> 2000L
-                2000L -> 5000L
-                else -> 1000L
-            }
-            Prefs.setPollIntervalMs(this, next)
+        findDevicesButton.setOnClickListener {
+            findDevicesLauncher.launch(android.content.Intent(this, FindDevicesActivity::class.java))
+        }
+
+        reconnectButton.setOnClickListener {
             RadiaCodeForegroundService.reconnect(this)
-            updatePollIntervalUi(next)
-        }
-
-        pauseSwitch.isChecked = Prefs.isPauseLiveEnabled(this)
-        pauseSwitch.setOnCheckedChangeListener { _, isChecked ->
-            Prefs.setPauseLiveEnabled(this, isChecked)
-            if (isChecked) {
-                pausedSnapshotDose = currentWindowSeriesDose()
-                pausedSnapshotCps = currentWindowSeriesCps()
-                updateStatus("Paused")
-            } else {
-                pausedSnapshotDose = null
-                pausedSnapshotCps = null
-                updateStatus("Live")
-            }
             lastReadingTimestampMs = 0L
         }
 
-        compactSwitch.isChecked = Prefs.isCompactLayoutEnabled(this)
-        compactSwitch.setOnCheckedChangeListener { _, isChecked ->
-            Prefs.setCompactLayoutEnabled(this, isChecked)
-            applyCompactUi(isChecked)
+        stopServiceButton.setOnClickListener {
+            RadiaCodeForegroundService.stop(this)
             lastReadingTimestampMs = 0L
         }
 
-        windowButton.setOnClickListener {
+        shareCsvButton.setOnClickListener { shareCsv() }
+
+        rowWindow.setOnClickListener {
             val next = when (Prefs.getWindowSeconds(this, 60)) {
                 10 -> 60
                 60 -> 600
@@ -212,34 +250,23 @@ class MainActivity : AppCompatActivity() {
                 else -> 10
             }
             Prefs.setWindowSeconds(this, next)
-            updateWindowUi(next)
+            refreshDisplayRows()
+            updateChartsTitles()
             lastReadingTimestampMs = 0L
         }
 
-        smoothingButton.setOnClickListener {
+        rowSmoothing.setOnClickListener {
             val next = when (Prefs.getSmoothSeconds(this, 0)) {
                 0 -> 5
                 5 -> 30
                 else -> 0
             }
             Prefs.setSmoothSeconds(this, next)
-            updateSmoothingUi(next)
+            refreshDisplayRows()
             lastReadingTimestampMs = 0L
         }
 
-        thresholdButton.setOnClickListener {
-            // Stored in base uSv/h. 0 = off.
-            val presets = floatArrayOf(0.0f, 0.05f, 0.10f, 0.50f, 1.00f)
-            val cur = Prefs.getDoseThresholdUsvH(this, 0f)
-            val idx = presets.indexOfFirst { kotlin.math.abs(it - cur) < 1e-6f }.let { if (it < 0) 0 else it }
-            val next = presets[(idx + 1) % presets.size]
-            Prefs.setDoseThresholdUsvH(this, next)
-            updateThresholdUi()
-            lastReadingTimestampMs = 0L
-        }
-
-        unitButton.setOnClickListener {
-            // Cycle through 4 combos.
+        rowUnits.setOnClickListener {
             val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
             val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
             val next = when {
@@ -250,32 +277,42 @@ class MainActivity : AppCompatActivity() {
             }
             Prefs.setDoseUnit(this, next.first)
             Prefs.setCountUnit(this, next.second)
-            updateUnitsUi(next.first, next.second)
-            updateThresholdUi()
+            refreshDisplayRows()
+            updateChartsTitles()
             lastReadingTimestampMs = 0L
         }
 
-        findDevicesButton.setOnClickListener {
-            findDevicesLauncher.launch(android.content.Intent(this, FindDevicesActivity::class.java))
+        rowThreshold.setOnClickListener {
+            val presets = floatArrayOf(0.0f, 0.05f, 0.10f, 0.50f, 1.00f)
+            val cur = Prefs.getDoseThresholdUsvH(this, 0f)
+            val idx = presets.indexOfFirst { kotlin.math.abs(it - cur) < 1e-6f }.let { if (it < 0) 0 else it }
+            Prefs.setDoseThresholdUsvH(this, presets[(idx + 1) % presets.size])
+            refreshDisplayRows()
+            lastReadingTimestampMs = 0L
         }
 
-        reconnectButton.setOnClickListener {
-            RadiaCodeForegroundService.reconnect(this)
-            updateStatus("Reconnect requested")
+        rowPause.setOnClickListener {
+            val next = !Prefs.isPauseLiveEnabled(this)
+            Prefs.setPauseLiveEnabled(this, next)
+            if (next) {
+                pausedSnapshotDose = currentWindowSeriesDose()
+                pausedSnapshotCps = currentWindowSeriesCps()
+            } else {
+                pausedSnapshotDose = null
+                pausedSnapshotCps = null
+            }
+            refreshDisplayRows()
+            lastReadingTimestampMs = 0L
         }
 
-        shareCsvButton.setOnClickListener {
-            shareCsv()
-        }
+        dashboardDoseChart.setOnClickListener { openFocus("dose") }
+        doseChart.setOnClickListener { openFocus("dose") }
+        cpsChart.setOnClickListener { openFocus("cps") }
 
-        updateThresholdUi()
+        refreshDisplayRows()
+        updateChartsTitles()
 
-        doseChart.setOnClickListener {
-            openFocus("dose")
-        }
-        cpsChart.setOnClickListener {
-            openFocus("cps")
-        }
+        updateStatus("Starting")
 
         if (!hasAllPermissions()) {
             ActivityCompat.requestPermissions(this, requiredPermissions, PERMISSION_REQUEST_CODE)
@@ -330,70 +367,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
-        menuInflater.inflate(R.menu.main_menu, menu)
-
-        // Reflect poll interval selection.
-        val poll = Prefs.getPollIntervalMs(this, 1000L)
-        when (poll) {
-            1000L -> menu.findItem(R.id.action_poll_1s)?.isChecked = true
-            2000L -> menu.findItem(R.id.action_poll_2s)?.isChecked = true
-            5000L -> menu.findItem(R.id.action_poll_5s)?.isChecked = true
-        }
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_find_devices -> {
-                findDevicesLauncher.launch(android.content.Intent(this, FindDevicesActivity::class.java))
-                true
-            }
-
-            R.id.action_toggle_autoconnect -> {
-                val enabled = !Prefs.isAutoConnectEnabled(this)
-                Prefs.setAutoConnectEnabled(this, enabled)
-                if (enabled) {
-                    RadiaCodeForegroundService.start(this)
-                    updateStatus("Auto-connect enabled")
-                } else {
-                    RadiaCodeForegroundService.stop(this)
-                    updateStatus("Auto-connect disabled")
-                }
-                true
-            }
-
-            R.id.action_reconnect -> {
-                RadiaCodeForegroundService.reconnect(this)
-                updateStatus("Reconnect requested")
-                true
-            }
-
-            R.id.action_stop_service -> {
-                RadiaCodeForegroundService.stop(this)
-                updateStatus("Stopping service")
-                true
-            }
-
-            R.id.action_poll_1s, R.id.action_poll_2s, R.id.action_poll_5s -> {
-                val newMs = when (item.itemId) {
-                    R.id.action_poll_1s -> 1000L
-                    R.id.action_poll_2s -> 2000L
-                    else -> 5000L
-                }
-                Prefs.setPollIntervalMs(this, newMs)
-                item.isChecked = true
-                RadiaCodeForegroundService.reconnect(this)
-                updateStatus("Poll interval set: ${newMs / 1000}s")
-                true
-            }
-
-            R.id.action_share_csv -> {
-                shareCsv()
-                true
-            }
-
-            else -> super.onOptionsItemSelected(item)
+    override fun onBackPressed() {
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        } else {
+            super.onBackPressed()
         }
     }
 
@@ -424,12 +402,8 @@ class MainActivity : AppCompatActivity() {
         if (Prefs.isAutoConnectEnabled(this) && !preferred.isNullOrBlank()) {
             RadiaCodeForegroundService.start(this)
         }
-        updatePollIntervalUi(Prefs.getPollIntervalMs(this, 1000L))
-        updateWindowUi(Prefs.getWindowSeconds(this, 60))
-        updateSmoothingUi(Prefs.getSmoothSeconds(this, 0))
-        updateUnitsUi(Prefs.getDoseUnit(this), Prefs.getCountUnit(this))
-        pauseSwitch.isChecked = Prefs.isPauseLiveEnabled(this)
-        applyCompactUi(Prefs.isCompactLayoutEnabled(this))
+        refreshDisplayRows()
+        updateChartsTitles()
 
         ensureHistoryCapacity()
         Prefs.getLastReading(this)?.let {
@@ -451,12 +425,18 @@ class MainActivity : AppCompatActivity() {
                 val svc = Prefs.getServiceStatus(this@MainActivity)
                 val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
 
+                preferredDeviceText.text = if (preferred.isNullOrBlank()) {
+                    "Preferred device: —"
+                } else {
+                    "Preferred device: $preferred"
+                }
+
                 updateStatus(
                     when {
-                        !auto -> "Auto-connect disabled"
-                        preferred.isNullOrBlank() -> "No preferred device (menu → Find devices)"
+                        !auto -> "Auto-connect: off"
+                        preferred.isNullOrBlank() -> "Pick a device in Device"
                         paused -> "Paused"
-                        else -> "Preferred: $preferred"
+                        else -> "Live"
                     }
                 )
 
@@ -474,9 +454,7 @@ class MainActivity : AppCompatActivity() {
                         updateReadingCards(frozen, timeFmt)
                     }
                 } else if (last == null) {
-                    updateDose(null)
-                    updateCps(null)
-                    updateReading("Waiting for readings…")
+                    showEmptyPrimary()
                     updateChartStats(emptyList())
                     updateCpsChartStats(emptyList())
                 } else {
@@ -491,6 +469,10 @@ class MainActivity : AppCompatActivity() {
                     cpsHistory.add(last.timestampMs, last.cps)
                 }
 
+                if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
+                    pausedSnapshotDose = currentWindowSeriesDose()
+                    pausedSnapshotCps = currentWindowSeriesCps()
+                }
                 val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
                 val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
                 updateCharts(doseSeries, cpsSeries)
@@ -509,36 +491,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateStatus(msg: String) {
         mainHandler.post {
-            statusText.text = "Status: $msg"
+            statusLine.text = msg
         }
     }
 
-    private fun updateDose(uSvPerHour: Float?) {
+    private fun showEmptyPrimary() {
         mainHandler.post {
-            val unit = when (Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)) {
-                Prefs.DoseUnit.USV_H -> "μSv/h"
-                Prefs.DoseUnit.NSV_H -> "nSv/h"
-            }
-            doseText.text = if (uSvPerHour == null) {
-                "— $unit"
-            } else {
-                String.format(Locale.US, "%.3f %s", uSvPerHour, unit)
-            }
-        }
-    }
-
-    private fun updateCps(cps: Float?) {
-        mainHandler.post {
-            val unit = when (Prefs.getCountUnit(this, Prefs.CountUnit.CPS)) {
-                Prefs.CountUnit.CPS -> "cps"
-                Prefs.CountUnit.CPM -> "cpm"
-            }
-            cpsText.text = if (cps == null) {
-                "— $unit"
-            } else {
-                val fmt = if (unit == "cpm") "%.0f" else "%.1f"
-                String.format(Locale.US, "$fmt %s", cps, unit)
-            }
+            primaryDoseText.text = "—"
+            primaryCountText.text = "—"
+            ageText.text = "Waiting for readings…"
         }
     }
 
@@ -555,18 +516,27 @@ class MainActivity : AppCompatActivity() {
             Prefs.CountUnit.CPM -> last.cps * 60.0f
         }
 
-        updateDose(dose)
-        updateCps(cpsOrCpm)
-
         val localTime = Instant.ofEpochMilli(last.timestampMs)
             .atZone(ZoneId.systemDefault())
             .toLocalTime()
         val ageSec = max(0L, (System.currentTimeMillis() - last.timestampMs) / 1000L)
-        updateReading("Updated: ${timeFmt.format(localTime)} • ${ageSec}s ago")
+
+        mainHandler.post {
+            primaryDoseText.text = when (du) {
+                Prefs.DoseUnit.USV_H -> String.format(Locale.US, "%.3f μSv/h", dose)
+                Prefs.DoseUnit.NSV_H -> String.format(Locale.US, "%.0f nSv/h", dose)
+            }
+
+            primaryCountText.text = when (cu) {
+                Prefs.CountUnit.CPS -> String.format(Locale.US, "%.1f cps", cpsOrCpm)
+                Prefs.CountUnit.CPM -> String.format(Locale.US, "%.0f cpm", cpsOrCpm)
+            }
+
+            ageText.text = "${timeFmt.format(localTime)} • ${ageSec}s ago"
+        }
     }
 
     private fun updateCharts(dose: SampleHistory.Series?, cps: SampleHistory.Series?) {
-        val compact = Prefs.isCompactLayoutEnabled(this)
         val smoothSeconds = Prefs.getSmoothSeconds(this, 0)
         val poll = Prefs.getPollIntervalMs(this, 1000L)
         val smoothSamples = if (smoothSeconds <= 0) 0 else max(1, ((smoothSeconds * 1000L) / max(1L, poll)).toInt())
@@ -597,16 +567,18 @@ class MainActivity : AppCompatActivity() {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
 
+            // A compact trend on the dashboard.
+            dashboardDoseChart.setSeries(doseDec.first, doseDec.second)
+
             doseChart.setThreshold(if (doseThresholdConverted.isFinite()) doseThresholdConverted else null)
             cpsChart.setThreshold(null)
+
+            dashboardDoseChart.setThreshold(if (doseThresholdConverted.isFinite()) doseThresholdConverted else null)
         }
 
         updateChartStats(doseDec.second)
         updateCpsChartStats(cpsDec.second)
 
-        if (!compact) {
-            // Titles already updated by updateWindowUi/updateUnitsUi; keep as-is.
-        }
     }
 
     private fun updateCpsChartStats(samples: List<Float>) {
@@ -655,34 +627,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateReading(msg: String) {
-        mainHandler.post {
-            readingText.text = msg
-        }
-    }
-
     private fun updateServiceStatus(status: Prefs.ServiceStatus?) {
         mainHandler.post {
             if (status == null) {
-                serviceStatusText.text = "Service: —"
+                serviceLine.text = "Service: —"
             } else {
                 val ageSec = max(0L, (System.currentTimeMillis() - status.timestampMs) / 1000L)
-                serviceStatusText.text = "Service: ${status.message} • ${ageSec}s ago"
+                serviceLine.text = "Service: ${status.message} • ${ageSec}s ago"
             }
         }
     }
 
-    private fun updatePollIntervalUi(intervalMs: Long) {
-        val s = when (intervalMs) {
-            1000L -> "1s"
-            2000L -> "2s"
-            5000L -> "5s"
-            else -> "${intervalMs}ms"
-        }
-        pollIntervalButton.text = "Poll interval: $s"
-    }
-
-    private fun updateWindowUi(windowSeconds: Int) {
+    private fun updateChartsTitles() {
+        val windowSeconds = Prefs.getWindowSeconds(this, 60)
         val label = when (windowSeconds) {
             10 -> "10s"
             60 -> "1m"
@@ -690,48 +647,61 @@ class MainActivity : AppCompatActivity() {
             3600 -> "1h"
             else -> "${windowSeconds}s"
         }
-        windowButton.text = "Window: $label"
-
         val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
         val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
         doseChartTitle.text = "Last $label (${doseUnitLabel(du)})"
         cpsChartTitle.text = "Last $label (${countUnitLabel(cu)})"
     }
 
-    private fun updateSmoothingUi(seconds: Int) {
-        smoothingButton.text = when (seconds) {
-            0 -> "Smoothing: off"
-            else -> "Smoothing: ${seconds}s"
-        }
-    }
-
-    private fun updateThresholdUi() {
-        val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
-        if (tUsvH <= 0f) {
-            thresholdButton.text = "Threshold: off"
-            return
-        }
-        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val (value, unit) = when (du) {
-            Prefs.DoseUnit.USV_H -> tUsvH to "μSv/h"
-            Prefs.DoseUnit.NSV_H -> (tUsvH * 1000.0f) to "nSv/h"
-        }
-        val fmt = if (unit == "nSv/h") "%.0f" else "%.2f"
-        thresholdButton.text = String.format(Locale.US, "Threshold: $fmt %s", value, unit)
-    }
-
-    private fun updateUnitsUi(du: Prefs.DoseUnit, cu: Prefs.CountUnit) {
-        unitButton.text = "Units: ${doseUnitLabel(du)} & ${countUnitLabel(cu)}"
-
-        val label = when (Prefs.getWindowSeconds(this, 60)) {
+    private fun refreshDisplayRows() {
+        val windowSeconds = Prefs.getWindowSeconds(this, 60)
+        valueWindow.text = when (windowSeconds) {
             10 -> "10s"
             60 -> "1m"
             600 -> "10m"
             3600 -> "1h"
-            else -> "${Prefs.getWindowSeconds(this, 60)}s"
+            else -> "${windowSeconds}s"
         }
-        doseChartTitle.text = "Last $label (${doseUnitLabel(du)})"
-        cpsChartTitle.text = "Last $label (${countUnitLabel(cu)})"
+
+        val smoothSeconds = Prefs.getSmoothSeconds(this, 0)
+        valueSmoothing.text = when (smoothSeconds) {
+            0 -> "Off"
+            else -> "${smoothSeconds}s"
+        }
+
+        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+        valueUnits.text = "${doseUnitLabel(du)} • ${countUnitLabel(cu)}"
+
+        val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
+        valueThreshold.text = if (tUsvH <= 0f) {
+            "Off"
+        } else {
+            val (value, unit) = when (du) {
+                Prefs.DoseUnit.USV_H -> tUsvH to "μSv/h"
+                Prefs.DoseUnit.NSV_H -> (tUsvH * 1000.0f) to "nSv/h"
+            }
+            val fmt = if (unit == "nSv/h") "%.0f" else "%.2f"
+            String.format(Locale.US, "$fmt %s", value, unit)
+        }
+
+        valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
+    }
+
+    private enum class Panel {
+        Dashboard,
+        Charts,
+        Device,
+        Display,
+        Logs,
+    }
+
+    private fun setPanel(panel: Panel) {
+        panelDashboard.visibility = if (panel == Panel.Dashboard) android.view.View.VISIBLE else android.view.View.GONE
+        panelCharts.visibility = if (panel == Panel.Charts) android.view.View.VISIBLE else android.view.View.GONE
+        panelDevice.visibility = if (panel == Panel.Device) android.view.View.VISIBLE else android.view.View.GONE
+        panelDisplay.visibility = if (panel == Panel.Display) android.view.View.VISIBLE else android.view.View.GONE
+        panelLogs.visibility = if (panel == Panel.Logs) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun doseUnitLabel(du: Prefs.DoseUnit): String = when (du) {
@@ -742,13 +712,6 @@ class MainActivity : AppCompatActivity() {
     private fun countUnitLabel(cu: Prefs.CountUnit): String = when (cu) {
         Prefs.CountUnit.CPS -> "cps"
         Prefs.CountUnit.CPM -> "cpm"
-    }
-
-    private fun applyCompactUi(compact: Boolean) {
-        mainHandler.post {
-            chartStatsText.visibility = if (compact) android.view.View.GONE else android.view.View.VISIBLE
-            cpsChartStatsText.visibility = if (compact) android.view.View.GONE else android.view.View.VISIBLE
-        }
     }
 
     private fun ensureHistoryCapacity() {
