@@ -12,6 +12,9 @@ object Prefs {
     private const val KEY_LAST_CPS = "last_cps"
     private const val KEY_LAST_TS_MS = "last_ts_ms"
 
+    private const val KEY_POLL_INTERVAL_MS = "poll_interval_ms"
+    private const val KEY_LAST_CSV_TS_MS = "last_csv_ts_ms"
+
     fun getPreferredAddress(context: Context): String? {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getString(KEY_PREFERRED_ADDRESS, null)
@@ -62,5 +65,35 @@ object Prefs {
             cps = prefs.getFloat(KEY_LAST_CPS, 0f),
             timestampMs = ts,
         )
+    }
+
+    fun getPollIntervalMs(context: Context, defaultMs: Long = 1000L): Long {
+        val v = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getLong(KEY_POLL_INTERVAL_MS, defaultMs)
+        // Keep it sane.
+        return when {
+            v < 250L -> 250L
+            v > 60_000L -> 60_000L
+            else -> v
+        }
+    }
+
+    fun setPollIntervalMs(context: Context, intervalMs: Long) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_POLL_INTERVAL_MS, intervalMs)
+            .apply()
+    }
+
+    fun getLastCsvTimestampMs(context: Context): Long {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getLong(KEY_LAST_CSV_TS_MS, 0L)
+    }
+
+    fun setLastCsvTimestampMs(context: Context, timestampMs: Long) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_LAST_CSV_TS_MS, timestampMs)
+            .apply()
     }
 }

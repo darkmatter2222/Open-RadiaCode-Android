@@ -7,8 +7,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -16,6 +18,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -31,10 +34,11 @@ class RadiaCodeForegroundService : Service() {
 
         private const val ACTION_START = "com.radiacode.ble.action.START"
         private const val ACTION_STOP = "com.radiacode.ble.action.STOP"
+        private const val ACTION_RECONNECT = "com.radiacode.ble.action.RECONNECT"
 
         private const val EXTRA_ADDRESS = "address"
 
-        private const val POLL_MS = 1000L
+        private const val DEFAULT_POLL_MS = 1000L
 
         private const val RECONNECT_BASE_DELAY_MS = 2_000L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
@@ -53,6 +57,11 @@ class RadiaCodeForegroundService : Service() {
             val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_STOP)
             context.startService(intent)
         }
+
+        fun reconnect(context: Context) {
+            val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_RECONNECT)
+            context.startService(intent)
+        }
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -67,11 +76,34 @@ class RadiaCodeForegroundService : Service() {
     private var reconnectAttempts: Int = 0
     private var reconnectTask: ScheduledFuture<*>? = null
 
+    private val btStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            if (state == BluetoothAdapter.STATE_ON) {
+                Log.d(TAG, "btStateReceiver: STATE_ON")
+                // If we have a preferred device and auto-connect enabled, try to restore session.
+                if (Prefs.isAutoConnectEnabled(this@RadiaCodeForegroundService)) {
+                    val addr = Prefs.getPreferredAddress(this@RadiaCodeForegroundService)
+                    if (!addr.isNullOrBlank()) {
+                        targetAddress = addr
+                        forceReconnect("Bluetooth on")
+                    }
+                }
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        try {
+            registerReceiver(btStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        } catch (t: Throwable) {
+            Log.w(TAG, "registerReceiver failed", t)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -80,6 +112,10 @@ class RadiaCodeForegroundService : Service() {
                 stopInternal("Stopped")
                 stopSelf()
                 return START_NOT_STICKY
+            }
+            ACTION_RECONNECT -> {
+                forceReconnect("Manual reconnect")
+                return START_STICKY
             }
             ACTION_START, null -> {
                 // fallthrough
@@ -130,6 +166,7 @@ class RadiaCodeForegroundService : Service() {
 
     override fun onDestroy() {
         stopInternal("Service destroyed")
+        try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
         try { scheduler.shutdownNow() } catch (_: Throwable) {}
         try { executor.shutdownNow() } catch (_: Throwable) {}
         super.onDestroy()
@@ -172,6 +209,9 @@ class RadiaCodeForegroundService : Service() {
         val piFlags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
         val contentPi = PendingIntent.getActivity(this, 0, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or piFlags)
 
+        val reconnectIntent = Intent(this, RadiaCodeForegroundService::class.java).setAction(ACTION_RECONNECT)
+        val reconnectPi = PendingIntent.getService(this, 2, reconnectIntent, PendingIntent.FLAG_UPDATE_CURRENT or piFlags)
+
         val stopIntent = Intent(this, RadiaCodeForegroundService::class.java).setAction(ACTION_STOP)
         val stopPi = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or piFlags)
 
@@ -181,6 +221,7 @@ class RadiaCodeForegroundService : Service() {
             .setContentText(text)
             .setContentIntent(contentPi)
             .setOngoing(true)
+                .addAction(0, "Reconnect", reconnectPi)
             .addAction(0, "Stop", stopPi)
             .build()
     }
@@ -282,7 +323,9 @@ class RadiaCodeForegroundService : Service() {
                         consecutivePollFailures = 0
 
                         val uSvPerHour = rt.doseRate * 10000.0f
-                        Prefs.setLastReading(this, uSvPerHour, rt.countRate)
+                        val timestampMs = System.currentTimeMillis()
+                        Prefs.setLastReading(this, uSvPerHour, rt.countRate, timestampMs)
+                        appendReadingCsvIfNew(timestampMs, uSvPerHour, rt.countRate)
                         RadiaCodeWidgetProvider.updateAll(this)
                         notifyUpdate(
                             "RadiaCode",
@@ -300,13 +343,67 @@ class RadiaCodeForegroundService : Service() {
                     .whenComplete { _, _ ->
                         // Schedule the next poll only after the current one completes.
                         if (client != null && (reconnectTask?.isDone != false)) {
-                            scheduleNextPoll(POLL_MS)
+                            scheduleNextPoll(Prefs.getPollIntervalMs(this, DEFAULT_POLL_MS))
                         }
                     }
             },
             delayMs,
             TimeUnit.MILLISECONDS
         )
+    }
+
+    private fun forceReconnect(reason: String) {
+        Log.d(TAG, "service forceReconnect: $reason")
+        reconnectTask?.cancel(true)
+        reconnectTask = null
+        reconnectAttempts = 0
+
+        pollTask?.cancel(true)
+        pollTask = null
+
+        client?.close()
+        client = null
+
+        val addr = targetAddress ?: Prefs.getPreferredAddress(this)
+        if (!addr.isNullOrBlank()) {
+            targetAddress = addr
+            notifyUpdate("RadiaCode", "Reconnecting… ($reason)")
+            startOrRestartSession("forceReconnect")
+        } else {
+            updateForeground("No preferred device", "Open app and pick a preferred device")
+        }
+    }
+
+    private fun appendReadingCsvIfNew(timestampMs: Long, uSvPerHour: Float, cps: Float) {
+        val lastLogged = Prefs.getLastCsvTimestampMs(this)
+        if (timestampMs <= lastLogged) return
+        Prefs.setLastCsvTimestampMs(this, timestampMs)
+
+        try {
+            val file = File(filesDir, "readings.csv")
+            // Rotate if it gets too big (simple safety guard).
+            if (file.exists() && file.length() > 2_000_000L) {
+                val old = File(filesDir, "readings.old.csv")
+                try { if (old.exists()) old.delete() } catch (_: Throwable) {}
+                try { file.renameTo(old) } catch (_: Throwable) {}
+            }
+
+            val isNew = !file.exists()
+            file.parentFile?.mkdirs()
+            file.outputStream().writer(Charsets.UTF_8).buffered(8 * 1024).use { w ->
+                if (isNew) {
+                    w.appendLine("timestamp_ms,usv_per_h,cps")
+                }
+                w.append(timestampMs.toString())
+                w.append(',')
+                w.append(String.format(java.util.Locale.US, "%.6f", uSvPerHour))
+                w.append(',')
+                w.append(String.format(java.util.Locale.US, "%.3f", cps))
+                w.appendLine()
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "appendReadingCsvIfNew failed", t)
+        }
     }
 
     private fun scheduleReconnect(reason: String) {

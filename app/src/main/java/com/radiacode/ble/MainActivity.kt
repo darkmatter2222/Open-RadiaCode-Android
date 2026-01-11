@@ -8,11 +8,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.TextView
+import androidx.core.content.FileProvider
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.appbar.MaterialToolbar
+import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
 import java.time.Instant
@@ -138,6 +140,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
+
+        // Reflect poll interval selection.
+        val poll = Prefs.getPollIntervalMs(this, 1000L)
+        when (poll) {
+            1000L -> menu.findItem(R.id.action_poll_1s)?.isChecked = true
+            2000L -> menu.findItem(R.id.action_poll_2s)?.isChecked = true
+            5000L -> menu.findItem(R.id.action_poll_5s)?.isChecked = true
+        }
         return true
     }
 
@@ -148,8 +158,73 @@ class MainActivity : AppCompatActivity() {
                 true
             }
 
+            R.id.action_toggle_autoconnect -> {
+                val enabled = !Prefs.isAutoConnectEnabled(this)
+                Prefs.setAutoConnectEnabled(this, enabled)
+                if (enabled) {
+                    RadiaCodeForegroundService.start(this)
+                    updateStatus("Auto-connect enabled")
+                } else {
+                    RadiaCodeForegroundService.stop(this)
+                    updateStatus("Auto-connect disabled")
+                }
+                true
+            }
+
+            R.id.action_reconnect -> {
+                RadiaCodeForegroundService.reconnect(this)
+                updateStatus("Reconnect requested")
+                true
+            }
+
+            R.id.action_stop_service -> {
+                RadiaCodeForegroundService.stop(this)
+                updateStatus("Stopping service")
+                true
+            }
+
+            R.id.action_poll_1s, R.id.action_poll_2s, R.id.action_poll_5s -> {
+                val newMs = when (item.itemId) {
+                    R.id.action_poll_1s -> 1000L
+                    R.id.action_poll_2s -> 2000L
+                    else -> 5000L
+                }
+                Prefs.setPollIntervalMs(this, newMs)
+                item.isChecked = true
+                RadiaCodeForegroundService.reconnect(this)
+                updateStatus("Poll interval set: ${newMs / 1000}s")
+                true
+            }
+
+            R.id.action_share_csv -> {
+                shareCsv()
+                true
+            }
+
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    private fun shareCsv() {
+        val file = File(filesDir, "readings.csv")
+        if (!file.exists() || file.length() == 0L) {
+            updateStatus("No CSV yet (waiting for readings)")
+            return
+        }
+
+        val uri = try {
+            FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+        } catch (t: Throwable) {
+            updateStatus("Share failed: FileProvider")
+            return
+        }
+
+        val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(android.content.Intent.createChooser(share, "Share readings"))
     }
 
     private fun startServiceIfConfigured() {
