@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pollIntervalButton: MaterialButton
     private lateinit var windowButton: MaterialButton
     private lateinit var smoothingButton: MaterialButton
+    private lateinit var thresholdButton: MaterialButton
     private lateinit var unitButton: MaterialButton
     private lateinit var findDevicesButton: MaterialButton
     private lateinit var reconnectButton: MaterialButton
@@ -148,6 +149,7 @@ class MainActivity : AppCompatActivity() {
         pollIntervalButton = findViewById(R.id.pollIntervalButton)
         windowButton = findViewById(R.id.windowButton)
         smoothingButton = findViewById(R.id.smoothingButton)
+        thresholdButton = findViewById(R.id.thresholdButton)
         unitButton = findViewById(R.id.unitButton)
         findDevicesButton = findViewById(R.id.findDevicesButton)
         reconnectButton = findViewById(R.id.reconnectButton)
@@ -225,6 +227,17 @@ class MainActivity : AppCompatActivity() {
             lastReadingTimestampMs = 0L
         }
 
+        thresholdButton.setOnClickListener {
+            // Stored in base uSv/h. 0 = off.
+            val presets = floatArrayOf(0.0f, 0.05f, 0.10f, 0.50f, 1.00f)
+            val cur = Prefs.getDoseThresholdUsvH(this, 0f)
+            val idx = presets.indexOfFirst { kotlin.math.abs(it - cur) < 1e-6f }.let { if (it < 0) 0 else it }
+            val next = presets[(idx + 1) % presets.size]
+            Prefs.setDoseThresholdUsvH(this, next)
+            updateThresholdUi()
+            lastReadingTimestampMs = 0L
+        }
+
         unitButton.setOnClickListener {
             // Cycle through 4 combos.
             val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
@@ -238,6 +251,7 @@ class MainActivity : AppCompatActivity() {
             Prefs.setDoseUnit(this, next.first)
             Prefs.setCountUnit(this, next.second)
             updateUnitsUi(next.first, next.second)
+            updateThresholdUi()
             lastReadingTimestampMs = 0L
         }
 
@@ -253,6 +267,8 @@ class MainActivity : AppCompatActivity() {
         shareCsvButton.setOnClickListener {
             shareCsv()
         }
+
+        updateThresholdUi()
 
         doseChart.setOnClickListener {
             openFocus("dose")
@@ -567,9 +583,22 @@ class MainActivity : AppCompatActivity() {
         val doseDec = decimate(doseT, doseV)
         val cpsDec = decimate(cpsT, cpsV)
 
+        val doseThresholdUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
+        val doseThresholdConverted = if (doseThresholdUsvH > 0f) {
+            when (du) {
+                Prefs.DoseUnit.USV_H -> doseThresholdUsvH
+                Prefs.DoseUnit.NSV_H -> doseThresholdUsvH * 1000.0f
+            }
+        } else {
+            Float.NaN
+        }
+
         mainHandler.post {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
+
+            doseChart.setThreshold(if (doseThresholdConverted.isFinite()) doseThresholdConverted else null)
+            cpsChart.setThreshold(null)
         }
 
         updateChartStats(doseDec.second)
@@ -674,6 +703,21 @@ class MainActivity : AppCompatActivity() {
             0 -> "Smoothing: off"
             else -> "Smoothing: ${seconds}s"
         }
+    }
+
+    private fun updateThresholdUi() {
+        val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
+        if (tUsvH <= 0f) {
+            thresholdButton.text = "Threshold: off"
+            return
+        }
+        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        val (value, unit) = when (du) {
+            Prefs.DoseUnit.USV_H -> tUsvH to "μSv/h"
+            Prefs.DoseUnit.NSV_H -> (tUsvH * 1000.0f) to "nSv/h"
+        }
+        val fmt = if (unit == "nSv/h") "%.0f" else "%.2f"
+        thresholdButton.text = String.format(Locale.US, "Threshold: $fmt %s", value, unit)
     }
 
     private fun updateUnitsUi(du: Prefs.DoseUnit, cu: Prefs.CountUnit) {

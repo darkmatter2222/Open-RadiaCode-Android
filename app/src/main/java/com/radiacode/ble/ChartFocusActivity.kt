@@ -34,6 +34,21 @@ class ChartFocusActivity : AppCompatActivity() {
         val kind = intent?.getStringExtra(EXTRA_KIND)?.lowercase(Locale.US) ?: "dose"
         supportActionBar?.title = if (kind == "cps") "Count rate" else "Dose"
 
+        val threshold = if (kind == "cps") {
+            null
+        } else {
+            val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
+            if (tUsvH <= 0f) {
+                null
+            } else {
+                when (Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)) {
+                    Prefs.DoseUnit.USV_H -> tUsvH
+                    Prefs.DoseUnit.NSV_H -> tUsvH * 1000.0f
+                }
+            }
+        }
+        chart.setThreshold(threshold)
+
         // Pull current window of samples from MainActivity via a sticky-ish approach (Prefs + CSV are persisted,
         // but for focus mode we just show the latest window snapshot passed in intent if present).
         // If not present, we fall back to the last reading only.

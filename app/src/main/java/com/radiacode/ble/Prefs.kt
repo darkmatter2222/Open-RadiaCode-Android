@@ -25,6 +25,8 @@ object Prefs {
     private const val KEY_COUNT_UNIT = "count_unit"
     private const val KEY_COMPACT_LAYOUT = "compact_layout"
 
+    private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
+
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
 
@@ -158,6 +160,23 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_COUNT_UNIT, unit.name)
+            .apply()
+    }
+
+    /**
+     * Dose threshold stored in base uSv/h. Use 0f to mean disabled.
+     */
+    fun getDoseThresholdUsvH(context: Context, defaultUsvH: Float = 0f): Float {
+        val v = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_DOSE_THRESHOLD_USV_H, defaultUsvH)
+        return if (v.isFinite() && v > 0f) v else 0f
+    }
+
+    fun setDoseThresholdUsvH(context: Context, thresholdUsvH: Float) {
+        val v = if (thresholdUsvH.isFinite() && thresholdUsvH > 0f) thresholdUsvH else 0f
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_DOSE_THRESHOLD_USV_H, v)
             .apply()
     }
 

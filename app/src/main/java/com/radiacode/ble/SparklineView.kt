@@ -33,6 +33,23 @@ class SparklineView @JvmOverloads constructor(
         alpha = 40
     }
 
+    private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        alpha = 22
+    }
+
+    private val avgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 2f
+        alpha = 140
+    }
+
+    private val thresholdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 2f
+        alpha = 180
+    }
+
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = resources.displayMetrics.density * 1f
@@ -62,6 +79,9 @@ class SparklineView @JvmOverloads constructor(
 
     private var timestampsMs: List<Long> = emptyList()
     private var samples: List<Float> = emptyList()
+
+    // Optional overlay.
+    private var thresholdValue: Float = Float.NaN
 
     // Viewport controls (x-axis). 1.0 = full range.
     private var zoomX: Float = 1.0f
@@ -141,6 +161,11 @@ class SparklineView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun setThreshold(threshold: Float?) {
+        thresholdValue = threshold ?: Float.NaN
+        invalidate()
+    }
+
     private fun setViewport(zoomX: Float, panX: Float) {
         this.zoomX = zoomX
         val maxPan = 1.0f - (1.0f / zoomX)
@@ -158,13 +183,18 @@ class SparklineView @JvmOverloads constructor(
         val colorPrimary = MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary, 0xFF00BCD4.toInt())
         val colorOnSurface = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, 0xFFFFFFFF.toInt())
 
+        val colorError = MaterialColors.getColor(this, com.google.android.material.R.attr.colorError, colorOnSurface)
+
         val colorSurface = MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface, 0xFF000000.toInt())
 
         linePaint.color = colorPrimary
         fillPaint.color = colorPrimary
+        bandPaint.color = colorPrimary
+        avgPaint.color = colorPrimary
         gridPaint.color = colorOnSurface
         markerPaint.color = colorOnSurface
         markerFillPaint.color = colorPrimary
+        thresholdPaint.color = colorError
         tooltipBgPaint.color = colorSurface
         tooltipTextPaint.color = colorOnSurface
 
@@ -189,9 +219,22 @@ class SparklineView @JvmOverloads constructor(
 
         var minV = Float.POSITIVE_INFINITY
         var maxV = Float.NEGATIVE_INFINITY
-        for (v in samples) {
+        var sum = 0.0f
+        var peakIndex: Int = startIndex
+        for (i in startIndex until endIndex) {
+            val v = samples[i]
             minV = min(minV, v)
-            maxV = max(maxV, v)
+            if (v > maxV) {
+                maxV = v
+                peakIndex = i
+            }
+            sum += v
+        }
+
+        // Include threshold in scaling so it remains visible.
+        if (thresholdValue.isFinite()) {
+            minV = min(minV, thresholdValue)
+            maxV = max(maxV, thresholdValue)
         }
 
         // Avoid divide-by-zero and keep some breathing room.
@@ -200,6 +243,29 @@ class SparklineView @JvmOverloads constructor(
         val minY = minV - vPad
         val maxY = maxV + vPad
         val denom = max(1e-6f, (maxY - minY))
+
+        // Band (min..max) + avg line for the visible range.
+        val avgV = (sum / max(1, (endIndex - startIndex))).toFloat()
+        run {
+            val yMinNorm = (minV - minY) / denom
+            val yMaxNorm = (maxV - minY) / denom
+            val yMinPx = bottom - (bottom - top) * yMinNorm
+            val yMaxPx = bottom - (bottom - top) * yMaxNorm
+            val bandTop = min(yMinPx, yMaxPx)
+            val bandBottom = max(yMinPx, yMaxPx)
+            canvas.drawRect(left, bandTop, right, bandBottom, bandPaint)
+
+            val yAvgNorm = (avgV - minY) / denom
+            val yAvgPx = bottom - (bottom - top) * yAvgNorm
+            canvas.drawLine(left, yAvgPx, right, yAvgPx, avgPaint)
+        }
+
+        // Threshold line.
+        if (thresholdValue.isFinite()) {
+            val yTNorm = (thresholdValue - minY) / denom
+            val yTPx = bottom - (bottom - top) * yTNorm
+            canvas.drawLine(left, yTPx, right, yTPx, thresholdPaint)
+        }
 
         val path = Path()
         val fill = Path()
@@ -225,6 +291,16 @@ class SparklineView @JvmOverloads constructor(
 
         canvas.drawPath(fill, fillPaint)
         canvas.drawPath(path, linePaint)
+
+        // Peak marker.
+        run {
+            val n = endIndex - startIndex
+            val i = (peakIndex - startIndex).coerceIn(0, max(1, n - 1))
+            val x = left + (right - left) * (i.toFloat() / (n - 1))
+            val yNorm = (samples[peakIndex] - minY) / denom
+            val y = bottom - (bottom - top) * yNorm
+            canvas.drawCircle(x, y, resources.displayMetrics.density * 5f, markerFillPaint)
+        }
 
         selectedIndex?.let { sel ->
             val clamped = sel.coerceIn(startIndex, endIndex - 1)
