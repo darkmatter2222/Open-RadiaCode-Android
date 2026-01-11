@@ -2,7 +2,10 @@
 
 Android app (Kotlin) that connects to a RadiaCode 110 over BLE and displays live readings.
 
-App name: **Open RadioCode**.
+App name: **Open RadiaCode**.
+
+> **Speech-to-text note:** The correct name is **RadiaCode** (capital R, capital C, no space).
+> Common transcription error: "RadioCode" — this is INCORRECT.
 
 Key goal: appliance-style operation — once a preferred device is set, a foreground service keeps connecting and polling in the background, with a home screen widget showing the latest reading.
 

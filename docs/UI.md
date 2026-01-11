@@ -1,92 +1,153 @@
-# Open RadioCode — UI spec
+# Open RadiaCode — UI/UX Specification
 
-This document is the canonical UI/UX spec for the app. If the implementation diverges, update this spec or fix the UI to match.
+> **Canonical reference.** Implementation must match this spec. Update spec or fix code if they diverge.
 
-## Goals
+## Vision
 
-- **Utility-first**: show the *essential* information immediately, no wasted space.
-- **Clean hierarchy**: one primary reading card; secondary details in collapsible/secondary screens.
-- **Menu-driven**: controls live behind a navigation menu (not as a wall of buttons).
-- **Fast-glance**: supports “check and go” usage.
+A **professional-grade radiation monitoring dashboard** built for data scientists and serious users. The UI should rival commercial analytics dashboards — think Bloomberg Terminal meets modern data visualization.
 
-## Navigation model
+## Design Philosophy
 
-Single-activity, drawer-style navigation (hamburger menu).
+1. **Data-dense**: Show maximum information without clutter
+2. **Glanceable hierarchy**: Critical metrics huge, supporting data smaller but present
+3. **Dark-first**: Deep blacks (#0D0D0F), muted surfaces (#1A1A1E), vibrant accent data
+4. **Gradient charts**: Line charts use gradient fills, not flat colors
+5. **Always show context**: Axes, grid lines, legends — users need reference points
+6. **Future-ready**: Architecture supports ML predictions, anomaly detection, geolocation overlays
 
-Sections:
-- **Dashboard** (default)
-- **Charts**
-- **Device**
-- **Display**
-- **Logs**
+## Color Palette
 
-## Dashboard screen
+```
+Background:       #0D0D0F (near-black)
+Surface:          #1A1A1E (card backgrounds)
+Surface Elevated: #242428 (hover/selected states)
+Border:           #2E2E33 (subtle card borders)
 
-Purpose: fastest possible glance.
+Primary Accent:   #00E5FF (cyan) — dose rate
+Secondary Accent: #E040FB (magenta) — count rate  
+Tertiary Accent:  #69F0AE (green) — positive trends
+Warning:          #FFD740 (amber) — thresholds
+Error:            #FF5252 (red) — alerts/high readings
 
-Layout:
-- Top app bar: app name + hamburger menu.
-- Status line: connection/service status + last update age.
-- **Primary reading card**:
-  - Large dose value + unit
-  - Medium count rate value + unit
-- **Trend**: a *small* dose sparkline (compact height). No giant charts.
+Text Primary:     #FFFFFF
+Text Secondary:   #B0B0B8
+Text Muted:       #6E6E78
+```
 
-Interactions:
-- Tap sparkline → opens full-screen chart focus.
+## Typography
 
-## Charts screen
+```
+Hero Metric:      48sp, bold, monospace (tabular figures)
+Large Metric:     32sp, bold, monospace
+Medium Metric:    20sp, medium
+Label:            12sp, medium, uppercase tracking
+Body:             14sp, regular
+Caption:          11sp, regular, muted
+```
 
-Purpose: analysis view.
+## Component Library
 
-Layout:
-- Two compact charts (dose + count). Still *compact* and consistent.
-- Stats row per chart: min/avg/max.
-- Overlays:
-  - min–max band
-  - avg line
-  - peak marker
-  - optional dose threshold line
+### 1. ProChartView
 
-## Device screen
+Professional line chart with:
+- **Gradient fill** under line (accent color → transparent)
+- **Y-axis** with auto-scaled labels (left side)
+- **X-axis** with time labels (bottom)
+- **Grid lines** (subtle horizontal lines at Y intervals)
+- **Threshold line** (dashed, warning color)
+- **Peak marker** (dot at highest point)
+- **Crosshair** on long-press with tooltip
 
-Purpose: manage connectivity.
+Visual specs:
+- Line stroke: 2.5dp
+- Gradient: 40% opacity at line → 0% at bottom
+- Grid lines: 8% opacity
+- Axis text: 10sp, muted color
+- Chart area padding: 48dp left (Y-axis), 24dp bottom (X-axis), 16dp top/right
 
-Controls:
-- Preferred device display (address).
-- Auto-connect toggle.
-- Actions:
-  - Find devices
-  - Reconnect now
-  - Stop service
+### 2. MetricCardView
 
-## Display screen
+Large stat display with trend indicator and mini sparkline:
+```
+┌─────────────────────────────┐
+│ DOSE RATE            ▲ +2% │  ← Label + trend
+│ 0.057                      │  ← Hero value (48sp)
+│ μSv/h                      │  ← Unit
+│ ───────────────────        │  ← Mini sparkline (32dp tall)
+└─────────────────────────────┘
+```
 
-Purpose: presentation settings (not frequent actions).
+### 3. StatRowView
 
-Controls (tap row cycles):
-- Window (10s / 1m / 10m / 1h)
-- Smoothing (off / 5s / 30s)
-- Units (μSv/h ↔ nSv/h; cps ↔ cpm)
-- Dose threshold (off / presets)
-- Pause live (on/off)
+Horizontal metrics strip showing min/avg/max/delta:
+```
+┌─────────┬─────────┬─────────┬─────────┐
+│ MIN     │ AVG     │ MAX     │ Δ/min   │
+│ 0.054   │ 0.056   │ 0.061   │ +0.002  │
+└─────────┴─────────┴─────────┴─────────┘
+```
 
-## Logs screen
+## Screen Layouts
 
-Purpose: export data.
+### Dashboard (default)
 
-Controls:
-- Share readings CSV
+```
+┌────────────────────────────────────────┐
+│ ≡  Open RadiaCode              ● LIVE  │
+├────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐     │
+│  │ DOSE RATE   │  │ COUNT RATE  │     │
+│  │ 0.057       │  │ 8.2         │     │
+│  │ μSv/h    ▲  │  │ cps      ─  │     │
+│  │ ~~~~~~~~~~~ │  │ ~~~~~~~~~~~ │     │
+│  └─────────────┘  └─────────────┘     │
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ DOSE RATE — Last 1m              │ │
+│  │ 0.06│  ~~~~~~~~~~~~~~~~~~~~~~~~  │ │
+│  │ 0.05│  ~~~~~~~~~~~~~~~~~~~~~~~~  │ │
+│  │     └──────────────────────────  │ │
+│  │ Min 0.054 • Avg 0.056 • Max 0.061│ │
+│  └──────────────────────────────────┘ │
+│                                        │
+│  ┌──────────────────────────────────┐ │
+│  │ COUNT RATE — Last 1m             │ │
+│  │ [chart with axes]                 │ │
+│  │ Min 8.0 • Avg 8.1 • Max 8.3       │ │
+│  └──────────────────────────────────┘ │
+│                                        │
+│  SESSION: 5m 32s │ 332 samples        │
+└────────────────────────────────────────┘
+```
 
-## Data model (UI-facing)
+### Charts (deep analysis)
 
-- **Dose**: base stored as μSv/h; can be displayed as nSv/h.
-- **Count rate**: base stored as cps; can be displayed as cpm.
-- **Last update**: timestamp shown as age seconds.
-- **Threshold**: stored as μSv/h; converted on display.
+- Larger charts (200dp height each)
+- Time window chips: 10s | 1m | 10m | 1h
+- Tap chart for full-screen focus
 
-## Style rules
+### Device
 
-- Use Material 3 components and the existing theme.
-- Avoid hard-coded colors; rely on theme attributes.
-- Avoid “button walls”; prefer a drawer menu + simple list rows.
+- Connection status indicator (pulsing dot)
+- Device address
+- Auto-connect toggle
+- Actions: Find / Reconnect / Stop
+
+### Settings
+
+- Units toggle
+- Threshold slider
+- Smoothing selector
+- Time window default
+
+### Logs
+
+- Export CSV button
+
+## Future Features (Architecture Support)
+
+- **Anomaly markers** on charts (ML-detected)
+- **Prediction overlay** (forecast as dashed line)
+- **Geolocation** (map heatmap)
+- **Multi-device** comparison
+- **Alert rules** with notifications

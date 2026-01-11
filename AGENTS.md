@@ -2,6 +2,23 @@
 
 This file documents the repeatable build + deploy loop used in this repo.
 
+## Git Workflow
+
+**Repository:** `https://github.com/darkmatter2222/Open-RadiaCode-Android.git`
+
+After completing a todo list:
+
+1. Create a new branch with a descriptive name: `git checkout -b feature/short-description`
+2. Stage all changes: `git add -A`
+3. Commit with a meaningful message: `git commit -m "feat: description of changes"`
+4. Switch back to main: `git checkout main`
+5. Merge the feature branch: `git merge feature/short-description`
+6. Push both branches to origin:
+   - `git push origin feature/short-description`
+   - `git push origin main`
+
+This ensures all changes are tracked with proper branch history on GitHub.
+
 ## Prereqs
 
 - Android SDK installed at `C:\Users\ryans\AppData\Local\Android\Sdk` (or set `ANDROID_SDK_ROOT`)
@@ -31,8 +48,11 @@ Optional checks:
 
 ## App identity
 
-- Launcher name: **Open RadioCode**
+- Launcher name: **Open RadiaCode**
 - Package: `com.radiacode.ble`
+
+> **Speech-to-text note:** The correct name is **RadiaCode** (capital R, capital C, no space). 
+> Common transcription error: "RadioCode" — this is INCORRECT.
 
 ## UI spec
 

@@ -231,4 +231,50 @@ object Prefs {
         if (msg.isEmpty() || ts <= 0L) return null
         return ServiceStatus(message = msg, timestampMs = ts)
     }
+
+    // Widget sparkline history (stored as compact CSV string for efficiency)
+    private const val KEY_RECENT_READINGS = "recent_readings"
+    private const val MAX_RECENT_READINGS = 60
+
+    fun addRecentReading(context: Context, reading: LastReading) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val existing = prefs.getString(KEY_RECENT_READINGS, "") ?: ""
+        
+        // Format: ts,usv,cps;ts,usv,cps;...
+        val newEntry = "${reading.timestampMs},${reading.uSvPerHour},${reading.cps}"
+        
+        val entries = existing.split(";").filter { it.isNotBlank() }.toMutableList()
+        entries.add(newEntry)
+        
+        // Keep only last N readings
+        while (entries.size > MAX_RECENT_READINGS) {
+            entries.removeAt(0)
+        }
+        
+        prefs.edit()
+            .putString(KEY_RECENT_READINGS, entries.joinToString(";"))
+            .apply()
+    }
+
+    fun getRecentReadings(context: Context, maxCount: Int = MAX_RECENT_READINGS): List<LastReading> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_RECENT_READINGS, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        
+        return raw.split(";")
+            .filter { it.isNotBlank() }
+            .mapNotNull { entry ->
+                val parts = entry.split(",")
+                if (parts.size == 3) {
+                    try {
+                        LastReading(
+                            timestampMs = parts[0].toLong(),
+                            uSvPerHour = parts[1].toFloat(),
+                            cps = parts[2].toFloat()
+                        )
+                    } catch (_: Exception) { null }
+                } else null
+            }
+            .takeLast(maxCount)
+    }
 }

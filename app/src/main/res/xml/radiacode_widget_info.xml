@@ -3,6 +3,12 @@
     android:initialLayout="@layout/radiacode_widget"
     android:minWidth="180dp"
     android:minHeight="80dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="60dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="200dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    android:previewLayout="@layout/radiacode_widget"
+    android:description="@string/widget_description" />

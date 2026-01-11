@@ -2,9 +2,22 @@
 <resources>
 
     <style name="Theme.RadiaCode" parent="Theme.Material3.Dark.NoActionBar">
-        <!-- Keep defaults; just ensure dark system bars. -->
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/black</item>
+        <!-- Professional dark theme colors -->
+        <item name="android:colorBackground">@color/pro_background</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="colorSurfaceVariant">@color/pro_surface_elevated</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorSecondary">@color/pro_magenta</item>
+        <item name="colorTertiary">@color/pro_green</item>
+        <item name="colorError">@color/pro_red</item>
+        <item name="colorOnBackground">@color/pro_text_primary</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/pro_text_secondary</item>
+        <item name="colorOutline">@color/pro_border</item>
+        
+        <!-- System bars -->
+        <item name="android:statusBarColor">@color/pro_background</item>
+        <item name="android:navigationBarColor">@color/pro_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
