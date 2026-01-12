@@ -95,215 +95,223 @@
                             android:layout_marginStart="6dp" />
                     </LinearLayout>
 
-                    <!-- Time Window Selector -->
+                    <!-- Combined Time Window & Units Panel -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
                         android:background="@drawable/card_background"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:paddingHorizontal="12dp"
-                        android:paddingVertical="8dp">
+                        android:paddingVertical="10dp">
 
-                        <TextView
-                            android:layout_width="wrap_content"
+                        <!-- Time Window Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="TIME WINDOW"
-                            android:textColor="@color/pro_text_muted"
-                            android:textSize="10sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.1" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <HorizontalScrollView
-                            android:layout_width="0dp"
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="TIME"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <HorizontalScrollView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:scrollbars="none">
+
+                                <com.google.android.material.chip.ChipGroup
+                                    android:id="@+id/timeWindowChips"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    app:singleSelection="true"
+                                    app:selectionRequired="true">
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chip30s"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="30s"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chip1m"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="1m"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp"
+                                        android:checked="true" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chip5m"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="5m"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chip15m"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="15m"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chip1h"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="1h"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp" />
+
+                                    <com.google.android.material.chip.Chip
+                                        android:id="@+id/chipAll"
+                                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="36dp"
+                                        android:text="ALL"
+                                        android:textColor="@color/chip_text_color"
+                                        app:chipBackgroundColor="@color/chip_bg_color"
+                                        app:chipStrokeColor="@color/pro_border"
+                                        app:chipStrokeWidth="1dp"
+                                        app:chipMinHeight="36dp" />
+
+                                </com.google.android.material.chip.ChipGroup>
+                            </HorizontalScrollView>
+                        </LinearLayout>
+
+                        <!-- Divider -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="8dp"
+                            android:background="@color/pro_border"
+                            android:alpha="0.3" />
+
+                        <!-- Units Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="12dp"
-                            android:scrollbars="none">
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="UNITS"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
 
                             <com.google.android.material.chip.ChipGroup
-                                android:id="@+id/timeWindowChips"
+                                android:id="@+id/doseUnitChips"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                app:singleSelection="true"
+                                app:selectionRequired="true">
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipUsvH"
+                                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:text="μSv/h"
+                                    android:textColor="@color/chip_text_color"
+                                    app:chipBackgroundColor="@color/chip_bg_color"
+                                    app:chipStrokeColor="@color/pro_border"
+                                    app:chipStrokeWidth="1dp"
+                                    app:chipMinHeight="36dp"
+                                    android:checked="true" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chipNsvH"
+                                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:text="nSv/h"
+                                    android:textColor="@color/chip_text_color"
+                                    app:chipBackgroundColor="@color/chip_bg_color"
+                                    app:chipStrokeColor="@color/pro_border"
+                                    app:chipStrokeWidth="1dp"
+                                    app:chipMinHeight="36dp" />
+
+                            </com.google.android.material.chip.ChipGroup>
+
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="24dp"
+                                android:layout_marginHorizontal="12dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <com.google.android.material.chip.ChipGroup
+                                android:id="@+id/countUnitChips"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 app:singleSelection="true"
                                 app:selectionRequired="true">
 
                                 <com.google.android.material.chip.Chip
-                                    android:id="@+id/chip30s"
+                                    android:id="@+id/chipCps"
                                     style="@style/Widget.MaterialComponents.Chip.Choice"
                                     android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="30s"
+                                    android:layout_height="36dp"
+                                    android:text="cps"
                                     android:textColor="@color/chip_text_color"
                                     app:chipBackgroundColor="@color/chip_bg_color"
                                     app:chipStrokeColor="@color/pro_border"
                                     app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chip1m"
-                                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="1m"
-                                    android:textColor="@color/chip_text_color"
-                                    app:chipBackgroundColor="@color/chip_bg_color"
-                                    app:chipStrokeColor="@color/pro_border"
-                                    app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp"
+                                    app:chipMinHeight="36dp"
                                     android:checked="true" />
 
                                 <com.google.android.material.chip.Chip
-                                    android:id="@+id/chip5m"
+                                    android:id="@+id/chipCpm"
                                     style="@style/Widget.MaterialComponents.Chip.Choice"
                                     android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="5m"
+                                    android:layout_height="36dp"
+                                    android:text="cpm"
                                     android:textColor="@color/chip_text_color"
                                     app:chipBackgroundColor="@color/chip_bg_color"
                                     app:chipStrokeColor="@color/pro_border"
                                     app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chip15m"
-                                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="15m"
-                                    android:textColor="@color/chip_text_color"
-                                    app:chipBackgroundColor="@color/chip_bg_color"
-                                    app:chipStrokeColor="@color/pro_border"
-                                    app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chip1h"
-                                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="1h"
-                                    android:textColor="@color/chip_text_color"
-                                    app:chipBackgroundColor="@color/chip_bg_color"
-                                    app:chipStrokeColor="@color/pro_border"
-                                    app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chipAll"
-                                    style="@style/Widget.MaterialComponents.Chip.Choice"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="32dp"
-                                    android:text="ALL"
-                                    android:textColor="@color/chip_text_color"
-                                    app:chipBackgroundColor="@color/chip_bg_color"
-                                    app:chipStrokeColor="@color/pro_border"
-                                    app:chipStrokeWidth="1dp"
-                                    app:chipMinHeight="32dp" />
+                                    app:chipMinHeight="36dp" />
 
                             </com.google.android.material.chip.ChipGroup>
-                        </HorizontalScrollView>
-                    </LinearLayout>
-
-                    <!-- Unit Selectors -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:background="@drawable/card_background"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="UNITS"
-                            android:textColor="@color/pro_text_muted"
-                            android:textSize="10sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.1" />
-
-                        <com.google.android.material.chip.ChipGroup
-                            android:id="@+id/doseUnitChips"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipUsvH"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="28dp"
-                                android:text="μSv/h"
-                                android:textColor="@color/chip_text_color"
-                                android:textSize="11sp"
-                                app:chipBackgroundColor="@color/chip_bg_color"
-                                app:chipStrokeColor="@color/pro_border"
-                                app:chipStrokeWidth="1dp"
-                                app:chipMinHeight="28dp"
-                                android:checked="true" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipNsvH"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="28dp"
-                                android:text="nSv/h"
-                                android:textColor="@color/chip_text_color"
-                                android:textSize="11sp"
-                                app:chipBackgroundColor="@color/chip_bg_color"
-                                app:chipStrokeColor="@color/pro_border"
-                                app:chipStrokeWidth="1dp"
-                                app:chipMinHeight="28dp" />
-
-                        </com.google.android.material.chip.ChipGroup>
-
-                        <View
-                            android:layout_width="1dp"
-                            android:layout_height="20dp"
-                            android:layout_marginHorizontal="8dp"
-                            android:background="@color/pro_border" />
-
-                        <com.google.android.material.chip.ChipGroup
-                            android:id="@+id/countUnitChips"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            app:singleSelection="true"
-                            app:selectionRequired="true">
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipCps"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="28dp"
-                                android:text="cps"
-                                android:textColor="@color/chip_text_color"
-                                android:textSize="11sp"
-                                app:chipBackgroundColor="@color/chip_bg_color"
-                                app:chipStrokeColor="@color/pro_border"
-                                app:chipStrokeWidth="1dp"
-                                app:chipMinHeight="28dp"
-                                android:checked="true" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipCpm"
-                                style="@style/Widget.MaterialComponents.Chip.Choice"
-                                android:layout_width="wrap_content"
-                                android:layout_height="28dp"
-                                android:text="cpm"
-                                android:textColor="@color/chip_text_color"
-                                android:textSize="11sp"
-                                app:chipBackgroundColor="@color/chip_bg_color"
-                                app:chipStrokeColor="@color/pro_border"
-                                app:chipStrokeWidth="1dp"
-                                app:chipMinHeight="28dp" />
-
-                        </com.google.android.material.chip.ChipGroup>
+                        </LinearLayout>
                     </LinearLayout>
 
                     <!-- Dose Chart -->

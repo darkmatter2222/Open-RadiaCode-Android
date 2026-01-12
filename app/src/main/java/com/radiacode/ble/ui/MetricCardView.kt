@@ -216,7 +216,7 @@ class MetricCardView @JvmOverloads constructor(
             points.add(x to y)
         }
 
-        // Draw per-segment color-coded fills that stay static
+        // Draw per-segment color-coded fills AND lines
         for (i in 1 until n) {
             val prev = sparklineData[i - 1]
             val curr = sparklineData[i]
@@ -232,7 +232,8 @@ class MetricCardView @JvmOverloads constructor(
                 else -> accentColor                            // Neutral = accent
             }
             
-            // Draw segment fill
+            // Draw segment fill with more opacity for colored segments
+            val fillAlpha = if (segmentColor != accentColor) 120 else 60
             val segmentPath = Path().apply {
                 moveTo(x1, top + height)
                 lineTo(x1, y1)
@@ -243,26 +244,17 @@ class MetricCardView @JvmOverloads constructor(
             
             val segmentGradient = LinearGradient(
                 0f, top, 0f, top + height,
-                Color.argb(90, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
+                Color.argb(fillAlpha, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
                 Color.argb(0, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
                 Shader.TileMode.CLAMP
             )
             sparklineFillPaint.shader = segmentGradient
             canvas.drawPath(segmentPath, sparklineFillPaint)
+            
+            // Draw line segment in the same color
+            sparklinePaint.color = segmentColor
+            canvas.drawLine(x1, y1, x2, y2, sparklinePaint)
         }
-
-        // Draw the line itself in accent color
-        val linePath = Path()
-        for (i in 0 until n) {
-            val (x, y) = points[i]
-            if (i == 0) {
-                linePath.moveTo(x, y)
-            } else {
-                linePath.lineTo(x, y)
-            }
-        }
-        sparklinePaint.color = accentColor
-        canvas.drawPath(linePath, sparklinePaint)
     }
 
     private fun formatValue(value: Float): String {
