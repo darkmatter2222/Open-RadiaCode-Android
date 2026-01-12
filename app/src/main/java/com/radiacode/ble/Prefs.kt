@@ -24,6 +24,7 @@ object Prefs {
     private const val KEY_DOSE_UNIT = "dose_unit"
     private const val KEY_COUNT_UNIT = "count_unit"
     private const val KEY_COMPACT_LAYOUT = "compact_layout"
+    private const val KEY_SHOW_SPIKE_MARKERS = "show_spike_markers"
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
 
@@ -189,6 +190,18 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_COMPACT_LAYOUT, enabled)
+            .apply()
+    }
+
+    fun isShowSpikeMarkersEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_SPIKE_MARKERS, true)  // Default ON
+    }
+
+    fun setShowSpikeMarkersEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_SPIKE_MARKERS, enabled)
             .apply()
     }
 

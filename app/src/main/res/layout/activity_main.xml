@@ -327,7 +327,7 @@
                             android:id="@+id/doseChartTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="DOSE RATE — Last 1m"
+                            android:text="REAL TIME DOSE RATE — Last 1m"
                             android:textColor="@color/pro_text_muted"
                             android:textSize="11sp"
                             android:textStyle="bold"
@@ -359,7 +359,7 @@
                             android:id="@+id/cpsChartTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="COUNT RATE — Last 1m"
+                            android:text="REAL TIME COUNT RATE — Last 1m"
                             android:textColor="@color/pro_text_muted"
                             android:textSize="11sp"
                             android:textStyle="bold"
@@ -512,6 +512,7 @@
                     android:padding="16dp"
                     android:visibility="gone">
 
+                    <!-- ===== CHART SETTINGS SECTION ===== -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -519,9 +520,9 @@
                         android:orientation="vertical"
                         android:padding="4dp">
 
-                        <!-- Window -->
+                        <!-- Section Header: Charts -->
                         <LinearLayout
-                            android:id="@+id/rowWindow"
+                            android:id="@+id/sectionChartHeader"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -535,31 +536,155 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Time window"
-                                android:textColor="@color/pro_text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:id="@+id/valueWindow"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="1m"
+                                android:text="CHART SETTINGS"
                                 android:textColor="@color/pro_cyan"
-                                android:textSize="15sp"
-                                android:fontFamily="monospace" />
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionChartArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
                         </LinearLayout>
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:background="@color/pro_border"
-                            android:alpha="0.5" />
-
-                        <!-- Smoothing -->
                         <LinearLayout
-                            android:id="@+id/rowSmoothing"
+                            android:id="@+id/sectionChartContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Window -->
+                            <LinearLayout
+                                android:id="@+id/rowWindow"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Time window"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueWindow"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="1m"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Smoothing -->
+                            <LinearLayout
+                                android:id="@+id/rowSmoothing"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Smoothing"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueSmoothing"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Off"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Spike Markers -->
+                            <LinearLayout
+                                android:id="@+id/rowSpikeMarkers"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Spike markers"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueSpikeMarkers"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="On"
+                                    android:textColor="@color/pro_green"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DISPLAY SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Display -->
+                        <LinearLayout
+                            android:id="@+id/sectionDisplayHeader"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -573,69 +698,79 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Smoothing"
-                                android:textColor="@color/pro_text_primary"
-                                android:textSize="15sp" />
+                                android:text="DISPLAY SETTINGS"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
 
-                            <TextView
-                                android:id="@+id/valueSmoothing"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Off"
-                                android:textColor="@color/pro_cyan"
-                                android:textSize="15sp"
-                                android:fontFamily="monospace" />
+                            <ImageView
+                                android:id="@+id/sectionDisplayArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
                         </LinearLayout>
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:background="@color/pro_border"
-                            android:alpha="0.5" />
-
-                        <!-- Units -->
                         <LinearLayout
-                            android:id="@+id/rowUnits"
+                            android:id="@+id/sectionDisplayContent"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center_vertical"
-                            android:orientation="horizontal"
-                            android:padding="16dp">
+                            android:orientation="vertical">
 
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Units"
-                                android:textColor="@color/pro_text_primary"
-                                android:textSize="15sp" />
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
 
-                            <TextView
-                                android:id="@+id/valueUnits"
-                                android:layout_width="wrap_content"
+                            <!-- Units -->
+                            <LinearLayout
+                                android:id="@+id/rowUnits"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="μSv/h • cps"
-                                android:textColor="@color/pro_cyan"
-                                android:textSize="15sp"
-                                android:fontFamily="monospace" />
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Units"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueUnits"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="μSv/h • cps"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
                         </LinearLayout>
+                    </LinearLayout>
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:background="@color/pro_border"
-                            android:alpha="0.5" />
+                    <!-- ===== ALERTS SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
 
-                        <!-- Threshold -->
+                        <!-- Section Header: Alerts -->
                         <LinearLayout
-                            android:id="@+id/rowThreshold"
+                            android:id="@+id/sectionAlertsHeader"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -649,31 +784,79 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Dose threshold"
-                                android:textColor="@color/pro_text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:id="@+id/valueThreshold"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Off"
+                                android:text="ALERTS"
                                 android:textColor="@color/pro_amber"
-                                android:textSize="15sp"
-                                android:fontFamily="monospace" />
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAlertsArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
                         </LinearLayout>
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:background="@color/pro_border"
-                            android:alpha="0.5" />
-
-                        <!-- Pause -->
                         <LinearLayout
-                            android:id="@+id/rowPause"
+                            android:id="@+id/sectionAlertsContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Threshold -->
+                            <LinearLayout
+                                android:id="@+id/rowThreshold"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Dose threshold"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueThreshold"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Off"
+                                    android:textColor="@color/pro_amber"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== ADVANCED SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Advanced -->
+                        <LinearLayout
+                            android:id="@+id/sectionAdvancedHeader"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:background="?attr/selectableItemBackground"
@@ -687,20 +870,66 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="Pause live updates"
-                                android:textColor="@color/pro_text_primary"
-                                android:textSize="15sp" />
-
-                            <TextView
-                                android:id="@+id/valuePause"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Off"
+                                android:text="ADVANCED"
                                 android:textColor="@color/pro_text_muted"
-                                android:textSize="15sp"
-                                android:fontFamily="monospace" />
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAdvancedArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
                         </LinearLayout>
 
+                        <LinearLayout
+                            android:id="@+id/sectionAdvancedContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Pause -->
+                            <LinearLayout
+                                android:id="@+id/rowPause"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Pause live updates"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valuePause"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Off"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
 

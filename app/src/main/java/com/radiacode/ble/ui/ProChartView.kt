@@ -66,6 +66,9 @@ class ProChartView @JvmOverloads constructor(
     private var isZoomPanEnabled: Boolean = true
     private var isPanning = false
     private var lastPanX = 0f
+    
+    // Display options
+    private var showSpikeMarkers: Boolean = true
 
     // Dimensions (calculated in onSizeChanged)
     private var chartLeft = 0f
@@ -343,6 +346,12 @@ class ProChartView @JvmOverloads constructor(
 
     /** Get current zoom level */
     fun getZoomLevel(): Float = zoomLevel
+    
+    /** Enable or disable spike markers (dotted lines with percentage) */
+    fun setShowSpikeMarkers(show: Boolean) {
+        showSpikeMarkers = show
+        invalidate()
+    }
 
     /** Get visible data range as [startIndex, endIndex] */
     private fun getVisibleRange(): Pair<Int, Int> {
@@ -583,8 +592,10 @@ class ProChartView @JvmOverloads constructor(
             canvas.drawLine(chartLeft, yPx, chartRight, yPx, thresholdPaint)
         }
 
-        // Draw delta spike markers for visible portion
-        drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
+        // Draw delta spike markers for visible portion (if enabled)
+        if (showSpikeMarkers) {
+            drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
+        }
 
         // Draw peak marker
         if (n > 0) {

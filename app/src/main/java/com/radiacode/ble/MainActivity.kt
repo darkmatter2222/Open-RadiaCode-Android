@@ -90,15 +90,31 @@ class MainActivity : AppCompatActivity() {
     // Settings panel
     private lateinit var rowWindow: View
     private lateinit var rowSmoothing: View
+    private lateinit var rowSpikeMarkers: View
     private lateinit var rowUnits: View
     private lateinit var rowThreshold: View
     private lateinit var rowPause: View
 
     private lateinit var valueWindow: TextView
     private lateinit var valueSmoothing: TextView
+    private lateinit var valueSpikeMarkers: TextView
     private lateinit var valueUnits: TextView
     private lateinit var valueThreshold: TextView
     private lateinit var valuePause: TextView
+    
+    // Settings sections (expandable)
+    private lateinit var sectionChartHeader: View
+    private lateinit var sectionChartContent: View
+    private lateinit var sectionChartArrow: android.widget.ImageView
+    private lateinit var sectionDisplayHeader: View
+    private lateinit var sectionDisplayContent: View
+    private lateinit var sectionDisplayArrow: android.widget.ImageView
+    private lateinit var sectionAlertsHeader: View
+    private lateinit var sectionAlertsContent: View
+    private lateinit var sectionAlertsArrow: android.widget.ImageView
+    private lateinit var sectionAdvancedHeader: View
+    private lateinit var sectionAdvancedContent: View
+    private lateinit var sectionAdvancedArrow: android.widget.ImageView
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -229,15 +245,31 @@ class MainActivity : AppCompatActivity() {
 
         rowWindow = findViewById(R.id.rowWindow)
         rowSmoothing = findViewById(R.id.rowSmoothing)
+        rowSpikeMarkers = findViewById(R.id.rowSpikeMarkers)
         rowUnits = findViewById(R.id.rowUnits)
         rowThreshold = findViewById(R.id.rowThreshold)
         rowPause = findViewById(R.id.rowPause)
 
         valueWindow = findViewById(R.id.valueWindow)
         valueSmoothing = findViewById(R.id.valueSmoothing)
+        valueSpikeMarkers = findViewById(R.id.valueSpikeMarkers)
         valueUnits = findViewById(R.id.valueUnits)
         valueThreshold = findViewById(R.id.valueThreshold)
         valuePause = findViewById(R.id.valuePause)
+        
+        // Expandable section headers and content
+        sectionChartHeader = findViewById(R.id.sectionChartHeader)
+        sectionChartContent = findViewById(R.id.sectionChartContent)
+        sectionChartArrow = findViewById(R.id.sectionChartArrow)
+        sectionDisplayHeader = findViewById(R.id.sectionDisplayHeader)
+        sectionDisplayContent = findViewById(R.id.sectionDisplayContent)
+        sectionDisplayArrow = findViewById(R.id.sectionDisplayArrow)
+        sectionAlertsHeader = findViewById(R.id.sectionAlertsHeader)
+        sectionAlertsContent = findViewById(R.id.sectionAlertsContent)
+        sectionAlertsArrow = findViewById(R.id.sectionAlertsArrow)
+        sectionAdvancedHeader = findViewById(R.id.sectionAdvancedHeader)
+        sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
+        sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -297,6 +329,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSettingsPanel() {
+        // Setup expandable sections
+        setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
+        setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
+        setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
+        setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
+        
         rowWindow.setOnClickListener {
             val next = when (Prefs.getWindowSeconds(this, 60)) {
                 10 -> 60
@@ -319,6 +357,14 @@ class MainActivity : AppCompatActivity() {
             Prefs.setSmoothSeconds(this, next)
             refreshSettingsRows()
             lastReadingTimestampMs = 0L
+        }
+        
+        rowSpikeMarkers.setOnClickListener {
+            val next = !Prefs.isShowSpikeMarkersEnabled(this)
+            Prefs.setShowSpikeMarkersEnabled(this, next)
+            doseChart.setShowSpikeMarkers(next)
+            cpsChart.setShowSpikeMarkers(next)
+            refreshSettingsRows()
         }
 
         rowUnits.setOnClickListener {
@@ -360,6 +406,32 @@ class MainActivity : AppCompatActivity() {
             lastReadingTimestampMs = 0L
         }
     }
+    
+    private fun setupExpandableSection(header: View, content: View, arrow: android.widget.ImageView, expanded: Boolean) {
+        // Set initial state
+        content.visibility = if (expanded) View.VISIBLE else View.GONE
+        arrow.rotation = if (expanded) 180f else 0f
+        
+        header.setOnClickListener {
+            val isCurrentlyExpanded = content.visibility == View.VISIBLE
+            if (isCurrentlyExpanded) {
+                content.animate()
+                    .alpha(0f)
+                    .setDuration(150)
+                    .withEndAction { content.visibility = View.GONE }
+                    .start()
+                arrow.animate().rotation(0f).setDuration(150).start()
+            } else {
+                content.alpha = 0f
+                content.visibility = View.VISIBLE
+                content.animate()
+                    .alpha(1f)
+                    .setDuration(150)
+                    .start()
+                arrow.animate().rotation(180f).setDuration(150).start()
+            }
+        }
+    }
 
     private fun setupLogsPanel() {
         shareCsvButton.setOnClickListener { shareCsv() }
@@ -369,12 +441,12 @@ class MainActivity : AppCompatActivity() {
         val cyanColor = ContextCompat.getColor(this, R.color.pro_cyan)
         val magentaColor = ContextCompat.getColor(this, R.color.pro_magenta)
 
-        doseCard.setLabel("DOSE RATE")
+        doseCard.setLabel("DELTA DOSE RATE")
         doseCard.setAccentColor(cyanColor)
         doseCard.setValueText("—")
         doseCard.setTrend(0f)
 
-        cpsCard.setLabel("COUNT RATE")
+        cpsCard.setLabel("DELTA COUNT RATE")
         cpsCard.setAccentColor(magentaColor)
         cpsCard.setValueText("—")
         cpsCard.setTrend(0f)
@@ -393,6 +465,11 @@ class MainActivity : AppCompatActivity() {
         // Enable rolling average line on charts
         doseChart.setRollingAverageWindow(10)
         cpsChart.setRollingAverageWindow(10)
+        
+        // Apply spike markers setting
+        val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
+        doseChart.setShowSpikeMarkers(showSpikes)
+        cpsChart.setShowSpikeMarkers(showSpikes)
 
         doseChart.setOnClickListener { openFocus("dose") }
         cpsChart.setOnClickListener { openFocus("cps") }
@@ -711,11 +788,11 @@ class MainActivity : AppCompatActivity() {
         previousCps = cpsOrCpm
 
         mainHandler.post {
-            doseCard.setLabel("DOSE RATE · $doseUnit")
+            doseCard.setLabel("DELTA DOSE RATE · $doseUnit")
             doseCard.setValue(dose, doseUnit)
             doseCard.setTrend(doseTrend)
 
-            cpsCard.setLabel("COUNT RATE · $cpsUnit")
+            cpsCard.setLabel("DELTA COUNT RATE · $cpsUnit")
             cpsCard.setValue(cpsOrCpm, cpsUnit)
             cpsCard.setTrend(cpsTrend)
         }
@@ -841,8 +918,8 @@ class MainActivity : AppCompatActivity() {
         val doseUnit = doseUnitLabel(du)
         val countUnit = countUnitLabel(cu)
         
-        doseChartTitle.text = "DOSE RATE ($doseUnit) — Last $label"
-        cpsChartTitle.text = "COUNT RATE ($countUnit) — Last $label"
+        doseChartTitle.text = "REAL TIME DOSE RATE ($doseUnit) — Last $label"
+        cpsChartTitle.text = "REAL TIME COUNT RATE ($countUnit) — Last $label"
     }
 
     private fun refreshSettingsRows() {
@@ -864,6 +941,11 @@ class MainActivity : AppCompatActivity() {
         val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
         val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
         valueUnits.text = "${doseUnitLabel(du)} • ${countUnitLabel(cu)}"
+        
+        val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
+        valueSpikeMarkers.text = if (showSpikes) "On" else "Off"
+        valueSpikeMarkers.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
+            if (showSpikes) R.color.pro_green else R.color.pro_text_muted))
 
         val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
         valueThreshold.text = if (tUsvH <= 0f) {

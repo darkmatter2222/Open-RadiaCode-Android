@@ -205,8 +205,11 @@ class MetricCardView @JvmOverloads constructor(
         val n = sparklineData.size
         val greenColor = ContextCompat.getColor(context, R.color.pro_green)
         val redColor = ContextCompat.getColor(context, R.color.pro_red)
-        val whiteColor = Color.WHITE  // Neutral segments are white so red/green stand out
-        val deltaThreshold = 0.005f  // 0.5% change threshold for coloring
+        val whiteColor = Color.WHITE
+        
+        // Intensity parameters: deltas below minDelta are white, above maxDelta are full color
+        val minDelta = 0.001f   // 0.1% - below this is truly "no change"
+        val maxDelta = 0.10f    // 10% - at or above this is full intensity
 
         // Calculate positions
         val points = mutableListOf<Pair<Float, Float>>()
@@ -217,28 +220,36 @@ class MetricCardView @JvmOverloads constructor(
             points.add(x to y)
         }
 
-        // Draw per-segment color-coded fills AND lines
+        // Draw per-segment intensity-based fills AND lines
         for (i in 1 until n) {
             val prev = sparklineData[i - 1]
             val curr = sparklineData[i]
             val deltaPercent = if (prev != 0f) (curr - prev) / prev else 0f
+            val absDelta = kotlin.math.abs(deltaPercent)
             
             val (x1, y1) = points[i - 1]
             val (x2, y2) = points[i]
             
-            // Determine segment color based on direction (white for neutral)
+            // Calculate intensity: 0.0 (white) to 1.0 (full color)
+            val intensity = when {
+                absDelta < minDelta -> 0f  // Truly no change = white
+                absDelta >= maxDelta -> 1f // Max change = full color
+                else -> (absDelta - minDelta) / (maxDelta - minDelta) // Linear interpolation
+            }.coerceIn(0f, 1f)
+            
+            // Determine color based on direction and intensity
             val segmentColor = when {
-                deltaPercent > deltaThreshold -> greenColor   // Increasing = green
-                deltaPercent < -deltaThreshold -> redColor    // Decreasing = red  
-                else -> whiteColor                             // Neutral = white
+                intensity < 0.01f -> whiteColor  // Nearly zero = white
+                deltaPercent > 0f -> blendColors(whiteColor, greenColor, intensity)
+                deltaPercent < 0f -> blendColors(whiteColor, redColor, intensity)
+                else -> whiteColor
             }
             
-            // Draw segment fill with more opacity for colored segments
-            val fillAlpha = when {
-                deltaPercent > deltaThreshold -> 120   // Green - prominent
-                deltaPercent < -deltaThreshold -> 120  // Red - prominent
-                else -> 40                              // White - subtle
-            }
+            // Fill alpha scales with intensity - more prominent fills
+            val baseFillAlpha = 60   // Base alpha for white
+            val maxFillAlpha = 180   // Max alpha for full intensity colors
+            val fillAlpha = (baseFillAlpha + (maxFillAlpha - baseFillAlpha) * intensity).toInt()
+            
             val segmentPath = Path().apply {
                 moveTo(x1, top + height)
                 lineTo(x1, y1)
@@ -256,10 +267,20 @@ class MetricCardView @JvmOverloads constructor(
             sparklineFillPaint.shader = segmentGradient
             canvas.drawPath(segmentPath, sparklineFillPaint)
             
-            // Draw line segment in the same color
-            sparklinePaint.color = segmentColor
+            // Line alpha also scales with intensity
+            val lineAlpha = (150 + 105 * intensity).toInt().coerceIn(150, 255)
+            sparklinePaint.color = Color.argb(lineAlpha, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor))
             canvas.drawLine(x1, y1, x2, y2, sparklinePaint)
         }
+    }
+    
+    // Blend two colors based on ratio (0.0 = color1, 1.0 = color2)
+    private fun blendColors(color1: Int, color2: Int, ratio: Float): Int {
+        val inverseRatio = 1f - ratio
+        val r = (Color.red(color1) * inverseRatio + Color.red(color2) * ratio).toInt()
+        val g = (Color.green(color1) * inverseRatio + Color.green(color2) * ratio).toInt()
+        val b = (Color.blue(color1) * inverseRatio + Color.blue(color2) * ratio).toInt()
+        return Color.rgb(r, g, b)
     }
 
     private fun formatValue(value: Float): String {

@@ -36,4 +36,7 @@
     <color name="pro_status_paused">#FFD740</color>
     <color name="pro_status_error">#FF5252</color>
     <color name="pro_status_disconnected">#6E6E78</color>
+    
+    <!-- App icon -->
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>
