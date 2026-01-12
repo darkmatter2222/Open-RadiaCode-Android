@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widgetStatusDot"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="●"
+            android:textSize="12sp"
+            android:textColor="#69F0AE" />
+
+        <TextView
+            android:id="@+id/widgetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:text="Open RadiaCode"
+            android:textColor="#9E9EA8"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widgetTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--:--"
+            android:textColor="#6E6E78"
+            android:textSize="10sp"
+            android:fontFamily="monospace" />
+    </LinearLayout>
+
+    <!-- Dose Rate -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widgetDoseValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textColor="#00E5FF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/widgetDoseUnit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="μSv/h"
+            android:textColor="#6E6E78"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Count Rate -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widgetCpsValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="—"
+            android:textColor="#E040FB"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/widgetCpsUnit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="cps"
+            android:textColor="#6E6E78"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -369,7 +369,11 @@ class RadiaCodeForegroundService : Service() {
                         } catch (_: Throwable) {
                         }
 
+                        // Update all widget types
                         RadiaCodeWidgetProvider.updateAll(this)
+                        SimpleWidgetProvider.updateAll(this)
+                        ChartWidgetProvider.updateAll(this)
+                        
                         notifyUpdate(
                             "Open RadiaCode",
                             "${"%.3f".format(uSvPerHour)} μSv/h • ${"%.1f".format(rt.countRate)} cps"

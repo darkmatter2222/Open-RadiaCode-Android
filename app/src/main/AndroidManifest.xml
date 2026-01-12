@@ -69,7 +69,8 @@
 
         <receiver
             android:name=".RadiaCodeWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:label="RadiaCode (Legacy)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -77,6 +78,32 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/radiacode_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".SimpleWidgetProvider"
+            android:exported="true"
+            android:label="RadiaCode Simple">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_simple_info" />
+        </receiver>
+
+        <receiver
+            android:name=".ChartWidgetProvider"
+            android:exported="true"
+            android:label="RadiaCode Charts">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_chart_info" />
         </receiver>
 
         <provider
