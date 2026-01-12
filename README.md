@@ -9,6 +9,34 @@ App name: **Open RadiaCode**.
 
 Key goal: appliance-style operation — once a preferred device is set, a foreground service keeps connecting and polling in the background, with a home screen widget showing the latest reading.
 
+## Features
+
+### Dashboard
+- **Real-time charts** with zoom, pan, and configurable time windows (30s to 1h)
+- **Delta cards** showing change rates with statistical sparklines
+- **Spike detection** with configurable markers and percentage annotations
+- **Statistical analysis** with z-score highlighting and trend indicators
+
+### Smart Alerts
+- Configure up to **10 custom alerts**
+- **Threshold-based**: trigger when dose/count goes above or below a value
+- **Statistical alerts**: trigger when readings deviate beyond 1σ, 2σ, or 3σ from the mean
+- **Duration requirements**: condition must persist for N seconds before triggering
+- **Cooldown periods**: prevent alert spam with configurable quiet periods
+- **Push notifications** with vibration and quick app access
+
+### Widget
+- Home screen widget with live dose and count rates
+- Statistical trend indicators (▲ ▼) with σ notation
+- Color-coded values based on statistical significance
+- Connection status indicator
+
+### Settings
+- **Chart Settings**: Time window, smoothing, spike markers, spike percentages
+- **Display Settings**: Unit selection (µSv/h, nSv/h, CPS, CPM)
+- **Alerts**: Dose threshold, Smart Alerts configuration
+- **Advanced**: Pause live updates
+
 ## Build + deploy loop (Windows)
 
 See [AGENTS.md](AGENTS.md) for the canonical build/install/debug loop.

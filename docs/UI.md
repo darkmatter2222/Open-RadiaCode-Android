@@ -70,12 +70,18 @@ Visual specs:
 Large stat display with trend indicator and mini sparkline:
 ```
 ┌─────────────────────────────┐
-│ DOSE RATE            ▲ +2% │  ← Label + trend
-│ 0.057                      │  ← Hero value (48sp)
-│ μSv/h                      │  ← Unit
-│ ───────────────────        │  ← Mini sparkline (32dp tall)
-└─────────────────────────────┘
+│ DELTA DOSE RATE              ▲ +2σ │  ← Label + trend (σ notation)
+│ 0.057                              │  ← Hero value (48sp)
+│ μSv/h                              │  ← Unit
+│ ───────────────────                │  ← Mini sparkline with mean line
+│                                     │  ← Color segments by z-score
+└─────────────────────────────────────┘
 ```
+
+Statistical features:
+- Sparkline segments colored by z-score (intensity = deviation from mean)
+- Dotted mean line for reference
+- Trend arrows with σ notation: ▲▲ (+>2σ), ▲ (+>1σ), ─ (within σ), ▼ (->1σ), ▼▼ (->2σ)
 
 ### 3. StatRowView
 
@@ -135,10 +141,36 @@ Horizontal metrics strip showing min/avg/max/delta:
 
 ### Settings
 
-- Units toggle
-- Threshold slider
-- Smoothing selector
-- Time window default
+Settings are organized into expandable sections:
+
+#### Chart Settings (cyan header)
+- Time window: 10s / 1m / 10m / 1h
+- Smoothing: Off / 3s / 5s / 10s / 30s
+- Spike markers: On/Off (shows triangle indicators at significant deltas)
+- Spike percentages: On/Off (shows percentage labels above spike markers)
+
+#### Display Settings (magenta header)
+- Units: µSv/h • CPS / nSv/h • CPS / µSv/h • CPM / nSv/h • CPM
+
+#### Alerts (amber header)
+- Dose threshold: Off / 0.05 / 0.10 / 0.50 / 1.00 µSv/h
+- Smart Alerts: Opens AlertConfigActivity wizard
+
+#### Advanced (muted header, collapsed by default)
+- Pause live updates: On/Off (freezes charts for inspection)
+
+### Smart Alerts Configuration
+
+Full wizard for configuring 0-10 statistical alerts:
+- List view with swipe-to-delete
+- FAB to add new alert
+- Each alert has:
+  - Name
+  - Metric: Dose Rate / Count Rate
+  - Condition: Above threshold / Below threshold / Outside σ band
+  - Threshold value (for above/below) or σ level (1σ/2σ/3σ)
+  - Duration requirement (seconds condition must persist)
+  - Cooldown period (seconds between repeated alerts)
 
 ### Logs
 
@@ -150,4 +182,31 @@ Horizontal metrics strip showing min/avg/max/delta:
 - **Prediction overlay** (forecast as dashed line)
 - **Geolocation** (map heatmap)
 - **Multi-device** comparison
-- **Alert rules** with notifications
+
+## Implemented Features
+
+### Statistical Analysis
+- Real-time mean and standard deviation calculation
+- Z-score based coloring for sparklines
+- Trend indicators using σ notation
+- Statistical alerts that adapt to baseline
+
+### Smart Alerts
+- Up to 10 configurable alerts
+- Threshold-based (above/below)
+- Statistical (outside N standard deviations)
+- Duration requirements (sustained condition)
+- Cooldown periods (prevent spam)
+- Push notifications with vibration
+
+### Chart Enhancements
+- Spike markers (triangles at significant deltas)
+- Configurable spike percentages
+- Zoom and pan with pinch/drag gestures
+- Rolling average overlay
+
+### Widget
+- Home screen widget with delta-style cards
+- Statistical trend display
+- Color-coded values
+- Connection status indicator

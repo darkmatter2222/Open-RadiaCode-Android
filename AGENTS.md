@@ -64,3 +64,12 @@ See [docs/UI.md](docs/UI.md) for the canonical UI/UX spec.
 - If scan doesn’t find the device, ensure the official RadiaCode app is not connected and the device isn’t connected to the OS Bluetooth settings as an active connection.
 - You can’t simulate `BOOT_COMPLETED` / `USER_UNLOCKED` with `adb shell am broadcast` (Android blocks protected broadcasts); validate auto-start by rebooting the phone.
 - The foreground service is `exported=false`, so `adb shell am start-foreground-service ...` won’t work; start it by launching the app (it auto-starts when a preferred device is set).
+## Documentation Updates
+
+**IMPORTANT:** When making changes to features, always update the relevant documentation:
+
+1. **README.md** - Update feature lists, screenshots, and usage instructions
+2. **docs/UI.md** - Update UI/UX specifications when changing the interface
+3. **AGENTS.md** - Add any new build/deploy considerations
+
+This ensures documentation stays in sync with the codebase.

@@ -48,6 +48,11 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
 
+        <activity
+            android:name=".AlertConfigActivity"
+            android:exported="false"
+            android:label="Smart Alerts" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

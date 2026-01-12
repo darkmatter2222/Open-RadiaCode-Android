@@ -7,16 +7,18 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.R
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
  * Professional metric card with:
  * - Label (uppercase)
  * - Hero value (large monospace)
  * - Unit label
- * - Trend indicator (arrow + percentage)
- * - Mini sparkline at bottom
+ * - Trend indicator (arrow + percentage) - now based on standard deviation
+ * - Mini sparkline at bottom with statistical color coding
  */
 class MetricCardView @JvmOverloads constructor(
     context: Context,
@@ -35,6 +37,11 @@ class MetricCardView @JvmOverloads constructor(
     private var trend: Float = 0f // percentage change
     private var sparklineData: List<Float> = emptyList()
     private var accentColor: Int = ContextCompat.getColor(context, R.color.pro_cyan)
+    
+    // Statistics (calculated from sparkline data)
+    private var mean: Float = 0f
+    private var stdDev: Float = 0f
+    private var zScore: Float = 0f  // How many std devs from mean
 
     // Paints
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -115,8 +122,39 @@ class MetricCardView @JvmOverloads constructor(
 
     fun setSparkline(data: List<Float>) {
         this.sparklineData = data
+        calculateStatistics()
         invalidate()
     }
+    
+    /** Calculate mean, standard deviation, and z-score for current value */
+    private fun calculateStatistics() {
+        if (sparklineData.size < 2) {
+            mean = value
+            stdDev = 0f
+            zScore = 0f
+            return
+        }
+        
+        // Calculate mean
+        mean = sparklineData.sum() / sparklineData.size
+        
+        // Calculate standard deviation
+        val sumSquaredDiff = sparklineData.map { (it - mean) * (it - mean) }.sum()
+        stdDev = sqrt(sumSquaredDiff / sparklineData.size)
+        
+        // Calculate z-score for current value (last value in sparkline or current value)
+        val currentVal = if (sparklineData.isNotEmpty()) sparklineData.last() else value
+        zScore = if (stdDev > 0.0001f) (currentVal - mean) / stdDev else 0f
+    }
+    
+    /** Get the z-score (for external use, e.g., widget) */
+    fun getZScore(): Float = zScore
+    
+    /** Get the standard deviation (for external use) */
+    fun getStdDev(): Float = stdDev
+    
+    /** Get the mean (for external use) */
+    fun getMean(): Float = mean
 
     fun setAccentColor(color: Int) {
         this.accentColor = color
@@ -167,16 +205,24 @@ class MetricCardView @JvmOverloads constructor(
         val colorRed = ContextCompat.getColor(context, R.color.pro_red)
         val colorMuted = ContextCompat.getColor(context, R.color.pro_text_muted)
 
-        val (arrow, color) = when {
-            trend > 0.5f -> "▲" to colorGreen
-            trend < -0.5f -> "▼" to colorRed
-            else -> "─" to colorMuted
+        // Use z-score for statistical significance
+        // |z| > 1 means outside 1 standard deviation (~68% of data)
+        // |z| > 2 means outside 2 standard deviations (~95% of data)
+        val absZ = abs(zScore)
+        
+        val (arrow, color, showValue) = when {
+            absZ > 2f && zScore > 0 -> Triple("▲▲", colorGreen, true)   // Very high (>2σ)
+            absZ > 1f && zScore > 0 -> Triple("▲", colorGreen, true)    // High (>1σ)
+            absZ > 2f && zScore < 0 -> Triple("▼▼", colorRed, true)     // Very low (<-2σ)
+            absZ > 1f && zScore < 0 -> Triple("▼", colorRed, true)      // Low (<-1σ)
+            else -> Triple("─", colorMuted, false)                       // Within 1σ (normal)
         }
 
         trendPaint.color = color
 
-        val text = if (kotlin.math.abs(trend) >= 0.5f) {
-            "$arrow ${String.format(Locale.US, "%.1f", kotlin.math.abs(trend))}%"
+        val text = if (showValue && abs(trend) >= 0.1f) {
+            val sign = if (trend > 0) "+" else ""
+            "$arrow $sign${String.format(Locale.US, "%.1f", trend)}%"
         } else {
             arrow
         }
@@ -206,10 +252,6 @@ class MetricCardView @JvmOverloads constructor(
         val greenColor = ContextCompat.getColor(context, R.color.pro_green)
         val redColor = ContextCompat.getColor(context, R.color.pro_red)
         val whiteColor = Color.WHITE
-        
-        // Intensity parameters: deltas below minDelta are white, above maxDelta are full color
-        val minDelta = 0.001f   // 0.1% - below this is truly "no change"
-        val maxDelta = 0.10f    // 10% - at or above this is full intensity
 
         // Calculate positions
         val points = mutableListOf<Pair<Float, Float>>()
@@ -220,34 +262,36 @@ class MetricCardView @JvmOverloads constructor(
             points.add(x to y)
         }
 
-        // Draw per-segment intensity-based fills AND lines
+        // Draw per-segment with statistical coloring based on z-score
         for (i in 1 until n) {
-            val prev = sparklineData[i - 1]
             val curr = sparklineData[i]
-            val deltaPercent = if (prev != 0f) (curr - prev) / prev else 0f
-            val absDelta = kotlin.math.abs(deltaPercent)
             
             val (x1, y1) = points[i - 1]
             val (x2, y2) = points[i]
             
-            // Calculate intensity: 0.0 (white) to 1.0 (full color)
+            // Calculate z-score for this point (how many std devs from mean)
+            val pointZScore = if (stdDev > 0.0001f) (curr - mean) / stdDev else 0f
+            val absZ = abs(pointZScore)
+            
+            // Intensity based on how far outside 1 std dev
+            // 0 at z=0, peaks at z=2+
             val intensity = when {
-                absDelta < minDelta -> 0f  // Truly no change = white
-                absDelta >= maxDelta -> 1f // Max change = full color
-                else -> (absDelta - minDelta) / (maxDelta - minDelta) // Linear interpolation
+                absZ < 0.5f -> 0f           // Within 0.5σ = white (normal noise)
+                absZ >= 2f -> 1f            // Beyond 2σ = full color (significant)
+                else -> (absZ - 0.5f) / 1.5f // 0.5σ to 2σ = gradient
             }.coerceIn(0f, 1f)
             
             // Determine color based on direction and intensity
             val segmentColor = when {
-                intensity < 0.01f -> whiteColor  // Nearly zero = white
-                deltaPercent > 0f -> blendColors(whiteColor, greenColor, intensity)
-                deltaPercent < 0f -> blendColors(whiteColor, redColor, intensity)
+                intensity < 0.05f -> whiteColor  // Nearly zero = white
+                pointZScore > 0f -> blendColors(whiteColor, greenColor, intensity)
+                pointZScore < 0f -> blendColors(whiteColor, redColor, intensity)
                 else -> whiteColor
             }
             
-            // Fill alpha scales with intensity - more prominent fills
-            val baseFillAlpha = 60   // Base alpha for white
-            val maxFillAlpha = 180   // Max alpha for full intensity colors
+            // Fill alpha scales with intensity - more prominent fills for significant deviations
+            val baseFillAlpha = 40
+            val maxFillAlpha = 200
             val fillAlpha = (baseFillAlpha + (maxFillAlpha - baseFillAlpha) * intensity).toInt()
             
             val segmentPath = Path().apply {
@@ -268,9 +312,23 @@ class MetricCardView @JvmOverloads constructor(
             canvas.drawPath(segmentPath, sparklineFillPaint)
             
             // Line alpha also scales with intensity
-            val lineAlpha = (150 + 105 * intensity).toInt().coerceIn(150, 255)
+            val lineAlpha = (120 + 135 * intensity).toInt().coerceIn(120, 255)
             sparklinePaint.color = Color.argb(lineAlpha, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor))
             canvas.drawLine(x1, y1, x2, y2, sparklinePaint)
+        }
+        
+        // Draw mean line (subtle dotted line)
+        if (stdDev > 0.0001f) {
+            val meanYNorm = (mean - yMin) / yRange
+            val meanY = top + height - height * meanYNorm
+            val meanLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = density * 1f
+                color = ContextCompat.getColor(context, R.color.pro_text_muted)
+                alpha = 60
+                pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
+            }
+            canvas.drawLine(left, meanY, left + width, meanY, meanLinePaint)
         }
     }
     

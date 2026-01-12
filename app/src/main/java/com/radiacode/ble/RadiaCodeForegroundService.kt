@@ -78,6 +78,9 @@ class RadiaCodeForegroundService : Service() {
     private var consecutivePollFailures: Int = 0
 
     private var targetAddress: String? = null
+
+    // Alert evaluation
+    private lateinit var alertEvaluator: AlertEvaluator
     private var reconnectAttempts: Int = 0
     private var reconnectTask: ScheduledFuture<*>? = null
 
@@ -104,6 +107,7 @@ class RadiaCodeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        alertEvaluator = AlertEvaluator(this)
         try {
             registerReceiver(btStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         } catch (t: Throwable) {
@@ -333,6 +337,14 @@ class RadiaCodeForegroundService : Service() {
                         Prefs.setLastReading(this, uSvPerHour, rt.countRate, timestampMs)
                         Prefs.addRecentReading(this, Prefs.LastReading(uSvPerHour, rt.countRate, timestampMs))
                         appendReadingCsvIfNew(timestampMs, uSvPerHour, rt.countRate)
+
+                        // Evaluate smart alerts
+                        try {
+                            val recentReadings = Prefs.getRecentReadings(this)
+                            alertEvaluator.evaluate(uSvPerHour, rt.countRate, recentReadings)
+                        } catch (t: Throwable) {
+                            Log.e(TAG, "Alert evaluation failed", t)
+                        }
 
                         // Live update for in-app charts/history.
                         try {

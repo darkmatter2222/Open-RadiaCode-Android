@@ -4,9 +4,14 @@
     
     <!-- Backgrounds -->
     <color name="pro_background">#0D0D0F</color>
+    <color name="pro_bg">#0D0D0F</color>
+    <color name="pro_bg_card">#1A1A1E</color>
     <color name="pro_surface">#1A1A1E</color>
     <color name="pro_surface_elevated">#242428</color>
     <color name="pro_border">#2E2E33</color>
+    
+    <!-- Basic Colors -->
+    <color name="white">#FFFFFF</color>
     
     <!-- Accent Colors -->
     <color name="pro_cyan">#00E5FF</color>

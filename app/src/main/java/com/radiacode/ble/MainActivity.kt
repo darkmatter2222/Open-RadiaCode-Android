@@ -1,6 +1,7 @@
 package com.radiacode.ble
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
@@ -94,13 +95,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowUnits: View
     private lateinit var rowThreshold: View
     private lateinit var rowPause: View
+    private lateinit var rowSpikePercentages: View
+    private lateinit var rowSmartAlerts: View
 
     private lateinit var valueWindow: TextView
     private lateinit var valueSmoothing: TextView
     private lateinit var valueSpikeMarkers: TextView
+    private lateinit var valueSpikePercentages: TextView
     private lateinit var valueUnits: TextView
     private lateinit var valueThreshold: TextView
     private lateinit var valuePause: TextView
+    private lateinit var valueSmartAlerts: TextView
     
     // Settings sections (expandable)
     private lateinit var sectionChartHeader: View
@@ -246,16 +251,20 @@ class MainActivity : AppCompatActivity() {
         rowWindow = findViewById(R.id.rowWindow)
         rowSmoothing = findViewById(R.id.rowSmoothing)
         rowSpikeMarkers = findViewById(R.id.rowSpikeMarkers)
+        rowSpikePercentages = findViewById(R.id.rowSpikePercentages)
         rowUnits = findViewById(R.id.rowUnits)
         rowThreshold = findViewById(R.id.rowThreshold)
         rowPause = findViewById(R.id.rowPause)
+        rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
 
         valueWindow = findViewById(R.id.valueWindow)
         valueSmoothing = findViewById(R.id.valueSmoothing)
         valueSpikeMarkers = findViewById(R.id.valueSpikeMarkers)
+        valueSpikePercentages = findViewById(R.id.valueSpikePercentages)
         valueUnits = findViewById(R.id.valueUnits)
         valueThreshold = findViewById(R.id.valueThreshold)
         valuePause = findViewById(R.id.valuePause)
+        valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
         
         // Expandable section headers and content
         sectionChartHeader = findViewById(R.id.sectionChartHeader)
@@ -367,6 +376,14 @@ class MainActivity : AppCompatActivity() {
             refreshSettingsRows()
         }
 
+        rowSpikePercentages.setOnClickListener {
+            val next = !Prefs.isShowSpikePercentagesEnabled(this)
+            Prefs.setShowSpikePercentagesEnabled(this, next)
+            doseChart.setShowSpikePercentages(next)
+            cpsChart.setShowSpikePercentages(next)
+            refreshSettingsRows()
+        }
+
         rowUnits.setOnClickListener {
             val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
             val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
@@ -404,6 +421,10 @@ class MainActivity : AppCompatActivity() {
             }
             refreshSettingsRows()
             lastReadingTimestampMs = 0L
+        }
+
+        rowSmartAlerts.setOnClickListener {
+            startActivity(Intent(this, AlertConfigActivity::class.java))
         }
     }
     
@@ -470,6 +491,11 @@ class MainActivity : AppCompatActivity() {
         val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
         doseChart.setShowSpikeMarkers(showSpikes)
         cpsChart.setShowSpikeMarkers(showSpikes)
+
+        // Apply spike percentages setting
+        val showSpikePercent = Prefs.isShowSpikePercentagesEnabled(this)
+        doseChart.setShowSpikePercentages(showSpikePercent)
+        cpsChart.setShowSpikePercentages(showSpikePercent)
 
         doseChart.setOnClickListener { openFocus("dose") }
         cpsChart.setOnClickListener { openFocus("cps") }
@@ -555,6 +581,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         registerReadingReceiver()
         startUiLoop()
+        refreshSettingsRows() // Refresh in case alerts were changed
     }
 
     override fun onPause() {
@@ -947,6 +974,11 @@ class MainActivity : AppCompatActivity() {
         valueSpikeMarkers.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
             if (showSpikes) R.color.pro_green else R.color.pro_text_muted))
 
+        val showSpikePercent = Prefs.isShowSpikePercentagesEnabled(this)
+        valueSpikePercentages.text = if (showSpikePercent) "On" else "Off"
+        valueSpikePercentages.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
+            if (showSpikePercent) R.color.pro_green else R.color.pro_text_muted))
+
         val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
         valueThreshold.text = if (tUsvH <= 0f) {
             "Off"
@@ -960,6 +992,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
+
+        // Smart alerts count
+        val alerts = Prefs.getSmartAlerts(this)
+        val enabledCount = alerts.count { it.enabled }
+        valueSmartAlerts.text = if (enabledCount == 0) "None" else "$enabledCount active"
+        valueSmartAlerts.setTextColor(androidx.core.content.ContextCompat.getColor(this,
+            if (enabledCount > 0) R.color.pro_amber else R.color.pro_text_muted))
     }
 
     private enum class Panel {

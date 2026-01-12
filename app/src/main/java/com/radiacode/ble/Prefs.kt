@@ -25,8 +25,12 @@ object Prefs {
     private const val KEY_COUNT_UNIT = "count_unit"
     private const val KEY_COMPACT_LAYOUT = "compact_layout"
     private const val KEY_SHOW_SPIKE_MARKERS = "show_spike_markers"
+    private const val KEY_SHOW_SPIKE_PERCENTAGES = "show_spike_percentages"
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
+    
+    // Smart Alert keys
+    private const val KEY_ALERTS_JSON = "alerts_json"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -203,6 +207,112 @@ object Prefs {
             .edit()
             .putBoolean(KEY_SHOW_SPIKE_MARKERS, enabled)
             .apply()
+    }
+    
+    fun isShowSpikePercentagesEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_SPIKE_PERCENTAGES, true)  // Default ON
+    }
+
+    fun setShowSpikePercentagesEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_SPIKE_PERCENTAGES, enabled)
+            .apply()
+    }
+    
+    // ========== Smart Alerts System ==========
+    
+    /**
+     * Smart Alert configuration
+     * @param id Unique identifier
+     * @param name User-friendly name
+     * @param enabled Whether the alert is active
+     * @param metric "dose" or "cps"
+     * @param condition "above", "below", "outside_sigma"
+     * @param threshold For above/below: the threshold value. For outside_sigma: number of std devs
+     * @param durationSeconds How long the condition must persist before alerting (0 = instant)
+     * @param cooldownMs Minimum time in milliseconds between repeat alerts
+     * @param lastTriggeredMs Last time this alert fired
+     */
+    data class SmartAlert(
+        val id: String,
+        val name: String,
+        val enabled: Boolean = true,
+        val metric: String = "dose",  // "dose" or "count"
+        val condition: String = "above",  // "above", "below", "outside_sigma"
+        val threshold: Double = 0.5,
+        val sigma: Double = 2.0,  // For "outside_sigma" condition: 1, 2, or 3 standard deviations
+        val durationSeconds: Int = 0,  // 0 = instant, >0 = sustained
+        val cooldownMs: Long = 60000L,  // milliseconds
+        val lastTriggeredMs: Long = 0L
+    ) {
+        fun toJson(): String {
+            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs}"""
+        }
+        
+        companion object {
+            fun fromJson(json: String): SmartAlert? {
+                return try {
+                    // Simple JSON parsing without external library
+                    val id = json.substringAfter("\"id\":\"").substringBefore("\"")
+                    val name = json.substringAfter("\"name\":\"").substringBefore("\"")
+                    val enabled = json.substringAfter("\"enabled\":").substringBefore(",").toBoolean()
+                    val metric = json.substringAfter("\"metric\":\"").substringBefore("\"")
+                    val condition = json.substringAfter("\"condition\":\"").substringBefore("\"")
+                    val threshold = json.substringAfter("\"threshold\":").substringBefore(",").toDouble()
+                    val sigma = json.substringAfter("\"sigma\":").substringBefore(",").toDoubleOrNull() ?: 2.0
+                    val durationSeconds = json.substringAfter("\"durationSeconds\":").substringBefore(",").toInt()
+                    val cooldownMs = json.substringAfter("\"cooldownMs\":").substringBefore(",").toLongOrNull() 
+                        ?: (json.substringAfter("\"cooldownSeconds\":").substringBefore(",").toIntOrNull()?.times(1000L) ?: 60000L)
+                    val lastTriggeredMs = json.substringAfter("\"lastTriggeredMs\":").substringBefore("}").toLong()
+                    SmartAlert(id, name, enabled, metric, condition, threshold, sigma, durationSeconds, cooldownMs, lastTriggeredMs)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+    }
+    
+    fun getSmartAlerts(context: Context): List<SmartAlert> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_ALERTS_JSON, "[]") ?: "[]"
+        if (json == "[]") return emptyList()
+        
+        return json.removeSurrounding("[", "]")
+            .split("},{")
+            .map { it.trim().let { s -> if (!s.startsWith("{")) "{$s" else s }.let { s -> if (!s.endsWith("}")) "$s}" else s } }
+            .mapNotNull { SmartAlert.fromJson(it) }
+    }
+    
+    fun setSmartAlerts(context: Context, alerts: List<SmartAlert>) {
+        val json = "[${alerts.joinToString(",") { it.toJson() }}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ALERTS_JSON, json)
+            .apply()
+    }
+    
+    fun addSmartAlert(context: Context, alert: SmartAlert): Boolean {
+        val alerts = getSmartAlerts(context).toMutableList()
+        if (alerts.size >= 10) return false  // Max 10 alerts
+        alerts.add(alert)
+        setSmartAlerts(context, alerts)
+        return true
+    }
+    
+    fun updateSmartAlert(context: Context, alert: SmartAlert) {
+        val alerts = getSmartAlerts(context).toMutableList()
+        val idx = alerts.indexOfFirst { it.id == alert.id }
+        if (idx >= 0) {
+            alerts[idx] = alert
+            setSmartAlerts(context, alerts)
+        }
+    }
+    
+    fun deleteSmartAlert(context: Context, alertId: String) {
+        val alerts = getSmartAlerts(context).filter { it.id != alertId }
+        setSmartAlerts(context, alerts)
     }
 
     fun setPollIntervalMs(context: Context, intervalMs: Long) {

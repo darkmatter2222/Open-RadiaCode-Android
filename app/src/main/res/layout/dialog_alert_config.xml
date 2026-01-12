@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/pro_bg_card">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Alert Name -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Alert Name"
+            app:boxStrokeColor="@color/pro_cyan"
+            app:hintTextColor="@color/pro_cyan">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputAlertName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="@color/pro_text_primary" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Metric Selection -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Metric"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerMetric"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/spinner_background"
+            android:padding="8dp"
+            android:popupBackground="@color/pro_bg_card" />
+
+        <!-- Condition Selection -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Trigger Condition"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerCondition"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/spinner_background"
+            android:padding="8dp"
+            android:popupBackground="@color/pro_bg_card" />
+
+        <!-- Threshold Input (for above/below) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layoutThreshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Threshold Value"
+            app:boxStrokeColor="@color/pro_cyan"
+            app:hintTextColor="@color/pro_cyan"
+            app:helperText="For dose: µSv/h, for count: CPS"
+            app:helperTextTextColor="@color/pro_text_muted">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputThreshold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="numberDecimal"
+                android:textColor="@color/pro_text_primary" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Sigma Selection (for outside_sigma) -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/layoutSigma"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Statistical Threshold"
+            android:visibility="gone"
+            app:boxStrokeColor="@color/pro_cyan"
+            app:hintTextColor="@color/pro_cyan"
+            app:helperText="Alert when value deviates from mean"
+            app:helperTextTextColor="@color/pro_text_muted">
+
+            <Spinner
+                android:id="@+id/spinnerSigma"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@android:color/transparent"
+                android:padding="8dp"
+                android:popupBackground="@color/pro_bg_card" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Duration Requirement -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Required Duration (seconds)"
+            app:boxStrokeColor="@color/pro_cyan"
+            app:hintTextColor="@color/pro_cyan"
+            app:helperText="Condition must persist for this long"
+            app:helperTextTextColor="@color/pro_text_muted">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputDuration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="@color/pro_text_primary" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Cooldown Period -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Cooldown (seconds)"
+            app:boxStrokeColor="@color/pro_cyan"
+            app:hintTextColor="@color/pro_cyan"
+            app:helperText="Minimum time between repeated alerts"
+            app:helperTextTextColor="@color/pro_text_muted">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/inputCooldown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:textColor="@color/pro_text_primary" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Info Box -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/info_box_background"
+            android:orientation="horizontal"
+            android:padding="12dp">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_info"
+                app:tint="@color/pro_cyan" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:text="Statistical alerts (σ) use running mean and standard deviation to detect anomalies. This is more adaptive than fixed thresholds."
+                android:textColor="@color/pro_text_muted"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

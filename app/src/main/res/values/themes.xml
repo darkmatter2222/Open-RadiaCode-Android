@@ -22,4 +22,23 @@
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 
+    <!-- Dialog theme for alert configuration -->
+    <style name="Theme.RadiaCodeBLE.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">@color/pro_bg_card</item>
+        <item name="colorSurface">@color/pro_bg_card</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="buttonBarPositiveButtonStyle">@style/DialogButton.Positive</item>
+        <item name="buttonBarNegativeButtonStyle">@style/DialogButton.Negative</item>
+    </style>
+
+    <style name="DialogButton.Positive" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/pro_cyan</item>
+    </style>
+
+    <style name="DialogButton.Negative" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/pro_text_muted</item>
+    </style>
+
 </resources>

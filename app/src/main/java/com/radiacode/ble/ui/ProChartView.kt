@@ -69,6 +69,8 @@ class ProChartView @JvmOverloads constructor(
     
     // Display options
     private var showSpikeMarkers: Boolean = true
+    private var showSpikePercentages: Boolean = true
+    private var showSpikeDottedLines: Boolean = false  // Off by default - just show triangles
 
     // Dimensions (calculated in onSizeChanged)
     private var chartLeft = 0f
@@ -350,6 +352,16 @@ class ProChartView @JvmOverloads constructor(
     /** Enable or disable spike markers (dotted lines with percentage) */
     fun setShowSpikeMarkers(show: Boolean) {
         showSpikeMarkers = show
+        invalidate()
+    }
+
+    fun setShowSpikePercentages(show: Boolean) {
+        showSpikePercentages = show
+        invalidate()
+    }
+
+    fun setShowSpikeDottedLines(show: Boolean) {
+        showSpikeDottedLines = show
         invalidate()
     }
 
@@ -713,21 +725,21 @@ class ProChartView @JvmOverloads constructor(
             val deltaPercent = if (prev != 0f) ((curr - prev) / prev) * 100f else 0f
             val isIncrease = deltaPercent > 0
 
-            // Select paint based on direction (green for increase, red for decrease)
-            val glowPaint = if (isIncrease) spikeGlowGreenPaint else spikeGlowRedPaint
-            val linePaint = if (isIncrease) spikeGreenPaint else spikeRedPaint
-
-            // Draw full-height glow behind the spike line
-            canvas.drawLine(x, chartTop, x, chartBottom, glowPaint)
+            // Only draw dotted lines if enabled (off by default now)
+            if (showSpikeDottedLines) {
+                val glowPaint = if (isIncrease) spikeGlowGreenPaint else spikeGlowRedPaint
+                val linePaint = if (isIncrease) spikeGreenPaint else spikeRedPaint
+                canvas.drawLine(x, chartTop, x, chartBottom, glowPaint)
+                canvas.drawLine(x, chartTop, x, chartBottom, linePaint)
+            }
             
-            // Draw the spike marker line (full height, dotted)
-            canvas.drawLine(x, chartTop, x, chartBottom, linePaint)
-            
-            // Draw triangle indicator at the data point
+            // Always draw triangle indicator at the data point
             drawSpikeIndicator(canvas, x, y, isIncrease)
             
-            // Draw percentage annotation at top
-            drawSpikeAnnotation(canvas, x, deltaPercent)
+            // Draw percentage annotation only if enabled
+            if (showSpikePercentages) {
+                drawSpikeAnnotation(canvas, x, deltaPercent)
+            }
         }
     }
 
