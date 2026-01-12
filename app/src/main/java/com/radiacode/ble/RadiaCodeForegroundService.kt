@@ -137,8 +137,11 @@ class RadiaCodeForegroundService : Service() {
         val addressFromIntent = intent?.getStringExtra(EXTRA_ADDRESS)?.trim()?.takeIf { it.isNotEmpty() }
         val preferred = Prefs.getPreferredAddress(this)
         val address = addressFromIntent ?: preferred
+        
+        Log.d(TAG, "service onStartCommand: action=${intent?.action}, addressFromIntent=$addressFromIntent, preferred=$preferred, address=$address")
 
         if (!Prefs.isAutoConnectEnabled(this)) {
+            Log.d(TAG, "service: auto-connect disabled, stopping")
             stopInternal("Auto-connect disabled")
             stopSelf()
             return START_NOT_STICKY
@@ -147,13 +150,21 @@ class RadiaCodeForegroundService : Service() {
         if (!hasNotificationPermission()) {
             // Foreground service requires a visible notification; if we can't post notifications,
             // stop and require the user to open the app and grant POST_NOTIFICATIONS.
-            Log.w(TAG, "service: missing POST_NOTIFICATIONS; stopping")
+            Log.w(TAG, "service: missing POST_NOTIFICATIONS permission; stopping")
             stopInternal("Notification permission missing; open app")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        
+        if (!hasBlePermission()) {
+            Log.w(TAG, "service: missing BLUETOOTH_CONNECT permission; stopping")
+            stopInternal("Bluetooth permission missing; open app")
             stopSelf()
             return START_NOT_STICKY
         }
 
         if (address.isNullOrBlank()) {
+            Log.d(TAG, "service: no address, showing foreground notification")
             updateForeground("No preferred device", "Open app and pick a preferred device")
             return START_STICKY
         }
@@ -162,6 +173,7 @@ class RadiaCodeForegroundService : Service() {
         val alreadyTargeting = (targetAddress == address)
         val pollingActive = pollTask?.let { !it.isCancelled && !it.isDone } == true
         if (alreadyTargeting && client != null && pollingActive) {
+            Log.d(TAG, "service: already connected to $address")
             updateForeground("Running", address)
             return START_STICKY
         }
