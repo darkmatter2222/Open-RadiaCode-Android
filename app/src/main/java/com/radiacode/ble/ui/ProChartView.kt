@@ -5,6 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.R
@@ -27,6 +28,7 @@ import kotlin.math.min
  * - Sticky tap marker (stays pinned as data updates)
  * - Delta spike markers (vertical lines at significant changes)
  * - Rolling average line (dotted)
+ * - Pinch-to-zoom and pan support
  */
 class ProChartView @JvmOverloads constructor(
     context: Context,
@@ -57,6 +59,13 @@ class ProChartView @JvmOverloads constructor(
     // Rolling average
     private var rollingAvgSamples: List<Float> = emptyList()
     private var rollingAvgWindow: Int = 10  // Number of samples for rolling average
+
+    // Zoom and Pan state
+    private var zoomLevel: Float = 1f           // 1.0 = no zoom, 2.0 = 2x zoom
+    private var panOffset: Float = 0f           // 0.0 = start, 1.0 = end (normalized)
+    private var isZoomPanEnabled: Boolean = true
+    private var isPanning = false
+    private var lastPanX = 0f
 
     // Dimensions (calculated in onSizeChanged)
     private var chartLeft = 0f
@@ -158,9 +167,57 @@ class ProChartView @JvmOverloads constructor(
 
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withLocale(Locale.US)
 
+    // Scale gesture detector for pinch-zoom
+    private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            if (!isZoomPanEnabled) return false
+            
+            val scaleFactor = detector.scaleFactor
+            val newZoom = (zoomLevel * scaleFactor).coerceIn(1f, 10f)
+            
+            // Adjust pan offset to keep the zoom centered on the focal point
+            val chartWidth = chartRight - chartLeft
+            if (chartWidth > 0) {
+                val focalX = detector.focusX
+                val focalFrac = ((focalX - chartLeft) / chartWidth).coerceIn(0f, 1f)
+                
+                // Calculate the data fraction at focal point before zoom
+                val visibleFrac = 1f / zoomLevel
+                val dataFracAtFocal = panOffset + focalFrac * visibleFrac
+                
+                // Update zoom
+                zoomLevel = newZoom
+                
+                // Recalculate pan to keep focal point at same data position
+                val newVisibleFrac = 1f / zoomLevel
+                panOffset = (dataFracAtFocal - focalFrac * newVisibleFrac).coerceIn(0f, 1f - newVisibleFrac)
+            } else {
+                zoomLevel = newZoom
+            }
+            
+            invalidate()
+            return true
+        }
+    })
+
     // Gesture handling
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent): Boolean = true
+
+        override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+            if (!isZoomPanEnabled || zoomLevel <= 1f) return false
+            
+            // Pan the view
+            val chartWidth = chartRight - chartLeft
+            if (chartWidth > 0 && samples.size > 1) {
+                val visibleFrac = 1f / zoomLevel
+                val panDelta = distanceX / chartWidth * visibleFrac
+                panOffset = (panOffset + panDelta).coerceIn(0f, 1f - visibleFrac)
+                invalidate()
+                return true
+            }
+            return false
+        }
 
         override fun onLongPress(e: MotionEvent) {
             // Long press enables sliding mode (clears on release)
@@ -186,6 +243,17 @@ class ProChartView @JvmOverloads constructor(
             }
             return true
         }
+        
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            // Double-tap to reset zoom
+            if (zoomLevel > 1f) {
+                zoomLevel = 1f
+                panOffset = 0f
+                invalidate()
+                return true
+            }
+            return false
+        }
     })
 
     init {
@@ -207,21 +275,28 @@ class ProChartView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val handled = gestureDetector.onTouchEvent(event)
+        // Handle scale gestures first
+        var handled = scaleGestureDetector.onTouchEvent(event)
         
-        // Handle drag during long-press (non-sticky mode)
-        if (!isStickyMode && (event.action == MotionEvent.ACTION_MOVE)) {
-            selectedIndex = pickIndexForX(event.x)
-            invalidate()
-        }
-        
-        if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-            // Only clear selection if NOT in sticky mode
-            if (!isStickyMode && selectedIndex != null) {
-                selectedIndex = null
+        // Only handle other gestures if not scaling
+        if (!scaleGestureDetector.isInProgress) {
+            handled = gestureDetector.onTouchEvent(event) || handled
+            
+            // Handle drag during long-press (non-sticky mode)
+            if (!isStickyMode && (event.action == MotionEvent.ACTION_MOVE)) {
+                selectedIndex = pickIndexForX(event.x)
                 invalidate()
             }
+            
+            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                // Only clear selection if NOT in sticky mode
+                if (!isStickyMode && selectedIndex != null) {
+                    selectedIndex = null
+                    invalidate()
+                }
+            }
         }
+        
         return handled || super.onTouchEvent(event)
     }
 
@@ -231,6 +306,41 @@ class ProChartView @JvmOverloads constructor(
         selectedIndex = null
         stickyTimestampMs = null
         invalidate()
+    }
+
+    /** Enable or disable zoom and pan gestures */
+    fun setZoomPanEnabled(enabled: Boolean) {
+        isZoomPanEnabled = enabled
+        if (!enabled) {
+            zoomLevel = 1f
+            panOffset = 0f
+            invalidate()
+        }
+    }
+
+    /** Reset zoom to default (1x) */
+    fun resetZoom() {
+        zoomLevel = 1f
+        panOffset = 0f
+        invalidate()
+    }
+
+    /** Get current zoom level */
+    fun getZoomLevel(): Float = zoomLevel
+
+    /** Get visible data range as [startIndex, endIndex] */
+    private fun getVisibleRange(): Pair<Int, Int> {
+        val n = samples.size
+        if (n < 2 || zoomLevel <= 1f) return 0 to n - 1
+        
+        val visibleFrac = 1f / zoomLevel
+        val startFrac = panOffset.coerceIn(0f, 1f - visibleFrac)
+        val endFrac = (startFrac + visibleFrac).coerceIn(0f, 1f)
+        
+        val startIdx = (startFrac * (n - 1)).toInt().coerceIn(0, n - 1)
+        val endIdx = (endFrac * (n - 1)).toInt().coerceIn(0, n - 1)
+        
+        return startIdx to endIdx
     }
 
     /** Set the delta threshold for spike detection (percentage of value) */
@@ -368,14 +478,21 @@ class ProChartView @JvmOverloads constructor(
             return
         }
 
+        // Get visible range based on zoom/pan
+        val (visibleStart, visibleEnd) = getVisibleRange()
+        val visibleSamples = samples.subList(visibleStart, visibleEnd + 1)
+        val visibleTimestamps = if (timestampsMs.size > visibleEnd) timestampsMs.subList(visibleStart, visibleEnd + 1) else emptyList()
+
         var minV = Float.POSITIVE_INFINITY
         var maxV = Float.NEGATIVE_INFINITY
         var peakIndex = 0
+        var peakValue = Float.NEGATIVE_INFINITY
 
-        for (i in samples.indices) {
-            val v = samples[i]
+        for (i in visibleSamples.indices) {
+            val v = visibleSamples[i]
             if (v < minV) minV = v
-            if (v > maxV) {
+            if (v > peakValue) {
+                peakValue = v
                 maxV = v
                 peakIndex = i
             }
@@ -397,8 +514,8 @@ class ProChartView @JvmOverloads constructor(
         // Draw grid and Y-axis
         drawGrid(canvas, yMin, yMax, chartHeight)
 
-        // Draw X-axis time labels
-        drawTimeAxis(canvas, chartWidth)
+        // Draw X-axis time labels (zoom-aware)
+        drawTimeAxis(canvas, chartWidth, visibleStart, visibleEnd)
 
         // Create gradient for fill
         val gradient = LinearGradient(
@@ -410,14 +527,14 @@ class ProChartView @JvmOverloads constructor(
         fillPaint.shader = gradient
         linePaint.color = accentColor
 
-        // Build paths
+        // Build paths using visible samples
         val linePath = Path()
         val fillPath = Path()
-        val n = samples.size
+        val n = visibleSamples.size
 
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / (n - 1))
-            val yNorm = (samples[i] - yMin) / yRange
+            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val yNorm = (visibleSamples[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
             if (i == 0) {
@@ -437,9 +554,10 @@ class ProChartView @JvmOverloads constructor(
         canvas.drawPath(fillPath, fillPaint)
         canvas.drawPath(linePath, linePaint)
 
-        // Draw rolling average line (dotted)
-        if (rollingAvgSamples.size == n) {
-            drawRollingAverageLine(canvas, chartWidth, chartHeight, yMin, yRange, n)
+        // Draw rolling average line (dotted) for visible portion
+        if (rollingAvgSamples.size >= samples.size && visibleSamples.isNotEmpty()) {
+            val visibleAvg = rollingAvgSamples.subList(visibleStart, visibleEnd + 1)
+            drawRollingAverageLine(canvas, chartWidth, chartHeight, yMin, yRange, visibleAvg)
         }
 
         // Draw threshold line
@@ -449,40 +567,70 @@ class ProChartView @JvmOverloads constructor(
             canvas.drawLine(chartLeft, yPx, chartRight, yPx, thresholdPaint)
         }
 
-        // Draw delta spike markers (vertical lines at significant changes)
-        drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, n)
+        // Draw delta spike markers for visible portion
+        drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
 
         // Draw peak marker
-        run {
-            val x = chartLeft + chartWidth * (peakIndex.toFloat() / (n - 1))
-            val yNorm = (samples[peakIndex] - yMin) / yRange
+        if (n > 0) {
+            val x = chartLeft + chartWidth * (peakIndex.toFloat() / max(1, n - 1))
+            val yNorm = (visibleSamples[peakIndex] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             canvas.drawCircle(x, y, density * 5f, peakPaint)
         }
 
         // Draw secondary series if present
-        if (secondarySamples.size >= 2 && secondarySamples.size == n) {
-            drawSecondarySeries(canvas, chartWidth, chartHeight, n)
+        if (secondarySamples.size >= 2 && secondarySamples.size == samples.size) {
+            val visibleSecondary = secondarySamples.subList(visibleStart, visibleEnd + 1)
+            drawSecondarySeries(canvas, chartWidth, chartHeight, visibleSecondary)
+        }
+
+        // Draw zoom indicator if zoomed
+        if (zoomLevel > 1f) {
+            drawZoomIndicator(canvas)
         }
 
         // Draw selection marker (sticky or regular crosshair)
         selectedIndex?.let { idx ->
-            if (idx in samples.indices) {
-                val x = chartLeft + chartWidth * (idx.toFloat() / (n - 1))
+            // Convert global index to visible index
+            if (idx in visibleStart..visibleEnd) {
+                val localIdx = idx - visibleStart
+                val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
                 val yNorm = (samples[idx] - yMin) / yRange
                 val y = chartBottom - chartHeight * yNorm
 
                 if (isStickyMode) {
-                    // Sticky marker: brighter, with a pin indicator
                     drawStickyMarker(canvas, x, y, idx)
                 } else {
-                    // Regular crosshair
                     canvas.drawLine(x, chartTop, x, chartBottom, crosshairPaint)
                     canvas.drawCircle(x, y, density * 6f, peakPaint)
                     drawTooltip(canvas, x, y, idx)
                 }
             }
         }
+    }
+
+    /** Draw zoom indicator showing current zoom level */
+    private fun drawZoomIndicator(canvas: Canvas) {
+        val text = String.format(Locale.US, "%.1fx", zoomLevel)
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ContextCompat.getColor(context, R.color.pro_surface_elevated)
+            alpha = 200
+        }
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = scaledDensity * 10f
+            color = ContextCompat.getColor(context, R.color.pro_text_secondary)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        }
+        
+        val textWidth = textPaint.measureText(text)
+        val padH = density * 6f
+        val padV = density * 3f
+        val x = chartRight - textWidth - padH * 3
+        val y = chartTop + padV
+        
+        val rect = RectF(x - padH, y - padV, x + textWidth + padH, y + textPaint.textSize + padV)
+        canvas.drawRoundRect(rect, density * 4f, density * 4f, bgPaint)
+        canvas.drawText(text, x, y + textPaint.textSize * 0.85f, textPaint)
     }
 
     /** Draw rolling average as a dotted line */
@@ -492,12 +640,13 @@ class ProChartView @JvmOverloads constructor(
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
-        n: Int
+        visibleAvg: List<Float>
     ) {
         val avgPath = Path()
+        val n = visibleAvg.size
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / (n - 1))
-            val yNorm = (rollingAvgSamples[i] - yMin) / yRange
+            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val yNorm = (visibleAvg[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
             if (i == 0) {
@@ -516,13 +665,19 @@ class ProChartView @JvmOverloads constructor(
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
-        n: Int
+        visibleSamples: List<Float>,
+        visibleStart: Int
     ) {
+        val n = visibleSamples.size
         for (spikeIdx in spikeIndices) {
+            // Check if spike is in visible range
+            if (spikeIdx < visibleStart || spikeIdx > visibleStart + n - 1) continue
             if (spikeIdx !in samples.indices) continue
             if (spikeIdx == 0) continue  // Need previous sample
             
-            val x = chartLeft + chartWidth * (spikeIdx.toFloat() / (n - 1))
+            // Convert to local index within visible range
+            val localIdx = spikeIdx - visibleStart
+            val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
             val yNorm = (samples[spikeIdx] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             
@@ -674,17 +829,17 @@ class ProChartView @JvmOverloads constructor(
         axisTextPaint.textAlign = Paint.Align.LEFT
     }
 
-    private fun drawTimeAxis(canvas: Canvas, chartWidth: Float) {
+    private fun drawTimeAxis(canvas: Canvas, chartWidth: Float, visibleStart: Int, visibleEnd: Int) {
         if (timestampsMs.size < 2) return
 
-        val n = timestampsMs.size
+        val visibleCount = visibleEnd - visibleStart + 1
         val labelCount = 4
         axisTextPaint.textAlign = Paint.Align.CENTER
 
         for (i in 0..labelCount) {
             val frac = i.toFloat() / labelCount
             val x = chartLeft + chartWidth * frac
-            val idx = ((n - 1) * frac).toInt().coerceIn(0, n - 1)
+            val idx = (visibleStart + (visibleCount - 1) * frac).toInt().coerceIn(0, timestampsMs.size - 1)
             val ts = timestampsMs[idx]
 
             val time = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalTime()
@@ -732,11 +887,11 @@ class ProChartView @JvmOverloads constructor(
         canvas.drawText(text, rect.left + padH, rect.top + padV + textHeight * 0.85f, tooltipTextPaint)
     }
 
-    private fun drawSecondarySeries(canvas: Canvas, chartWidth: Float, chartHeight: Float, n: Int) {
-        // Calculate range for secondary series
+    private fun drawSecondarySeries(canvas: Canvas, chartWidth: Float, chartHeight: Float, visibleSecondary: List<Float>) {
+        // Calculate range for visible secondary series
         var minV = Float.POSITIVE_INFINITY
         var maxV = Float.NEGATIVE_INFINITY
-        for (v in secondarySamples) {
+        for (v in visibleSecondary) {
             if (v < minV) minV = v
             if (v > maxV) maxV = v
         }
@@ -773,10 +928,11 @@ class ProChartView @JvmOverloads constructor(
             alpha = 200
         }
 
+        val n = visibleSecondary.size
         val path = Path()
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / (n - 1))
-            val yNorm = (secondarySamples[i] - yMin) / yRange
+            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val yNorm = (visibleSecondary[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
             if (i == 0) {
@@ -805,7 +961,12 @@ class ProChartView @JvmOverloads constructor(
         val chartWidth = chartRight - chartLeft
         if (chartWidth <= 0f) return null
 
+        // Account for zoom/pan when picking index
+        val (visibleStart, visibleEnd) = getVisibleRange()
+        val visibleCount = visibleEnd - visibleStart + 1
+        
         val frac = ((xPx - chartLeft) / chartWidth).coerceIn(0f, 1f)
-        return (frac * (n - 1)).toInt().coerceIn(0, n - 1)
+        val localIdx = (frac * (visibleCount - 1)).toInt()
+        return (visibleStart + localIdx).coerceIn(0, n - 1)
     }
 }

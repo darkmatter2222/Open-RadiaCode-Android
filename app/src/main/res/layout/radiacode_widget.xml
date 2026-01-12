@@ -25,11 +25,11 @@
             android:textStyle="bold"
             android:letterSpacing="0.05" />
 
-        <View
+        <ImageView
             android:id="@+id/widgetStatusDot"
-            android:layout_width="6dp"
-            android:layout_height="6dp"
-            android:background="@drawable/status_dot" />
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:src="@drawable/status_dot" />
 
         <TextView
             android:id="@+id/widgetStatus"

@@ -2,4 +2,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
     <solid android:color="@color/pro_status_live" />
+    <size android:width="8dp" android:height="8dp" />
 </shape>

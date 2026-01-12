@@ -206,6 +206,106 @@
                         </HorizontalScrollView>
                     </LinearLayout>
 
+                    <!-- Unit Selectors -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_background"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="UNITS"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1" />
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/doseUnitChips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            app:singleSelection="true"
+                            app:selectionRequired="true">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipUsvH"
+                                style="@style/Widget.MaterialComponents.Chip.Choice"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:text="μSv/h"
+                                android:textColor="@color/chip_text_color"
+                                android:textSize="11sp"
+                                app:chipBackgroundColor="@color/chip_bg_color"
+                                app:chipStrokeColor="@color/pro_border"
+                                app:chipStrokeWidth="1dp"
+                                app:chipMinHeight="28dp"
+                                android:checked="true" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipNsvH"
+                                style="@style/Widget.MaterialComponents.Chip.Choice"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:text="nSv/h"
+                                android:textColor="@color/chip_text_color"
+                                android:textSize="11sp"
+                                app:chipBackgroundColor="@color/chip_bg_color"
+                                app:chipStrokeColor="@color/pro_border"
+                                app:chipStrokeWidth="1dp"
+                                app:chipMinHeight="28dp" />
+
+                        </com.google.android.material.chip.ChipGroup>
+
+                        <View
+                            android:layout_width="1dp"
+                            android:layout_height="20dp"
+                            android:layout_marginHorizontal="8dp"
+                            android:background="@color/pro_border" />
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/countUnitChips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            app:singleSelection="true"
+                            app:selectionRequired="true">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipCps"
+                                style="@style/Widget.MaterialComponents.Chip.Choice"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:text="cps"
+                                android:textColor="@color/chip_text_color"
+                                android:textSize="11sp"
+                                app:chipBackgroundColor="@color/chip_bg_color"
+                                app:chipStrokeColor="@color/pro_border"
+                                app:chipStrokeWidth="1dp"
+                                app:chipMinHeight="28dp"
+                                android:checked="true" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipCpm"
+                                style="@style/Widget.MaterialComponents.Chip.Choice"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:text="cpm"
+                                android:textColor="@color/chip_text_color"
+                                android:textSize="11sp"
+                                app:chipBackgroundColor="@color/chip_bg_color"
+                                app:chipStrokeColor="@color/pro_border"
+                                app:chipStrokeWidth="1dp"
+                                app:chipMinHeight="28dp" />
+
+                        </com.google.android.material.chip.ChipGroup>
+                    </LinearLayout>
+
                     <!-- Dose Chart -->
                     <LinearLayout
                         android:layout_width="match_parent"

@@ -205,7 +205,7 @@ class MetricCardView @JvmOverloads constructor(
         val n = sparklineData.size
         val greenColor = ContextCompat.getColor(context, R.color.pro_green)
         val redColor = ContextCompat.getColor(context, R.color.pro_red)
-        val deltaThreshold = 0.05f  // 5% change threshold for coloring
+        val deltaThreshold = 0.005f  // 0.5% change threshold for coloring
 
         // Calculate positions
         val points = mutableListOf<Pair<Float, Float>>()
@@ -216,63 +216,42 @@ class MetricCardView @JvmOverloads constructor(
             points.add(x to y)
         }
 
-        // Draw color-coded fill segments for significant changes
+        // Draw per-segment color-coded fills that stay static
         for (i in 1 until n) {
             val prev = sparklineData[i - 1]
             val curr = sparklineData[i]
             val deltaPercent = if (prev != 0f) (curr - prev) / prev else 0f
-
-            // Only color-code if change exceeds threshold
-            if (kotlin.math.abs(deltaPercent) >= deltaThreshold) {
-                val segmentColor = if (deltaPercent > 0) greenColor else redColor
-                val (x1, y1) = points[i - 1]
-                val (x2, y2) = points[i]
-
-                // Draw color-coded segment fill
-                val segmentPath = Path().apply {
-                    moveTo(x1, top + height)
-                    lineTo(x1, y1)
-                    lineTo(x2, y2)
-                    lineTo(x2, top + height)
-                    close()
-                }
-
-                val segmentGradient = LinearGradient(
-                    0f, top, 0f, top + height,
-                    Color.argb(100, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
-                    Color.argb(0, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
-                    Shader.TileMode.CLAMP
-                )
-                sparklineFillPaint.shader = segmentGradient
-                canvas.drawPath(segmentPath, sparklineFillPaint)
+            
+            val (x1, y1) = points[i - 1]
+            val (x2, y2) = points[i]
+            
+            // Determine segment color based on direction
+            val segmentColor = when {
+                deltaPercent > deltaThreshold -> greenColor   // Increasing = green
+                deltaPercent < -deltaThreshold -> redColor    // Decreasing = red  
+                else -> accentColor                            // Neutral = accent
             }
+            
+            // Draw segment fill
+            val segmentPath = Path().apply {
+                moveTo(x1, top + height)
+                lineTo(x1, y1)
+                lineTo(x2, y2)
+                lineTo(x2, top + height)
+                close()
+            }
+            
+            val segmentGradient = LinearGradient(
+                0f, top, 0f, top + height,
+                Color.argb(90, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
+                Color.argb(0, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor)),
+                Shader.TileMode.CLAMP
+            )
+            sparklineFillPaint.shader = segmentGradient
+            canvas.drawPath(segmentPath, sparklineFillPaint)
         }
 
-        // Draw the base accent color fill (underneath for non-significant areas)
-        val fillPath = Path()
-        for (i in 0 until n) {
-            val (x, y) = points[i]
-            if (i == 0) {
-                fillPath.moveTo(x, top + height)
-                fillPath.lineTo(x, y)
-            } else {
-                fillPath.lineTo(x, y)
-            }
-        }
-        fillPath.lineTo(left + width, top + height)
-        fillPath.close()
-
-        // Subtle base gradient
-        val baseGradient = LinearGradient(
-            0f, top, 0f, top + height,
-            Color.argb(30, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)),
-            Color.argb(0, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor)),
-            Shader.TileMode.CLAMP
-        )
-        sparklineFillPaint.shader = baseGradient
-        canvas.drawPath(fillPath, sparklineFillPaint)
-
-        // Draw the line itself
+        // Draw the line itself in accent color
         val linePath = Path()
         for (i in 0 until n) {
             val (x, y) = points[i]

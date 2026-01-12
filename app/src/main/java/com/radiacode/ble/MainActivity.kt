@@ -73,6 +73,10 @@ class MainActivity : AppCompatActivity() {
 
     // Dashboard - Time window chips
     private lateinit var timeWindowChips: ChipGroup
+    
+    // Dashboard - Unit chips
+    private lateinit var doseUnitChips: ChipGroup
+    private lateinit var countUnitChips: ChipGroup
 
     // Device panel
     private lateinit var connectionDot: View
@@ -171,6 +175,7 @@ class MainActivity : AppCompatActivity() {
         setupMetricCards()
         setupCharts()
         setupTimeWindowChips()
+        setupUnitChips()
 
         refreshSettingsRows()
         updateChartTitles()
@@ -211,6 +216,8 @@ class MainActivity : AppCompatActivity() {
         sessionInfo = findViewById(R.id.sessionInfo)
 
         timeWindowChips = findViewById(R.id.timeWindowChips)
+        doseUnitChips = findViewById(R.id.doseUnitChips)
+        countUnitChips = findViewById(R.id.countUnitChips)
 
         connectionDot = findViewById(R.id.connectionDot)
         connectionStatus = findViewById(R.id.connectionStatus)
@@ -419,6 +426,48 @@ class MainActivity : AppCompatActivity() {
             val seconds = chipToSeconds[chipId] ?: 60
             
             Prefs.setWindowSeconds(this, if (seconds == Int.MAX_VALUE) 86400 else seconds)
+            refreshSettingsRows()
+            updateChartTitles()
+            lastReadingTimestampMs = 0L
+        }
+    }
+
+    private fun setupUnitChips() {
+        // Set initial chip selection based on saved preference
+        val currentDoseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        val currentCountUnit = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+        
+        when (currentDoseUnit) {
+            Prefs.DoseUnit.USV_H -> findViewById<Chip>(R.id.chipUsvH).isChecked = true
+            Prefs.DoseUnit.NSV_H -> findViewById<Chip>(R.id.chipNsvH).isChecked = true
+        }
+        
+        when (currentCountUnit) {
+            Prefs.CountUnit.CPS -> findViewById<Chip>(R.id.chipCps).isChecked = true
+            Prefs.CountUnit.CPM -> findViewById<Chip>(R.id.chipCpm).isChecked = true
+        }
+
+        doseUnitChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
+            val chipId = checkedIds.first()
+            val unit = when (chipId) {
+                R.id.chipNsvH -> Prefs.DoseUnit.NSV_H
+                else -> Prefs.DoseUnit.USV_H
+            }
+            Prefs.setDoseUnit(this, unit)
+            refreshSettingsRows()
+            updateChartTitles()
+            lastReadingTimestampMs = 0L
+        }
+        
+        countUnitChips.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
+            val chipId = checkedIds.first()
+            val unit = when (chipId) {
+                R.id.chipCpm -> Prefs.CountUnit.CPM
+                else -> Prefs.CountUnit.CPS
+            }
+            Prefs.setCountUnit(this, unit)
             refreshSettingsRows()
             updateChartTitles()
             lastReadingTimestampMs = 0L
@@ -777,13 +826,23 @@ class MainActivity : AppCompatActivity() {
         val windowSeconds = Prefs.getWindowSeconds(this, 60)
         val label = when (windowSeconds) {
             10 -> "10s"
+            30 -> "30s"
             60 -> "1m"
+            300 -> "5m"
             600 -> "10m"
+            900 -> "15m"
             3600 -> "1h"
+            86400 -> "All"
             else -> "${windowSeconds}s"
         }
-        doseChartTitle.text = "DOSE RATE — Last $label"
-        cpsChartTitle.text = "COUNT RATE — Last $label"
+        
+        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+        val doseUnit = doseUnitLabel(du)
+        val countUnit = countUnitLabel(cu)
+        
+        doseChartTitle.text = "DOSE RATE ($doseUnit) — Last $label"
+        cpsChartTitle.text = "COUNT RATE ($countUnit) — Last $label"
     }
 
     private fun refreshSettingsRows() {
