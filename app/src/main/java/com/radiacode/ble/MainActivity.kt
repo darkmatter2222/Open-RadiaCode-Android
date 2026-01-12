@@ -93,7 +93,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowSmoothing: View
     private lateinit var rowSpikeMarkers: View
     private lateinit var rowUnits: View
-    private lateinit var rowThreshold: View
     private lateinit var rowPause: View
     private lateinit var rowSpikePercentages: View
     private lateinit var rowSmartAlerts: View
@@ -103,7 +102,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valueSpikeMarkers: TextView
     private lateinit var valueSpikePercentages: TextView
     private lateinit var valueUnits: TextView
-    private lateinit var valueThreshold: TextView
     private lateinit var valuePause: TextView
     private lateinit var valueSmartAlerts: TextView
     
@@ -253,7 +251,6 @@ class MainActivity : AppCompatActivity() {
         rowSpikeMarkers = findViewById(R.id.rowSpikeMarkers)
         rowSpikePercentages = findViewById(R.id.rowSpikePercentages)
         rowUnits = findViewById(R.id.rowUnits)
-        rowThreshold = findViewById(R.id.rowThreshold)
         rowPause = findViewById(R.id.rowPause)
         rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
 
@@ -262,7 +259,6 @@ class MainActivity : AppCompatActivity() {
         valueSpikeMarkers = findViewById(R.id.valueSpikeMarkers)
         valueSpikePercentages = findViewById(R.id.valueSpikePercentages)
         valueUnits = findViewById(R.id.valueUnits)
-        valueThreshold = findViewById(R.id.valueThreshold)
         valuePause = findViewById(R.id.valuePause)
         valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
         
@@ -397,15 +393,6 @@ class MainActivity : AppCompatActivity() {
             Prefs.setCountUnit(this, next.second)
             refreshSettingsRows()
             updateChartTitles()
-            lastReadingTimestampMs = 0L
-        }
-
-        rowThreshold.setOnClickListener {
-            val presets = floatArrayOf(0.0f, 0.05f, 0.10f, 0.50f, 1.00f)
-            val cur = Prefs.getDoseThresholdUsvH(this, 0f)
-            val idx = presets.indexOfFirst { kotlin.math.abs(it - cur) < 1e-6f }.let { if (it < 0) 0 else it }
-            Prefs.setDoseThresholdUsvH(this, presets[(idx + 1) % presets.size])
-            refreshSettingsRows()
             lastReadingTimestampMs = 0L
         }
 
@@ -842,22 +829,9 @@ class MainActivity : AppCompatActivity() {
         val doseDec = decimate(doseT, doseV)
         val cpsDec = decimate(cpsT, cpsV)
 
-        val doseThresholdUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
-        val doseThresholdConverted = if (doseThresholdUsvH > 0f) {
-            when (du) {
-                Prefs.DoseUnit.USV_H -> doseThresholdUsvH
-                Prefs.DoseUnit.NSV_H -> doseThresholdUsvH * 1000.0f
-            }
-        } else {
-            Float.NaN
-        }
-
         mainHandler.post {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
-
-            doseChart.setThreshold(if (doseThresholdConverted.isFinite()) doseThresholdConverted else null)
-            cpsChart.setThreshold(null)
 
             // Mini sparklines for cards (last ~20 points)
             val sparkDose = doseDec.second.takeLast(20)
@@ -978,18 +952,6 @@ class MainActivity : AppCompatActivity() {
         valueSpikePercentages.text = if (showSpikePercent) "On" else "Off"
         valueSpikePercentages.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
             if (showSpikePercent) R.color.pro_green else R.color.pro_text_muted))
-
-        val tUsvH = Prefs.getDoseThresholdUsvH(this, 0f)
-        valueThreshold.text = if (tUsvH <= 0f) {
-            "Off"
-        } else {
-            val (value, unit) = when (du) {
-                Prefs.DoseUnit.USV_H -> tUsvH to "μSv/h"
-                Prefs.DoseUnit.NSV_H -> (tUsvH * 1000.0f) to "nSv/h"
-            }
-            val fmt = if (unit == "nSv/h") "%.0f" else "%.2f"
-            String.format(Locale.US, "$fmt %s", value, unit)
-        }
 
         valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
 

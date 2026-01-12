@@ -234,6 +234,8 @@ object Prefs {
      * @param durationSeconds How long the condition must persist before alerting (0 = instant)
      * @param cooldownMs Minimum time in milliseconds between repeat alerts
      * @param lastTriggeredMs Last time this alert fired
+     * @param color Alert color: "amber" or "red"
+     * @param severity Alert severity: "low", "medium", or "high"
      */
     data class SmartAlert(
         val id: String,
@@ -245,10 +247,12 @@ object Prefs {
         val sigma: Double = 2.0,  // For "outside_sigma" condition: 1, 2, or 3 standard deviations
         val durationSeconds: Int = 0,  // 0 = instant, >0 = sustained
         val cooldownMs: Long = 60000L,  // milliseconds
-        val lastTriggeredMs: Long = 0L
+        val lastTriggeredMs: Long = 0L,
+        val color: String = "amber",  // "amber" or "red"
+        val severity: String = "medium"  // "low", "medium", or "high"
     ) {
         fun toJson(): String {
-            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs}"""
+            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs,"color":"$color","severity":"$severity"}"""
         }
         
         companion object {
@@ -265,8 +269,10 @@ object Prefs {
                     val durationSeconds = json.substringAfter("\"durationSeconds\":").substringBefore(",").toInt()
                     val cooldownMs = json.substringAfter("\"cooldownMs\":").substringBefore(",").toLongOrNull() 
                         ?: (json.substringAfter("\"cooldownSeconds\":").substringBefore(",").toIntOrNull()?.times(1000L) ?: 60000L)
-                    val lastTriggeredMs = json.substringAfter("\"lastTriggeredMs\":").substringBefore("}").toLong()
-                    SmartAlert(id, name, enabled, metric, condition, threshold, sigma, durationSeconds, cooldownMs, lastTriggeredMs)
+                    val lastTriggeredMs = json.substringAfter("\"lastTriggeredMs\":").substringBefore(",").substringBefore("}").toLong()
+                    val color = json.substringAfter("\"color\":\"").substringBefore("\"").ifEmpty { "amber" }
+                    val severity = json.substringAfter("\"severity\":\"").substringBefore("\"").ifEmpty { "medium" }
+                    SmartAlert(id, name, enabled, metric, condition, threshold, sigma, durationSeconds, cooldownMs, lastTriggeredMs, color, severity)
                 } catch (e: Exception) {
                     null
                 }

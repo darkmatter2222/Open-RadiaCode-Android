@@ -535,11 +535,7 @@ class ProChartView @JvmOverloads constructor(
             }
         }
 
-        // Include threshold in range
-        if (thresholdValue.isFinite()) {
-            minV = min(minV, thresholdValue)
-            maxV = max(maxV, thresholdValue)
-        }
+        // Threshold line removed - no longer including in range calculation
 
         // Add padding to range
         val range = max(1e-6f, maxV - minV)
@@ -597,12 +593,7 @@ class ProChartView @JvmOverloads constructor(
             drawRollingAverageLine(canvas, chartWidth, chartHeight, yMin, yRange, visibleAvg)
         }
 
-        // Draw threshold line
-        if (thresholdValue.isFinite()) {
-            val yNorm = (thresholdValue - yMin) / yRange
-            val yPx = chartBottom - chartHeight * yNorm
-            canvas.drawLine(chartLeft, yPx, chartRight, yPx, thresholdPaint)
-        }
+        // Threshold line removed - now using Smart Alerts system instead
 
         // Draw delta spike markers for visible portion (if enabled)
         if (showSpikeMarkers) {

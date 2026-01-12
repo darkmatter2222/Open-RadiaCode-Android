@@ -150,6 +150,42 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
+        <!-- Color Selection -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Alert Color"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerColor"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/spinner_background"
+            android:padding="8dp"
+            android:popupBackground="@color/pro_bg_card" />
+
+        <!-- Severity Selection -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Alert Severity"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerSeverity"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/spinner_background"
+            android:padding="8dp"
+            android:popupBackground="@color/pro_bg_card" />
+
         <!-- Info Box -->
         <LinearLayout
             android:layout_width="match_parent"

@@ -159,6 +159,8 @@ class AlertConfigActivity : AppCompatActivity() {
         val sigmaSpinner = dialogView.findViewById<Spinner>(R.id.spinnerSigma)
         val durationInput = dialogView.findViewById<TextInputEditText>(R.id.inputDuration)
         val cooldownInput = dialogView.findViewById<TextInputEditText>(R.id.inputCooldown)
+        val colorSpinner = dialogView.findViewById<Spinner>(R.id.spinnerColor)
+        val severitySpinner = dialogView.findViewById<Spinner>(R.id.spinnerSeverity)
 
         // Setup metric spinner
         val metrics = listOf("Dose Rate" to "dose", "Count Rate" to "count")
@@ -173,6 +175,16 @@ class AlertConfigActivity : AppCompatActivity() {
         )
         conditionSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             conditions.map { it.first })
+        
+        // Setup color spinner
+        val colors = listOf("Amber" to "amber", "Red" to "red")
+        colorSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            colors.map { it.first })
+        
+        // Setup severity spinner
+        val severities = listOf("Low" to "low", "Medium" to "medium", "High" to "high")
+        severitySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            severities.map { it.first })
 
         // Setup sigma spinner (1σ, 2σ, 3σ)
         val sigmaOptions = listOf("1σ (68%)" to 1.0, "2σ (95%)" to 2.0, "3σ (99.7%)" to 3.0)
@@ -201,10 +213,14 @@ class AlertConfigActivity : AppCompatActivity() {
             }
             durationInput.setText(existing.durationSeconds.toString())
             cooldownInput.setText((existing.cooldownMs / 1000).toString())
+            colorSpinner.setSelection(colors.indexOfFirst { it.second == existing.color }.coerceAtLeast(0))
+            severitySpinner.setSelection(severities.indexOfFirst { it.second == existing.severity }.coerceAtLeast(0))
         } else {
             // Defaults
             durationInput.setText("5")
             cooldownInput.setText("60")
+            colorSpinner.setSelection(0)  // Amber
+            severitySpinner.setSelection(1)  // Medium
         }
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
@@ -243,6 +259,8 @@ class AlertConfigActivity : AppCompatActivity() {
 
                 val duration = durationInput.text?.toString()?.toIntOrNull() ?: 5
                 val cooldown = (cooldownInput.text?.toString()?.toIntOrNull() ?: 60) * 1000L
+                val color = colors[colorSpinner.selectedItemPosition].second
+                val severity = severities[severitySpinner.selectedItemPosition].second
 
                 val alert = Prefs.SmartAlert(
                     id = existing?.id ?: UUID.randomUUID().toString(),
@@ -254,7 +272,9 @@ class AlertConfigActivity : AppCompatActivity() {
                     sigma = sigma,
                     durationSeconds = duration,
                     cooldownMs = cooldown,
-                    lastTriggeredMs = existing?.lastTriggeredMs ?: 0L
+                    lastTriggeredMs = existing?.lastTriggeredMs ?: 0L,
+                    color = color,
+                    severity = severity
                 )
 
                 if (isEdit) {
