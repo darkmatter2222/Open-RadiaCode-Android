@@ -205,6 +205,7 @@ class MetricCardView @JvmOverloads constructor(
         val n = sparklineData.size
         val greenColor = ContextCompat.getColor(context, R.color.pro_green)
         val redColor = ContextCompat.getColor(context, R.color.pro_red)
+        val whiteColor = Color.WHITE  // Neutral segments are white so red/green stand out
         val deltaThreshold = 0.005f  // 0.5% change threshold for coloring
 
         // Calculate positions
@@ -225,15 +226,19 @@ class MetricCardView @JvmOverloads constructor(
             val (x1, y1) = points[i - 1]
             val (x2, y2) = points[i]
             
-            // Determine segment color based on direction
+            // Determine segment color based on direction (white for neutral)
             val segmentColor = when {
                 deltaPercent > deltaThreshold -> greenColor   // Increasing = green
                 deltaPercent < -deltaThreshold -> redColor    // Decreasing = red  
-                else -> accentColor                            // Neutral = accent
+                else -> whiteColor                             // Neutral = white
             }
             
             // Draw segment fill with more opacity for colored segments
-            val fillAlpha = if (segmentColor != accentColor) 120 else 60
+            val fillAlpha = when {
+                deltaPercent > deltaThreshold -> 120   // Green - prominent
+                deltaPercent < -deltaThreshold -> 120  // Red - prominent
+                else -> 40                              // White - subtle
+            }
             val segmentPath = Path().apply {
                 moveTo(x1, top + height)
                 lineTo(x1, y1)

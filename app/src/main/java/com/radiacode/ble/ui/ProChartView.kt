@@ -133,19 +133,35 @@ class ProChartView @JvmOverloads constructor(
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
     }
 
-    // Delta spike marker paint
-    private val spikePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    // Delta spike marker paints (dotted, semi-transparent for subtlety - alarms will be more prominent)
+    private val spikeGreenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = density * 2f
-        color = ContextCompat.getColor(context, R.color.pro_amber)
-        alpha = 180
+        strokeWidth = density * 1.5f
+        color = ContextCompat.getColor(context, R.color.pro_green)
+        alpha = 120
+        pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
     }
 
-    private val spikeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val spikeRedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = density * 6f
-        color = ContextCompat.getColor(context, R.color.pro_amber)
-        alpha = 50
+        strokeWidth = density * 1.5f
+        color = ContextCompat.getColor(context, R.color.pro_red)
+        alpha = 120
+        pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
+    }
+
+    private val spikeGlowGreenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 4f
+        color = ContextCompat.getColor(context, R.color.pro_green)
+        alpha = 30
+    }
+
+    private val spikeGlowRedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 4f
+        color = ContextCompat.getColor(context, R.color.pro_red)
+        alpha = 30
     }
 
     // Rolling average paint (dotted line)
@@ -686,11 +702,15 @@ class ProChartView @JvmOverloads constructor(
             val deltaPercent = if (prev != 0f) ((curr - prev) / prev) * 100f else 0f
             val isIncrease = deltaPercent > 0
 
+            // Select paint based on direction (green for increase, red for decrease)
+            val glowPaint = if (isIncrease) spikeGlowGreenPaint else spikeGlowRedPaint
+            val linePaint = if (isIncrease) spikeGreenPaint else spikeRedPaint
+
             // Draw full-height glow behind the spike line
-            canvas.drawLine(x, chartTop, x, chartBottom, spikeGlowPaint)
+            canvas.drawLine(x, chartTop, x, chartBottom, glowPaint)
             
-            // Draw the spike marker line (full height)
-            canvas.drawLine(x, chartTop, x, chartBottom, spikePaint)
+            // Draw the spike marker line (full height, dotted)
+            canvas.drawLine(x, chartTop, x, chartBottom, linePaint)
             
             // Draw triangle indicator at the data point
             drawSpikeIndicator(canvas, x, y, isIncrease)
@@ -704,11 +724,15 @@ class ProChartView @JvmOverloads constructor(
     private fun drawSpikeAnnotation(canvas: Canvas, x: Float, deltaPercent: Float) {
         val sign = if (deltaPercent > 0) "+" else ""
         val text = "$sign${String.format(Locale.US, "%.0f", deltaPercent)}%"
+        val isIncrease = deltaPercent > 0
         
         val annotationPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
             textSize = scaledDensity * 9f
-            color = ContextCompat.getColor(context, R.color.pro_amber)
+            color = if (isIncrease) 
+                ContextCompat.getColor(context, R.color.pro_green)
+            else 
+                ContextCompat.getColor(context, R.color.pro_red)
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
@@ -751,7 +775,10 @@ class ProChartView @JvmOverloads constructor(
         
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = ContextCompat.getColor(context, R.color.pro_amber)
+            color = if (isIncrease) 
+                ContextCompat.getColor(context, R.color.pro_green)
+            else 
+                ContextCompat.getColor(context, R.color.pro_red)
         }
         canvas.drawPath(trianglePath, fillPaint)
     }
