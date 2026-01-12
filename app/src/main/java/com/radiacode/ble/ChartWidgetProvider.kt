@@ -58,12 +58,18 @@ class ChartWidgetProvider : AppWidgetProvider() {
             
             ids.forEach { id ->
                 val options = mgr.getAppWidgetOptions(id)
-                mgr.updateAppWidget(id, buildViews(context, options))
+                try {
+                    mgr.updateAppWidget(id, buildViews(context, options))
+                } catch (e: Exception) {
+                    android.util.Log.e("RadiaCode", "ChartWidget updateAll error", e)
+                }
             }
         }
 
         private fun buildViews(context: Context, options: Bundle?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_chart)
+            
+            try {
 
             val last = Prefs.getLastReading(context)
             val recentReadings = Prefs.getRecentReadings(context, 60)
@@ -79,12 +85,12 @@ class ChartWidgetProvider : AppWidgetProvider() {
             
             // Get widget dimensions for sparkline sizing
             val density = context.resources.displayMetrics.density
-            val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250) ?: 250
-            val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 120) ?: 120
+            val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 300) ?: 300
+            val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 150) ?: 150
             
-            // Calculate sparkline dimensions (roughly half the widget width, with some padding)
-            val sparkWidth = ((minWidth * density) / 2.5f).toInt().coerceIn(80, 300)
-            val sparkHeight = ((minHeight * density) / 4f).toInt().coerceIn(30, 80)
+            // Calculate sparkline dimensions - larger for better visibility
+            val sparkWidth = ((minWidth * density) / 2f).toInt().coerceIn(100, 600)
+            val sparkHeight = ((minHeight * density) / 5f).toInt().coerceIn(40, 150)
             
             if (last == null) {
                 views.setTextViewText(R.id.widgetDoseValue, "—")
@@ -148,6 +154,11 @@ class ChartWidgetProvider : AppWidgetProvider() {
                     views.setImageViewBitmap(R.id.widgetCpsSparkline, cpsBitmap)
                 }
             }
+            } catch (e: Exception) {
+                android.util.Log.e("RadiaCode", "ChartWidget buildViews error", e)
+                views.setTextViewText(R.id.widgetDoseValue, "ERR")
+                views.setTextViewText(R.id.widgetCpsValue, "ERR")
+            }
 
             // Click handler to launch app
             val launchIntent = Intent(context, MainActivity::class.java)
@@ -159,22 +170,40 @@ class ChartWidgetProvider : AppWidgetProvider() {
         }
         
         private fun createSparkline(values: List<Float>, width: Int, height: Int, color: Int): Bitmap {
-            if (values.isEmpty() || width <= 0 || height <= 0) {
+            if (width <= 0 || height <= 0) {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             }
             
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             
+            // Draw subtle background
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                this.color = Color.argb(30, 255, 255, 255)
+            }
+            canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 8f, 8f, bgPaint)
+            
+            // If no data, show "No data" indicator
+            if (values.isEmpty() || values.size < 2) {
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = Color.argb(100, 255, 255, 255)
+                    textSize = height / 3f
+                    textAlign = Paint.Align.CENTER
+                }
+                canvas.drawText("—", width / 2f, height / 2f + textPaint.textSize / 3f, textPaint)
+                return bitmap
+            }
+            
             val minV = values.minOrNull() ?: 0f
             val maxV = values.maxOrNull() ?: 1f
             val range = max(0.0001f, maxV - minV)
             
             // Padding
-            val padLeft = 2f
-            val padRight = 2f
-            val padTop = 4f
-            val padBottom = 4f
+            val padLeft = 8f
+            val padRight = 8f
+            val padTop = 8f
+            val padBottom = 8f
             val chartWidth = width - padLeft - padRight
             val chartHeight = height - padTop - padBottom
             
@@ -183,8 +212,6 @@ class ChartWidgetProvider : AppWidgetProvider() {
             val fillPath = Path()
             
             val n = values.size
-            var firstX = 0f
-            var firstY = 0f
             
             for (i in 0 until n) {
                 val x = padLeft + (i.toFloat() / max(1, n - 1)) * chartWidth
@@ -193,10 +220,8 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 
                 if (i == 0) {
                     linePath.moveTo(x, y)
-                    fillPath.moveTo(x, height.toFloat())
+                    fillPath.moveTo(x, height.toFloat() - padBottom)
                     fillPath.lineTo(x, y)
-                    firstX = x
-                    firstY = y
                 } else {
                     linePath.lineTo(x, y)
                     fillPath.lineTo(x, y)
@@ -204,26 +229,38 @@ class ChartWidgetProvider : AppWidgetProvider() {
             }
             
             // Close fill path
-            fillPath.lineTo(padLeft + chartWidth, height.toFloat())
+            fillPath.lineTo(padLeft + chartWidth, height.toFloat() - padBottom)
             fillPath.close()
             
             // Draw gradient fill
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
-                    0f, 0f, 0f, height.toFloat(),
-                    Color.argb(60, Color.red(color), Color.green(color), Color.blue(color)),
-                    Color.argb(5, Color.red(color), Color.green(color), Color.blue(color)),
+                    0f, padTop, 0f, height.toFloat() - padBottom,
+                    Color.argb(80, Color.red(color), Color.green(color), Color.blue(color)),
+                    Color.argb(10, Color.red(color), Color.green(color), Color.blue(color)),
                     Shader.TileMode.CLAMP
                 )
             }
             canvas.drawPath(fillPath, fillPaint)
             
-            // Draw line
+            // Draw line with glow effect
+            val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 6f
+                this.color = Color.argb(40, Color.red(color), Color.green(color), Color.blue(color))
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+            canvas.drawPath(linePath, glowPaint)
+            
+            // Draw main line
             val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = 2f
+                strokeWidth = 3f
                 this.color = color
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
             }
             canvas.drawPath(linePath, linePaint)
             
