@@ -177,17 +177,12 @@ class ChartWidgetProvider : AppWidgetProvider() {
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             
-            // Draw subtle background
-            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                this.color = Color.argb(30, 255, 255, 255)
-            }
-            canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 8f, 8f, bgPaint)
+            // Transparent background - let the card background show through
             
             // If no data, show "No data" indicator
             if (values.isEmpty() || values.size < 2) {
                 val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    this.color = Color.argb(100, 255, 255, 255)
+                    this.color = Color.argb(80, 255, 255, 255)
                     textSize = height / 3f
                     textAlign = Paint.Align.CENTER
                 }
