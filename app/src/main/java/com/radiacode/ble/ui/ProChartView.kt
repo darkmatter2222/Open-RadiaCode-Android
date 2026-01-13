@@ -66,6 +66,7 @@ class ProChartView @JvmOverloads constructor(
     private var isZoomPanEnabled: Boolean = true
     private var isPanning = false
     private var lastPanX = 0f
+    private var isFollowingRealTime: Boolean = true  // If true, auto-scroll to show newest data
     
     // Display options
     private var showSpikeMarkers: Boolean = true
@@ -187,14 +188,75 @@ class ProChartView @JvmOverloads constructor(
     }
 
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withLocale(Locale.US)
+    
+    // Touch interaction timing
+    private var touchDownTime: Long = 0L
+    private var touchDownX: Float = 0f
+    private var touchDownY: Float = 0f
+    private val markerDelayMs = 300L  // Don't show marker until held for 300ms
+    private val tapSlop = density * 10f  // Movement threshold to cancel tap
+    private var isWaitingForMarker = false
+    
+    // Fling/momentum scrolling
+    private var flingVelocity: Float = 0f
+    private var lastFlingTime: Long = 0L
+    private val flingDecay = 0.92f  // How quickly fling slows down
+    private val flingMinVelocity = density * 5f  // Stop fling below this velocity
+    
+    private val flingRunnable = object : Runnable {
+        override fun run() {
+            if (abs(flingVelocity) < flingMinVelocity || zoomLevel <= 1f) {
+                flingVelocity = 0f
+                return
+            }
+            
+            val chartWidth = chartRight - chartLeft
+            if (chartWidth > 0 && samples.size > 1) {
+                val visibleFrac = 1f / zoomLevel
+                val panDelta = flingVelocity / chartWidth * visibleFrac
+                val newPan = (panOffset + panDelta).coerceIn(0f, 1f - visibleFrac)
+                
+                // Check if we've reached the end (real-time)
+                val wasFollowing = isFollowingRealTime
+                isFollowingRealTime = newPan >= (1f - visibleFrac - 0.001f)
+                if (wasFollowing != isFollowingRealTime) {
+                    notifyRealTimeStateChanged()
+                }
+                
+                panOffset = newPan
+                flingVelocity *= flingDecay
+                invalidate()
+                postOnAnimation(this)
+            }
+        }
+    }
+    
+    private val markerDelayRunnable = Runnable {
+        if (isWaitingForMarker && !scaleGestureDetector.isInProgress) {
+            selectedIndex = pickIndexForX(touchDownX)
+            if (selectedIndex != null) {
+                isStickyMode = true
+                stickyTimestampMs = timestampsMs.getOrNull(selectedIndex!!)
+                invalidate()
+            }
+        }
+        isWaitingForMarker = false
+    }
 
-    // Scale gesture detector for pinch-zoom
+    // Scale gesture detector for pinch-zoom (with amplified sensitivity)
     private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             if (!isZoomPanEnabled) return false
             
-            val scaleFactor = detector.scaleFactor
-            val newZoom = (zoomLevel * scaleFactor).coerceIn(1f, 10f)
+            // Amplify scale factor for more responsive zooming
+            val rawScale = detector.scaleFactor
+            val amplifiedScale = if (rawScale > 1f) {
+                1f + (rawScale - 1f) * 2.5f  // Zoom in faster
+            } else {
+                1f - (1f - rawScale) * 2.5f  // Zoom out faster
+            }
+            val oldZoom = zoomLevel
+            val newZoom = (zoomLevel * amplifiedScale).coerceIn(1f, 20f)
             
             // Adjust pan offset to keep the zoom centered on the focal point
             val chartWidth = chartRight - chartLeft
@@ -216,66 +278,116 @@ class ProChartView @JvmOverloads constructor(
                 zoomLevel = newZoom
             }
             
+            // Cancel any pending marker when zooming
+            cancelMarkerDelay()
+            
+            // Notify listener if zoom changed
+            if (oldZoom != zoomLevel) {
+                notifyZoomChanged()
+            }
+            
             invalidate()
+            return true
+        }
+        
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            // Cancel marker when starting to zoom
+            cancelMarkerDelay()
+            flingVelocity = 0f  // Stop any ongoing fling
             return true
         }
     })
 
     // Gesture handling
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDown(e: MotionEvent): Boolean = true
+        override fun onDown(e: MotionEvent): Boolean {
+            // Stop any ongoing fling
+            flingVelocity = 0f
+            removeCallbacks(flingRunnable)
+            return true
+        }
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-            if (!isZoomPanEnabled || zoomLevel <= 1f) return false
+            // Cancel marker when scrolling
+            cancelMarkerDelay()
+            
+            if (!isZoomPanEnabled) return false
+            
+            // Only allow panning when zoomed in
+            if (zoomLevel <= 1f) return false
             
             // Pan the view
             val chartWidth = chartRight - chartLeft
             if (chartWidth > 0 && samples.size > 1) {
                 val visibleFrac = 1f / zoomLevel
                 val panDelta = distanceX / chartWidth * visibleFrac
-                panOffset = (panOffset + panDelta).coerceIn(0f, 1f - visibleFrac)
+                val newPan = (panOffset + panDelta).coerceIn(0f, 1f - visibleFrac)
+                
+                // Check if we've scrolled away from or back to real-time
+                val wasFollowing = isFollowingRealTime
+                isFollowingRealTime = newPan >= (1f - visibleFrac - 0.001f)
+                if (wasFollowing != isFollowingRealTime) {
+                    notifyRealTimeStateChanged()
+                }
+                
+                panOffset = newPan
                 invalidate()
                 return true
             }
             return false
         }
+        
+        override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+            if (!isZoomPanEnabled || zoomLevel <= 1f) return false
+            
+            // Start momentum scrolling (negative because we pan opposite to swipe)
+            flingVelocity = -velocityX / 60f  // Scale down velocity
+            lastFlingTime = System.currentTimeMillis()
+            postOnAnimation(flingRunnable)
+            return true
+        }
 
         override fun onLongPress(e: MotionEvent) {
-            // Long press enables sliding mode (clears on release)
-            isStickyMode = false
+            // Long press immediately enables sliding mode
+            cancelMarkerDelay()
+            isStickyMode = true  // Make it sticky so it persists
             selectedIndex = pickIndexForX(e.x)
+            stickyTimestampMs = selectedIndex?.let { timestampsMs.getOrNull(it) }
             invalidate()
         }
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
-            // Tap toggles sticky marker
-            val idx = pickIndexForX(e.x)
-            if (idx != null) {
-                if (isStickyMode && selectedIndex == idx) {
-                    // Tapping same spot again clears it
-                    clearStickyMarker()
-                } else {
-                    // Set sticky marker at this timestamp
-                    isStickyMode = true
-                    selectedIndex = idx
-                    stickyTimestampMs = timestampsMs.getOrNull(idx)
-                }
-                invalidate()
+            // Don't show marker on single tap - only on delayed hold
+            // Instead, if we already have a marker, tapping clears it
+            if (isStickyMode) {
+                clearStickyMarker()
             }
             return true
         }
         
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            // Double-tap to reset zoom
-            if (zoomLevel > 1f) {
+            // Double-tap to reset zoom and go to real-time
+            cancelMarkerDelay()
+            if (zoomLevel > 1f || !isFollowingRealTime) {
                 zoomLevel = 1f
                 panOffset = 0f
+                val wasFollowing = isFollowingRealTime
+                isFollowingRealTime = true
+                if (!wasFollowing) {
+                    notifyRealTimeStateChanged()
+                }
+                notifyZoomChanged()
                 invalidate()
                 return true
             }
             return false
         }
     })
+    
+    private fun cancelMarkerDelay() {
+        isWaitingForMarker = false
+        removeCallbacks(markerDelayRunnable)
+    }
 
     init {
         setLayerType(LAYER_TYPE_HARDWARE, null)
@@ -296,21 +408,26 @@ class ProChartView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Handle scale gestures first
-        var handled = scaleGestureDetector.onTouchEvent(event)
-        
-        // Only handle other gestures if not scaling
-        if (!scaleGestureDetector.isInProgress) {
-            handled = gestureDetector.onTouchEvent(event) || handled
-            
-            // Handle drag during long-press (non-sticky mode)
-            if (!isStickyMode && (event.action == MotionEvent.ACTION_MOVE)) {
-                selectedIndex = pickIndexForX(event.x)
-                invalidate()
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDownTime = System.currentTimeMillis()
+                touchDownX = event.x
+                touchDownY = event.y
+                isWaitingForMarker = true
+                // Start delayed marker timer
+                postDelayed(markerDelayRunnable, markerDelayMs)
             }
-            
-            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                // Only clear selection if NOT in sticky mode
+            MotionEvent.ACTION_MOVE -> {
+                // Cancel marker if moved too far
+                val dx = abs(event.x - touchDownX)
+                val dy = abs(event.y - touchDownY)
+                if (dx > tapSlop || dy > tapSlop) {
+                    cancelMarkerDelay()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                cancelMarkerDelay()
+                // Clear non-sticky selection on release
                 if (!isStickyMode && selectedIndex != null) {
                     selectedIndex = null
                     invalidate()
@@ -318,7 +435,70 @@ class ProChartView @JvmOverloads constructor(
             }
         }
         
+        // Handle scale gestures first
+        var handled = scaleGestureDetector.onTouchEvent(event)
+        
+        // Only handle other gestures if not scaling
+        if (!scaleGestureDetector.isInProgress) {
+            handled = gestureDetector.onTouchEvent(event) || handled
+            
+            // Handle drag during long-press - for sliding marker
+            if (isStickyMode && selectedIndex != null && event.action == MotionEvent.ACTION_MOVE) {
+                selectedIndex = pickIndexForX(event.x)
+                stickyTimestampMs = selectedIndex?.let { timestampsMs.getOrNull(it) }
+                invalidate()
+            }
+        }
+        
         return handled || super.onTouchEvent(event)
+    }
+    
+    /** Listener for zoom level changes */
+    interface OnZoomChangeListener {
+        fun onZoomChanged(zoomLevel: Float)
+    }
+    
+    /** Listener for real-time following state changes */
+    interface OnRealTimeStateListener {
+        fun onRealTimeStateChanged(isFollowingRealTime: Boolean)
+    }
+    
+    private var zoomChangeListener: OnZoomChangeListener? = null
+    private var realTimeStateListener: OnRealTimeStateListener? = null
+    
+    fun setOnZoomChangeListener(listener: OnZoomChangeListener?) {
+        zoomChangeListener = listener
+    }
+    
+    fun setOnRealTimeStateListener(listener: OnRealTimeStateListener?) {
+        realTimeStateListener = listener
+    }
+    
+    private fun notifyZoomChanged() {
+        zoomChangeListener?.onZoomChanged(zoomLevel)
+    }
+    
+    private fun notifyRealTimeStateChanged() {
+        realTimeStateListener?.onRealTimeStateChanged(isFollowingRealTime)
+    }
+    
+    /** Check if chart is following real-time (showing newest data on right edge) */
+    fun isFollowingRealTime(): Boolean = isFollowingRealTime
+    
+    /** Jump to real-time (newest data) without changing zoom level */
+    fun goToRealTime() {
+        if (zoomLevel > 1f) {
+            val visibleFrac = 1f / zoomLevel
+            panOffset = 1f - visibleFrac  // Pan to show the rightmost data
+        } else {
+            panOffset = 0f
+        }
+        val wasFollowing = isFollowingRealTime
+        isFollowingRealTime = true
+        if (!wasFollowing) {
+            notifyRealTimeStateChanged()
+        }
+        invalidate()
     }
 
     /** Clear the sticky marker */
@@ -335,14 +515,22 @@ class ProChartView @JvmOverloads constructor(
         if (!enabled) {
             zoomLevel = 1f
             panOffset = 0f
+            val wasFollowing = isFollowingRealTime
+            isFollowingRealTime = true
+            if (!wasFollowing) notifyRealTimeStateChanged()
+            notifyZoomChanged()
             invalidate()
         }
     }
 
-    /** Reset zoom to default (1x) */
+    /** Reset zoom to default (1x) and go to real-time */
     fun resetZoom() {
         zoomLevel = 1f
         panOffset = 0f
+        val wasFollowing = isFollowingRealTime
+        isFollowingRealTime = true
+        if (!wasFollowing) notifyRealTimeStateChanged()
+        notifyZoomChanged()
         invalidate()
     }
 
@@ -411,6 +599,12 @@ class ProChartView @JvmOverloads constructor(
             selectedIndex = findIndexForTimestamp(stickyTimestampMs!!)
         } else if (!isStickyMode) {
             selectedIndex = null
+        }
+        
+        // If following real-time and zoomed, keep view at the end
+        if (isFollowingRealTime && zoomLevel > 1f) {
+            val visibleFrac = 1f / zoomLevel
+            panOffset = (1f - visibleFrac).coerceAtLeast(0f)
         }
         
         // Recalculate derived data

@@ -323,15 +323,47 @@
                         android:orientation="vertical"
                         android:padding="12dp">
 
-                        <TextView
-                            android:id="@+id/doseChartTitle"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="REAL TIME DOSE RATE — Last 1m"
-                            android:textColor="@color/pro_text_muted"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.1" />
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:id="@+id/doseChartTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="REAL TIME DOSE RATE — Last 1m"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <ImageButton
+                                android:id="@+id/doseChartGoRealtime"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_go_realtime"
+                                android:contentDescription="Go to real-time"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_cyan" />
+                            
+                            <ImageButton
+                                android:id="@+id/doseChartReset"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_reset_zoom"
+                                android:contentDescription="Reset zoom"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
 
                         <com.radiacode.ble.ui.ProChartView
                             android:id="@+id/doseChart"
@@ -355,15 +387,47 @@
                         android:orientation="vertical"
                         android:padding="12dp">
 
-                        <TextView
-                            android:id="@+id/cpsChartTitle"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="REAL TIME COUNT RATE — Last 1m"
-                            android:textColor="@color/pro_text_muted"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.1" />
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:id="@+id/cpsChartTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="REAL TIME COUNT RATE — Last 1m"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <ImageButton
+                                android:id="@+id/cpsChartGoRealtime"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_go_realtime"
+                                android:contentDescription="Go to real-time"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_cyan" />
+                            
+                            <ImageButton
+                                android:id="@+id/cpsChartReset"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_reset_zoom"
+                                android:contentDescription="Reset zoom"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
 
                         <com.radiacode.ble.ui.ProChartView
                             android:id="@+id/cpsChart"

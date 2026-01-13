@@ -64,10 +64,14 @@ class MainActivity : AppCompatActivity() {
     // Dashboard - Charts
     private lateinit var doseChartTitle: TextView
     private lateinit var doseChart: ProChartView
+    private lateinit var doseChartReset: android.widget.ImageButton
+    private lateinit var doseChartGoRealtime: android.widget.ImageButton
     private lateinit var doseStats: StatRowView
 
     private lateinit var cpsChartTitle: TextView
     private lateinit var cpsChart: ProChartView
+    private lateinit var cpsChartReset: android.widget.ImageButton
+    private lateinit var cpsChartGoRealtime: android.widget.ImageButton
     private lateinit var cpsStats: StatRowView
 
     private lateinit var sessionInfo: TextView
@@ -226,10 +230,14 @@ class MainActivity : AppCompatActivity() {
 
         doseChartTitle = findViewById(R.id.doseChartTitle)
         doseChart = findViewById(R.id.doseChart)
+        doseChartReset = findViewById(R.id.doseChartReset)
+        doseChartGoRealtime = findViewById(R.id.doseChartGoRealtime)
         doseStats = findViewById(R.id.doseStats)
 
         cpsChartTitle = findViewById(R.id.cpsChartTitle)
         cpsChart = findViewById(R.id.cpsChart)
+        cpsChartReset = findViewById(R.id.cpsChartReset)
+        cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
         cpsStats = findViewById(R.id.cpsStats)
 
         sessionInfo = findViewById(R.id.sessionInfo)
@@ -486,6 +494,50 @@ class MainActivity : AppCompatActivity() {
 
         doseChart.setOnClickListener { openFocus("dose") }
         cpsChart.setOnClickListener { openFocus("cps") }
+        
+        // Setup zoom change listeners to show/hide reset buttons
+        doseChart.setOnZoomChangeListener(object : ProChartView.OnZoomChangeListener {
+            override fun onZoomChanged(zoomLevel: Float) {
+                doseChartReset.visibility = if (zoomLevel > 1.01f) View.VISIBLE else View.GONE
+            }
+        })
+        
+        cpsChart.setOnZoomChangeListener(object : ProChartView.OnZoomChangeListener {
+            override fun onZoomChanged(zoomLevel: Float) {
+                cpsChartReset.visibility = if (zoomLevel > 1.01f) View.VISIBLE else View.GONE
+            }
+        })
+        
+        // Reset button click handlers
+        doseChartReset.setOnClickListener {
+            doseChart.resetZoom()
+        }
+        
+        cpsChartReset.setOnClickListener {
+            cpsChart.resetZoom()
+        }
+        
+        // Go-to-realtime button click handlers
+        doseChartGoRealtime.setOnClickListener {
+            doseChart.goToRealTime()
+        }
+        
+        cpsChartGoRealtime.setOnClickListener {
+            cpsChart.goToRealTime()
+        }
+        
+        // Setup real-time state listeners to show/hide go-to-realtime buttons
+        doseChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
+            override fun onRealTimeStateChanged(isFollowingRealTime: Boolean) {
+                doseChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
+            }
+        })
+        
+        cpsChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
+            override fun onRealTimeStateChanged(isFollowingRealTime: Boolean) {
+                cpsChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
+            }
+        })
     }
 
     private fun setupTimeWindowChips() {
@@ -507,7 +559,8 @@ class MainActivity : AppCompatActivity() {
             300 -> findViewById<Chip>(R.id.chip5m).isChecked = true
             900 -> findViewById<Chip>(R.id.chip15m).isChecked = true
             3600 -> findViewById<Chip>(R.id.chip1h).isChecked = true
-            else -> findViewById<Chip>(R.id.chipAll).isChecked = true
+            86400 -> findViewById<Chip>(R.id.chipAll).isChecked = true
+            else -> findViewById<Chip>(R.id.chip1m).isChecked = true
         }
 
         timeWindowChips.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -519,6 +572,10 @@ class MainActivity : AppCompatActivity() {
             refreshSettingsRows()
             updateChartTitles()
             lastReadingTimestampMs = 0L
+            
+            // Reset chart zoom to show the new time window properly
+            doseChart.resetZoom()
+            cpsChart.resetZoom()
         }
     }
 
@@ -650,9 +707,23 @@ class MainActivity : AppCompatActivity() {
         updateChartTitles()
 
         ensureHistoryCapacity()
-        Prefs.getLastReading(this)?.let {
-            doseHistory.add(it.timestampMs, it.uSvPerHour)
-            cpsHistory.add(it.timestampMs, it.cps)
+        
+        // Load full chart history from persistent storage (survives app restart)
+        val chartHistory = Prefs.getChartHistory(this)
+        if (chartHistory.isNotEmpty()) {
+            for (reading in chartHistory) {
+                doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+                cpsHistory.add(reading.timestampMs, reading.cps)
+            }
+            sampleCount = chartHistory.size
+            // Use the earliest timestamp as session start for continuity
+            sessionStartMs = chartHistory.first().timestampMs
+        } else {
+            // Fall back to just the last reading if no history
+            Prefs.getLastReading(this)?.let {
+                doseHistory.add(it.timestampMs, it.uSvPerHour)
+                cpsHistory.add(it.timestampMs, it.cps)
+            }
         }
         startUiLoop()
     }
