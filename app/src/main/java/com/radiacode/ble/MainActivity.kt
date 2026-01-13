@@ -56,6 +56,11 @@ class MainActivity : AppCompatActivity() {
     // Toolbar status
     private lateinit var statusDot: View
     private lateinit var statusLabel: TextView
+    private lateinit var statusContainer: View
+
+    // Dashboard - Device Selector
+    private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
+    private lateinit var allDevicesOverlay: View
 
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
@@ -95,6 +100,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var findDevicesButton: MaterialButton
     private lateinit var reconnectButton: MaterialButton
     private lateinit var stopServiceButton: MaterialButton
+    private lateinit var deviceListContainer: android.widget.LinearLayout
+    private lateinit var noDevicesText: TextView
 
     // Settings panel
     private lateinit var rowWindow: View
@@ -223,6 +230,7 @@ class MainActivity : AppCompatActivity() {
         setupCharts()
         setupTimeWindowChips()
         setupUnitChips()
+        setupToolbarDeviceSelector()
 
         refreshSettingsRows()
         updateChartTitles()
@@ -248,6 +256,11 @@ class MainActivity : AppCompatActivity() {
 
         statusDot = findViewById(R.id.statusDot)
         statusLabel = findViewById(R.id.statusLabel)
+        statusContainer = statusLabel.parent as View
+
+        // Device selector for multi-device dashboard
+        deviceSelector = findViewById(R.id.deviceSelector)
+        allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -280,6 +293,8 @@ class MainActivity : AppCompatActivity() {
         findDevicesButton = findViewById(R.id.findDevicesButton)
         reconnectButton = findViewById(R.id.reconnectButton)
         stopServiceButton = findViewById(R.id.stopServiceButton)
+        deviceListContainer = findViewById(R.id.deviceListContainer)
+        noDevicesText = findViewById(R.id.noDevicesText)
 
         rowWindow = findViewById(R.id.rowWindow)
         rowSmoothing = findViewById(R.id.rowSmoothing)
@@ -366,6 +381,10 @@ class MainActivity : AppCompatActivity() {
             RadiaCodeForegroundService.stop(this)
             lastReadingTimestampMs = 0L
         }
+        
+        // Setup device list manager
+        setupDeviceListManager()
+        refreshDeviceList()
     }
 
     private fun setupSettingsPanel() {
@@ -630,33 +649,126 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Setup the toolbar status indicator to show device selector popup when clicked.
+     */
+    private fun setupToolbarDeviceSelector() {
+        statusContainer.setOnClickListener {
+            val devices = Prefs.getDevices(this)
+            if (devices.size <= 1) return@setOnClickListener
+            
+            showDeviceSelectorDialog(devices)
+        }
+    }
+    
+    private fun showDeviceSelectorDialog(devices: List<DeviceConfig>) {
+        val selectedId = Prefs.getSelectedDeviceId(this)
+        val items = mutableListOf("All Devices")
+        items.addAll(devices.map { it.displayName })
+        
+        val currentSelection = if (selectedId == null) 0 else {
+            val idx = devices.indexOfFirst { it.id == selectedId }
+            if (idx >= 0) idx + 1 else 0
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Select Device")
+            .setSingleChoiceItems(items.toTypedArray(), currentSelection) { dialog, which ->
+                val newSelectedId = if (which == 0) null else devices.getOrNull(which - 1)?.id
+                Prefs.setSelectedDeviceId(this, newSelectedId)
+                
+                // Clear and reload data for selected device
+                doseHistory.clear()
+                cpsHistory.clear()
+                sampleCount = 0
+                lastReadingTimestampMs = 0L
+                sessionStartMs = System.currentTimeMillis()
+                
+                if (newSelectedId != null) {
+                    val history = Prefs.getDeviceChartHistory(this, newSelectedId)
+                    for (reading in history) {
+                        doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+                        cpsHistory.add(reading.timestampMs, reading.cps)
+                        sampleCount++
+                    }
+                }
+                
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    // Device list manager for Device panel
+    private var deviceListManager: DeviceListManager? = null
+    
+    private fun setupDeviceListManager() {
+        if (deviceListManager != null) return
+        
+        deviceListManager = DeviceListManager(
+            context = this,
+            container = deviceListContainer,
+            noDevicesView = noDevicesText,
+            onDevicesChanged = {
+                // Refresh UI when devices are changed
+                refreshDeviceList()
+            }
+        )
+    }
+    
+    private fun refreshDeviceList() {
+        val devices = Prefs.getDevices(this)
+        android.util.Log.d("RadiaCode", "refreshDeviceList: ${devices.size} devices")
+        deviceListManager?.refresh()
+    }
+
     override fun onResume() {
         super.onResume()
         registerReadingReceiver()
-        reloadChartHistoryFromStorage()
+        reloadChartHistoryForSelectedDevice()
         startUiLoop()
         refreshSettingsRows()
     }
     
-    private fun reloadChartHistoryFromStorage() {
-        val chartHistory = Prefs.getChartHistory(this)
-        if (chartHistory.isEmpty()) return
+    private fun reloadChartHistoryForSelectedDevice() {
+        val devices = Prefs.getDevices(this)
+        var selectedDeviceId = Prefs.getSelectedDeviceId(this)
         
-        val lastInMemoryTs = doseHistory.lastN(1).timestampsMs.firstOrNull() ?: 0L
+        // Clear existing data
+        doseHistory.clear()
+        cpsHistory.clear()
+        sampleCount = 0
         
-        var addedCount = 0
-        for (reading in chartHistory) {
-            if (reading.timestampMs > lastInMemoryTs) {
-                doseHistory.add(reading.timestampMs, reading.uSvPerHour)
-                cpsHistory.add(reading.timestampMs, reading.cps)
-                addedCount++
+        // If only one device exists, auto-select it
+        if (selectedDeviceId == null && devices.size == 1) {
+            selectedDeviceId = devices.first().id
+        }
+        
+        if (selectedDeviceId == null) {
+            // All devices mode - no chart data, show overlay
+            android.util.Log.d("RadiaCode", "All devices mode - no chart data to load")
+            if (devices.size > 1) {
+                allDevicesOverlay.visibility = View.VISIBLE
+                panelDashboard.visibility = View.INVISIBLE
             }
+            return
         }
         
-        if (addedCount > 0) {
-            sampleCount += addedCount
-            lastReadingTimestampMs = 0L
+        // Single device mode - hide overlay
+        allDevicesOverlay.visibility = View.GONE
+        panelDashboard.visibility = View.VISIBLE
+        
+        // Load history for selected device only
+        val chartHistory = Prefs.getDeviceChartHistory(this, selectedDeviceId)
+        android.util.Log.d("RadiaCode", "Loading ${chartHistory.size} readings for device $selectedDeviceId")
+        
+        for (reading in chartHistory) {
+            doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+            cpsHistory.add(reading.timestampMs, reading.cps)
+            sampleCount++
         }
+        
+        lastReadingTimestampMs = 0L
     }
 
     override fun onPause() {
@@ -749,17 +861,84 @@ class MainActivity : AppCompatActivity() {
 
     private fun startUiLoop() {
         if (uiRunnable != null) return
+        
+        // Setup device selector callback
+        deviceSelector.setOnDeviceSelectedListener(object : com.radiacode.ble.ui.DeviceSelectorView.OnDeviceSelectedListener {
+            override fun onDeviceSelected(deviceId: String?) {
+                android.util.Log.d("RadiaCode", "Device selected: $deviceId")
+                
+                // Clear history and reload for selected device
+                doseHistory.clear()
+                cpsHistory.clear()
+                sampleCount = 0
+                lastReadingTimestampMs = 0L
+                sessionStartMs = System.currentTimeMillis()
+                
+                // Update overlay visibility
+                if (deviceId == null) {
+                    // All devices mode - show overlay
+                    allDevicesOverlay.visibility = View.VISIBLE
+                    panelDashboard.visibility = View.INVISIBLE
+                } else {
+                    // Single device mode - hide overlay and load data
+                    allDevicesOverlay.visibility = View.GONE
+                    panelDashboard.visibility = View.VISIBLE
+                    
+                    val history = Prefs.getDeviceChartHistory(this@MainActivity, deviceId)
+                    android.util.Log.d("RadiaCode", "Loaded ${history.size} readings for device $deviceId")
+                    for (reading in history) {
+                        doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+                        cpsHistory.add(reading.timestampMs, reading.cps)
+                        sampleCount++
+                    }
+                }
+            }
+        })
+        
         val r = object : Runnable {
             override fun run() {
                 val preferred = Prefs.getPreferredAddress(this@MainActivity)
                 val auto = Prefs.isAutoConnectEnabled(this@MainActivity)
-                val last = Prefs.getLastReading(this@MainActivity)
                 val svc = Prefs.getServiceStatus(this@MainActivity)
                 val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
 
-                // Update device panel - show device count for multi-device
+                // Get devices and selected device
                 val devices = Prefs.getDevices(this@MainActivity)
                 val enabledCount = devices.count { it.enabled }
+                val selectedDeviceId = Prefs.getSelectedDeviceId(this@MainActivity)
+                
+                // Update device selector
+                deviceSelector.setDevices(devices)
+                
+                // Update overlay visibility based on selection
+                val isAllDevicesMode = selectedDeviceId == null && devices.size > 1
+                if (isAllDevicesMode) {
+                    allDevicesOverlay.visibility = View.VISIBLE
+                    panelDashboard.visibility = View.INVISIBLE
+                } else {
+                    allDevicesOverlay.visibility = View.GONE
+                    panelDashboard.visibility = View.VISIBLE
+                }
+                
+                // Get reading ONLY for selected device (no mixing!)
+                val last = if (selectedDeviceId != null) {
+                    val deviceReadings = Prefs.getDeviceRecentReadings(this@MainActivity, selectedDeviceId, 1)
+                    deviceReadings.firstOrNull()?.let { r ->
+                        Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs)
+                    }
+                } else if (devices.size == 1) {
+                    // Auto-select single device
+                    val singleDevice = devices.first()
+                    val deviceReadings = Prefs.getDeviceRecentReadings(this@MainActivity, singleDevice.id, 1)
+                    deviceReadings.firstOrNull()?.let { r ->
+                        Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs)
+                    }
+                } else {
+                    // All devices mode - no data
+                    null
+                }
+                
+                // Update device panel
                 preferredDeviceText.text = when {
                     enabledCount > 1 -> "$enabledCount devices"
                     enabledCount == 1 -> devices.first { it.enabled }.displayName
@@ -796,7 +975,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 updateStatus(isConnected && !paused, statusText)
 
-                val shouldUpdateReading = !paused
+                val shouldUpdateReading = !paused && !isAllDevicesMode
                 if (!shouldUpdateReading) {
                     val frozen = lastShownReading
                     if (frozen != null) {
@@ -809,7 +988,8 @@ class MainActivity : AppCompatActivity() {
                     updateMetricCards(last)
                 }
 
-                if (last != null && !paused && last.timestampMs != lastReadingTimestampMs) {
+                // Only add to history if we have a specific device selected (not all-devices mode)
+                if (last != null && !paused && !isAllDevicesMode && last.timestampMs != lastReadingTimestampMs) {
                     lastReadingTimestampMs = last.timestampMs
                     ensureHistoryCapacity()
                     doseHistory.add(last.timestampMs, last.uSvPerHour)

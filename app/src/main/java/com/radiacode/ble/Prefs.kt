@@ -459,10 +459,26 @@ object Prefs {
             .getString(KEY_DEVICES_JSON, "[]") ?: "[]"
         if (json == "[]") return emptyList()
         
-        return json.removeSurrounding("[", "]")
+        val parsed = json.removeSurrounding("[", "]")
             .split("},{")
             .map { it.trim().let { s -> if (!s.startsWith("{")) "{$s" else s }.let { s -> if (!s.endsWith("}")) "$s}" else s } }
             .mapNotNull { DeviceConfig.fromJson(it) }
+        
+        // Remove duplicates by MAC address (keep first occurrence)
+        val seen = mutableSetOf<String>()
+        val unique = parsed.filter { device ->
+            val mac = device.macAddress.uppercase()
+            if (mac in seen) {
+                android.util.Log.w("Prefs", "getDevices: duplicate MAC removed: $mac")
+                false
+            } else {
+                seen.add(mac)
+                true
+            }
+        }
+        
+        android.util.Log.d("Prefs", "getDevices: parsed ${parsed.size} -> ${unique.size} unique devices")
+        return unique
     }
     
     /**
@@ -477,10 +493,23 @@ object Prefs {
      */
     fun setDevices(context: Context, devices: List<DeviceConfig>) {
         val json = "[${devices.joinToString(",") { it.toJson() }}]"
+        android.util.Log.d("Prefs", "setDevices: saving ${devices.size} devices")
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_DEVICES_JSON, json)
             .apply()
+    }
+    
+    /**
+     * Clear all devices and reset migration flag (for debugging).
+     */
+    fun clearAllDevices(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_DEVICES_JSON)
+            .remove("multi_device_migrated")
+            .apply()
+        android.util.Log.d("Prefs", "clearAllDevices: cleared all devices and migration flag")
     }
     
     /**
@@ -489,12 +518,17 @@ object Prefs {
     fun addDevice(context: Context, device: DeviceConfig): Boolean {
         val devices = getDevices(context).toMutableList()
         if (devices.size >= MAX_DEVICES) return false
-        if (devices.any { it.macAddress.equals(device.macAddress, ignoreCase = true) }) return false
+        // Check for duplicate MAC (case insensitive)
+        if (devices.any { it.macAddress.equals(device.macAddress, ignoreCase = true) }) {
+            android.util.Log.d("Prefs", "addDevice: device ${device.macAddress} already exists")
+            return false
+        }
         
         // Assign a color based on position
         val coloredDevice = device.copy(colorHex = DeviceConfig.getColorForIndex(devices.size))
         devices.add(coloredDevice)
         setDevices(context, devices)
+        android.util.Log.d("Prefs", "addDevice: added ${device.macAddress}, total devices: ${devices.size}")
         return true
     }
     

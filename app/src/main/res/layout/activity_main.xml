@@ -69,6 +69,10 @@
                 android:layout_height="wrap_content">
 
                 <!-- ==================== DASHBOARD PANEL ==================== -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+                    
                 <LinearLayout
                     android:id="@+id/panelDashboard"
                     android:layout_width="match_parent"
@@ -460,6 +464,38 @@
                     </LinearLayout>
 
                 </LinearLayout>
+                
+                <!-- All Devices overlay (shown when no specific device selected) -->
+                <LinearLayout
+                    android:id="@+id/allDevicesOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/pro_background"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="32dp"
+                    android:visibility="gone">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="All Devices View"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:text="Select a specific device from the dropdown above to view its data.\n\nMulti-device dashboard coming soon."
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="14sp" />
+                        
+                </LinearLayout>
+                
+                </FrameLayout>
 
                 <!-- ==================== DEVICE PANEL ==================== -->
                 <LinearLayout
