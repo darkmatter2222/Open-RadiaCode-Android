@@ -61,6 +61,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var doseCard: MetricCardView
     private lateinit var cpsCard: MetricCardView
 
+    // Dashboard - Chart Panels (for click handling)
+    private lateinit var doseChartPanel: View
+    private lateinit var cpsChartPanel: View
+
     // Dashboard - Charts
     private lateinit var doseChartTitle: TextView
     private lateinit var doseChart: ProChartView
@@ -227,6 +231,9 @@ class MainActivity : AppCompatActivity() {
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
+
+        doseChartPanel = findViewById(R.id.doseChartPanel)
+        cpsChartPanel = findViewById(R.id.cpsChartPanel)
 
         doseChartTitle = findViewById(R.id.doseChartTitle)
         doseChart = findViewById(R.id.doseChart)
@@ -467,8 +474,7 @@ class MainActivity : AppCompatActivity() {
         cpsCard.setValueText("—")
         cpsCard.setTrend(0f)
 
-        doseCard.setOnClickListener { openFocus("dose") }
-        cpsCard.setOnClickListener { openFocus("cps") }
+        // Note: Delta cards no longer open focus view - use chart panels instead
     }
 
     private fun setupCharts() {
@@ -492,8 +498,9 @@ class MainActivity : AppCompatActivity() {
         doseChart.setShowSpikePercentages(showSpikePercent)
         cpsChart.setShowSpikePercentages(showSpikePercent)
 
-        doseChart.setOnClickListener { openFocus("dose") }
-        cpsChart.setOnClickListener { openFocus("cps") }
+        // Chart panel click handlers (opens detailed analysis view)
+        doseChartPanel.setOnClickListener { openDetailedChart("dose") }
+        cpsChartPanel.setOnClickListener { openDetailedChart("cps") }
         
         // Setup zoom change listeners to show/hide reset buttons
         doseChart.setOnZoomChangeListener(object : ProChartView.OnZoomChangeListener {
@@ -1148,6 +1155,56 @@ class MainActivity : AppCompatActivity() {
             i += step
         }
         return outT to outV
+    }
+
+    private fun openDetailedChart(kind: String) {
+        val paused = Prefs.isPauseLiveEnabled(this)
+        val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
+        val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
+
+        // Primary series data
+        val (ts, v) = if (kind == "cps") {
+            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+            val smooth = Prefs.getSmoothSeconds(this, 0)
+            val poll = Prefs.getPollIntervalMs(this, 1000L)
+            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
+            val vals = convertCount(applySmoothing(cpsSeries?.values.orEmpty(), smoothSamples), cu)
+            decimate(cpsSeries?.timestampsMs.orEmpty(), vals)
+        } else {
+            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+            val smooth = Prefs.getSmoothSeconds(this, 0)
+            val poll = Prefs.getPollIntervalMs(this, 1000L)
+            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
+            val vals = convertDose(applySmoothing(doseSeries?.values.orEmpty(), smoothSamples), du)
+            decimate(doseSeries?.timestampsMs.orEmpty(), vals)
+        }
+
+        // Secondary series (for comparison mode)
+        val secondaryV = if (kind == "cps") {
+            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+            val smooth = Prefs.getSmoothSeconds(this, 0)
+            val poll = Prefs.getPollIntervalMs(this, 1000L)
+            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
+            val vals = convertDose(applySmoothing(doseSeries?.values.orEmpty(), smoothSamples), du)
+            vals.toList()
+        } else {
+            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+            val smooth = Prefs.getSmoothSeconds(this, 0)
+            val poll = Prefs.getPollIntervalMs(this, 1000L)
+            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
+            val vals = convertCount(applySmoothing(cpsSeries?.values.orEmpty(), smoothSamples), cu)
+            vals.toList()
+        }
+        
+        // Decimate secondary to match primary timestamps
+        val (_, secondaryDecimated) = decimate(ts.indices.map { doseSeries?.timestampsMs?.getOrNull(it) ?: 0L }, secondaryV)
+
+        val i = Intent(this, DetailedChartActivity::class.java)
+            .putExtra(DetailedChartActivity.EXTRA_KIND, kind)
+            .putExtra("ts", ts.toLongArray())
+            .putExtra("v", v.toFloatArray())
+            .putExtra("secondary_v", secondaryDecimated.toFloatArray())
+        startActivity(i)
     }
 
     private fun openFocus(kind: String) {

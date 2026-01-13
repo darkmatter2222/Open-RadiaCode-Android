@@ -60,6 +60,10 @@ class ProChartView @JvmOverloads constructor(
     private var rollingAvgSamples: List<Float> = emptyList()
     private var rollingAvgWindow: Int = 10  // Number of samples for rolling average
 
+    // Sigma bands (statistical bands)
+    private var sigmaBandLevel: Int = 0  // 0 = off, 1/2/3 = ±1σ/2σ/3σ
+    private var showMeanLine: Boolean = false
+
     // Zoom and Pan state
     private var zoomLevel: Float = 1f           // 1.0 = no zoom, 2.0 = 2x zoom
     private var panOffset: Float = 0f           // 0.0 = start, 1.0 = end (normalized)
@@ -180,6 +184,29 @@ class ProChartView @JvmOverloads constructor(
         color = ContextCompat.getColor(context, R.color.pro_text_muted)
         alpha = 200
         pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
+    }
+
+    // Mean line paint (solid horizontal line)
+    private val meanLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 2f
+        color = ContextCompat.getColor(context, R.color.pro_amber)
+        alpha = 180
+    }
+
+    // Sigma band paint (semi-transparent fill)
+    private val sigmaBandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = ContextCompat.getColor(context, R.color.pro_cyan)
+        alpha = 25
+    }
+
+    private val sigmaBandBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 1f
+        color = ContextCompat.getColor(context, R.color.pro_cyan)
+        alpha = 60
+        pathEffect = DashPathEffect(floatArrayOf(density * 6f, density * 3f), 0f)
     }
 
     // Sticky marker paint (brighter than regular crosshair)
@@ -371,12 +398,17 @@ class ProChartView @JvmOverloads constructor(
             isStickyMode = true  // Make it sticky so it persists
             selectedIndex = pickIndexForX(e.x)
             stickyTimestampMs = selectedIndex?.let { timestampsMs.getOrNull(it) }
+            selectedIndex?.let { notifyDataPointSelected(it) }
             invalidate()
         }
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
-            // Don't show marker on single tap - only on delayed hold
-            // Instead, if we already have a marker, tapping clears it
+            // Single tap selects point (for range selection mode)
+            val idx = pickIndexForX(e.x)
+            if (idx != null) {
+                notifyDataPointSelected(idx)
+            }
+            // If we have a sticky marker, clear it
             if (isStickyMode) {
                 clearStickyMarker()
             }
@@ -421,7 +453,7 @@ class ProChartView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         // Calculate chart bounds
         val yAxisWidth = density * 44f
-        val rightAxisWidth = if (hasSecondaryAxis) density * 44f else density * 12f
+        val rightAxisWidth = if (hasSecondaryAxis) density * 60f else density * 12f  // Increased for secondary axis labels
         val xAxisHeight = density * 24f
         val padding = density * 12f
 
@@ -487,8 +519,14 @@ class ProChartView @JvmOverloads constructor(
         fun onRealTimeStateChanged(isFollowingRealTime: Boolean)
     }
     
+    /** Listener for data point selection (tap/hold) */
+    interface OnDataPointSelectedListener {
+        fun onDataPointSelected(index: Int, timestampMs: Long, value: Float)
+    }
+    
     private var zoomChangeListener: OnZoomChangeListener? = null
     private var realTimeStateListener: OnRealTimeStateListener? = null
+    private var dataPointSelectedListener: OnDataPointSelectedListener? = null
     
     fun setOnZoomChangeListener(listener: OnZoomChangeListener?) {
         zoomChangeListener = listener
@@ -498,12 +536,22 @@ class ProChartView @JvmOverloads constructor(
         realTimeStateListener = listener
     }
     
+    fun setOnDataPointSelectedListener(listener: OnDataPointSelectedListener?) {
+        dataPointSelectedListener = listener
+    }
+    
     private fun notifyZoomChanged() {
         zoomChangeListener?.onZoomChanged(zoomLevel)
     }
     
     private fun notifyRealTimeStateChanged() {
         realTimeStateListener?.onRealTimeStateChanged(isFollowingRealTime)
+    }
+    
+    private fun notifyDataPointSelected(index: Int) {
+        if (index in samples.indices && index in timestampsMs.indices) {
+            dataPointSelectedListener?.onDataPointSelected(index, timestampsMs[index], samples[index])
+        }
     }
     
     /** Check if chart is following real-time (showing newest data on right edge) */
@@ -602,10 +650,22 @@ class ProChartView @JvmOverloads constructor(
         invalidate()
     }
 
-    /** Set the rolling average window size */
+    /** Set the rolling average window size (0 to disable) */
     fun setRollingAverageWindow(windowSize: Int) {
-        rollingAvgWindow = windowSize.coerceAtLeast(2)
+        rollingAvgWindow = if (windowSize <= 0) 0 else windowSize.coerceAtLeast(2)
         recalculateRollingAverage()
+        invalidate()
+    }
+
+    /** Set sigma band level (0=off, 1/2/3 = ±1σ/2σ/3σ) */
+    fun setSigmaBandLevel(level: Int) {
+        sigmaBandLevel = level.coerceIn(0, 3)
+        invalidate()
+    }
+
+    /** Show or hide mean line */
+    fun setShowMeanLine(show: Boolean) {
+        showMeanLine = show
         invalidate()
     }
 
@@ -714,7 +774,7 @@ class ProChartView @JvmOverloads constructor(
 
     /** Calculate rolling average */
     private fun recalculateRollingAverage() {
-        if (samples.size < rollingAvgWindow) {
+        if (rollingAvgWindow <= 0 || samples.size < rollingAvgWindow) {
             rollingAvgSamples = emptyList()
             return
         }
@@ -799,6 +859,22 @@ class ProChartView @JvmOverloads constructor(
 
         // Draw X-axis time labels (zoom-aware)
         drawTimeAxis(canvas, chartWidth, visibleStart, visibleEnd)
+
+        // Calculate statistics for sigma bands and mean line
+        val mean = visibleSamples.average().toFloat()
+        val variance = visibleSamples.map { (it - mean) * (it - mean) }.average()
+        val stdDev = kotlin.math.sqrt(variance).toFloat()
+
+        // Draw sigma bands (before main line so it appears behind)
+        if (sigmaBandLevel > 0) {
+            drawSigmaBands(canvas, chartHeight, yMin, yRange, mean, stdDev, sigmaBandLevel)
+        }
+
+        // Draw mean line (before main line)
+        if (showMeanLine) {
+            val meanY = chartBottom - chartHeight * ((mean - yMin) / yRange)
+            canvas.drawLine(chartLeft, meanY, chartRight, meanY, meanLinePaint)
+        }
 
         // Create gradient for fill
         val gradient = LinearGradient(
@@ -936,6 +1012,75 @@ class ProChartView @JvmOverloads constructor(
             }
         }
         canvas.drawPath(avgPath, rollingAvgPaint)
+    }
+
+    /** Draw sigma bands as horizontal shaded regions */
+    private fun drawSigmaBands(
+        canvas: Canvas,
+        chartHeight: Float,
+        yMin: Float,
+        yRange: Float,
+        mean: Float,
+        stdDev: Float,
+        level: Int
+    ) {
+        // Calculate the Y positions for the bands
+        val meanY = chartBottom - chartHeight * ((mean - yMin) / yRange)
+        
+        for (sigmaLevel in 1..level) {
+            val upperBound = mean + (sigmaLevel * stdDev)
+            val lowerBound = mean - (sigmaLevel * stdDev)
+            
+            val upperY = chartBottom - chartHeight * ((upperBound - yMin) / yRange)
+            val lowerY = chartBottom - chartHeight * ((lowerBound - yMin) / yRange)
+            
+            // Clamp to chart bounds
+            val clampedUpperY = upperY.coerceIn(chartTop, chartBottom)
+            val clampedLowerY = lowerY.coerceIn(chartTop, chartBottom)
+            
+            // Draw filled band with decreasing opacity for outer bands
+            val bandAlpha = when (sigmaLevel) {
+                1 -> 35
+                2 -> 25
+                3 -> 15
+                else -> 20
+            }
+            sigmaBandPaint.alpha = bandAlpha
+            
+            val rect = RectF(chartLeft, clampedUpperY, chartRight, clampedLowerY)
+            canvas.drawRect(rect, sigmaBandPaint)
+            
+            // Draw dashed border lines at band edges
+            if (clampedUpperY > chartTop) {
+                canvas.drawLine(chartLeft, clampedUpperY, chartRight, clampedUpperY, sigmaBandBorderPaint)
+            }
+            if (clampedLowerY < chartBottom) {
+                canvas.drawLine(chartLeft, clampedLowerY, chartRight, clampedLowerY, sigmaBandBorderPaint)
+            }
+        }
+        
+        // Draw sigma labels on right edge
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = scaledDensity * 9f
+            color = ContextCompat.getColor(context, R.color.pro_cyan)
+            alpha = 180
+            textAlign = Paint.Align.RIGHT
+        }
+        
+        for (sigmaLevel in 1..level) {
+            val upperBound = mean + (sigmaLevel * stdDev)
+            val lowerBound = mean - (sigmaLevel * stdDev)
+            
+            val upperY = chartBottom - chartHeight * ((upperBound - yMin) / yRange)
+            val lowerY = chartBottom - chartHeight * ((lowerBound - yMin) / yRange)
+            
+            if (upperY > chartTop + density * 12) {
+                canvas.drawText("+${sigmaLevel}σ", chartRight - density * 4, upperY + density * 3, labelPaint)
+            }
+            if (lowerY < chartBottom - density * 12) {
+                canvas.drawText("-${sigmaLevel}σ", chartRight - density * 4, lowerY + density * 3, labelPaint)
+            }
+        }
     }
 
     /** Draw vertical spike markers at significant delta points */

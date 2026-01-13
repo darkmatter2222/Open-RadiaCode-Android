@@ -1,0 +1,547 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/pro_surface">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:minHeight="36dp"
+            app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
+            app:titleTextColor="@color/pro_text_primary"
+            app:navigationIconTint="@color/pro_text_primary" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <!-- Main Chart Area -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <com.radiacode.ble.ui.ProChartView
+                android:id="@+id/detailChart"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Selection Info Overlay (shown when range selected) -->
+            <LinearLayout
+                android:id="@+id/selectionOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="12dp"
+                android:background="@drawable/tooltip_background"
+                android:orientation="vertical"
+                android:padding="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/selectionTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SELECTION"
+                    android:textColor="@color/pro_cyan"
+                    android:textSize="9sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
+
+                <TextView
+                    android:id="@+id/selectionStats"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/pro_text_primary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+            <!-- Zoom Level Indicator -->
+            <TextView
+                android:id="@+id/zoomIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|start"
+                android:layout_margin="12dp"
+                android:background="@drawable/tooltip_background"
+                android:padding="6dp"
+                android:text="1.0x"
+                android:fontFamily="monospace"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="10sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- Statistics Panel -->
+        <LinearLayout
+            android:id="@+id/statsPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/pro_surface"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- Stats Row 1 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MIN"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statMin"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MAX"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statMax"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MEAN"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statMean"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="STD DEV"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statStdDev"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="SAMPLES"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statSamples"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Stats Row 2 (Advanced) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="MEDIAN"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statMedian"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="P95"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statP95"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="P5"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statP5"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TREND"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statTrend"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="CV%"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="9sp"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/statCV"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="—"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Control Panel -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/pro_surface_elevated"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <!-- Statistical Bands Toggle -->
+                <com.google.android.material.chip.ChipGroup
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:singleSelection="true"
+                    app:selectionRequired="false">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSigma1"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="±1σ"
+                        android:textColor="@color/chip_text_color"
+                        app:chipBackgroundColor="@color/chip_bg_color"
+                        app:chipStrokeColor="@color/pro_border"
+                        app:chipStrokeWidth="1dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSigma2"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="±2σ"
+                        android:textColor="@color/chip_text_color"
+                        app:chipBackgroundColor="@color/chip_bg_color"
+                        app:chipStrokeColor="@color/pro_border"
+                        app:chipStrokeWidth="1dp" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipSigma3"
+                        style="@style/Widget.MaterialComponents.Chip.Choice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:text="±3σ"
+                        android:textColor="@color/chip_text_color"
+                        app:chipBackgroundColor="@color/chip_bg_color"
+                        app:chipStrokeColor="@color/pro_border"
+                        app:chipStrokeWidth="1dp" />
+
+                </com.google.android.material.chip.ChipGroup>
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@color/pro_border" />
+
+                <!-- Mean Line Toggle -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipMeanLine"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Mean"
+                    android:textColor="@color/chip_text_color"
+                    app:chipBackgroundColor="@color/chip_bg_color"
+                    app:chipStrokeColor="@color/pro_border"
+                    app:chipStrokeWidth="1dp" />
+
+                <!-- Rolling Average Toggle -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipRollingAvg"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Rolling Avg"
+                    android:textColor="@color/chip_text_color"
+                    app:chipBackgroundColor="@color/chip_bg_color"
+                    app:chipStrokeColor="@color/pro_border"
+                    app:chipStrokeWidth="1dp"
+                    android:checked="true" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@color/pro_border" />
+
+                <!-- Comparison Mode Toggle -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipCompare"
+                    style="@style/Widget.MaterialComponents.Chip.Choice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Compare"
+                    android:textColor="@color/chip_text_color"
+                    app:chipBackgroundColor="@color/chip_bg_color"
+                    app:chipStrokeColor="@color/pro_border"
+                    app:chipStrokeWidth="1dp" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:layout_marginHorizontal="8dp"
+                    android:background="@color/pro_border" />
+
+                <!-- Export Button -->
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipExport"
+                    style="@style/Widget.MaterialComponents.Chip.Action"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Export CSV"
+                    android:textColor="@color/pro_cyan"
+                    app:chipBackgroundColor="@color/pro_surface"
+                    app:chipStrokeColor="@color/pro_cyan"
+                    app:chipStrokeWidth="1dp"
+                    app:chipIcon="@drawable/ic_export"
+                    app:chipIconTint="@color/pro_cyan"
+                    app:chipIconSize="16dp" />
+
+            </LinearLayout>
+
+        </HorizontalScrollView>
+
+        <!-- Bottom Action Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/pro_surface"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <ImageButton
+                android:id="@+id/btnGoRealtime"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Go to real-time"
+                android:src="@drawable/ic_go_realtime"
+                app:tint="@color/pro_cyan" />
+
+            <ImageButton
+                android:id="@+id/btnResetZoom"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Reset zoom"
+                android:src="@drawable/ic_reset_zoom"
+                app:tint="@color/pro_text_muted" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Selection Mode Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelectRange"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Select Range"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="12sp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/pro_border"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearSelection"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Clear"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

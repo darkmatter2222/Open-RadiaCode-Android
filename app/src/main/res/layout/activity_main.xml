@@ -20,9 +20,11 @@
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
+                android:minHeight="36dp"
                 android:background="@color/pro_background"
                 app:title="@string/app_name"
+                app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
                 app:titleTextColor="@color/pro_text_primary">
 
                 <!-- Live status indicator -->
@@ -304,6 +306,7 @@
 
                     <!-- Dose Chart -->
                     <LinearLayout
+                        android:id="@+id/doseChartPanel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
@@ -368,6 +371,7 @@
 
                     <!-- CPS Chart -->
                     <LinearLayout
+                        android:id="@+id/cpsChartPanel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"

@@ -49,6 +49,12 @@
             android:screenOrientation="sensorLandscape" />
 
         <activity
+            android:name=".DetailedChartActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:label="Detailed Analysis" />
+
+        <activity
             android:name=".AlertConfigActivity"
             android:exported="false"
             android:label="Smart Alerts" />
