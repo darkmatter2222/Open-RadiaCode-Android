@@ -7,6 +7,80 @@ App name: **Open RadiaCode**
 > **Speech-to-text note:** The correct name is **RadiaCode** (capital R, capital C, no space).
 > Common transcription error: "RadioCode" — this is INCORRECT.
 
+## Versioning
+
+- **Format:** `MAJOR.MINOR` (e.g., `0.01`, `0.02`, `1.00`)
+- **Minor versions:** Incremented for each build
+- **Major versions:** Only increment on GitHub releases
+- **Current version:** See `app/build.gradle.kts` → `versionName`
+
+## Download & Installation
+
+Pre-built APK files are available in the [`Installer/`](Installer/) folder of this repository.
+
+### Step 1: Download the APK
+
+1. Go to the [`Installer/`](Installer/) folder in this repository
+2. Click on the latest `OpenRadiaCode-v{VERSION}.apk` file (e.g., `OpenRadiaCode-v0.01.apk`)
+3. Click the **Download** button (or "Download raw file" icon)
+4. The APK will download to your phone or computer
+
+> **Tip:** If downloading on a computer, transfer the APK to your Android device via USB, email, or cloud storage.
+
+### Step 2: Enable Installation from Unknown Sources
+
+Android blocks app installations from outside the Play Store by default. You need to enable "Install unknown apps" for your browser or file manager:
+
+**On Android 8.0+ (Oreo and newer):**
+1. When you try to install the APK, Android will prompt you to allow installation
+2. Tap **Settings** on the prompt
+3. Toggle **"Allow from this source"** ON
+4. Go back and continue the installation
+
+**Or manually enable it:**
+1. Open **Settings** → **Apps** (or **Apps & notifications**)
+2. Tap the **⋮** menu → **Special access** → **Install unknown apps**
+3. Find your browser (Chrome, Firefox, etc.) or file manager
+4. Toggle **"Allow from this source"** ON
+
+**On older Android versions (7.x and below):**
+1. Open **Settings** → **Security**
+2. Enable **"Unknown sources"**
+3. Confirm the warning prompt
+
+### Step 3: Install the APK
+
+1. Open your **Downloads** folder or file manager
+2. Tap the `OpenRadiaCode-v{VERSION}.apk` file
+3. Tap **Install**
+4. Wait for installation to complete
+5. Tap **Open** to launch the app
+
+### Step 4: Grant Permissions
+
+When you first run the app, grant these permissions when prompted:
+- **Bluetooth** - Required to connect to your RadiaCode device
+- **Location** - Required by Android for BLE scanning (the app doesn't track your location)
+- **Notifications** - For radiation alerts and background service status
+
+### Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "App not installed" error | Make sure you don't have a conflicting version. Uninstall any old version first. |
+| Can't find the APK | Check your browser's download folder, usually `/Download/` |
+| "Installation blocked" | Enable "Install unknown apps" for your browser (Step 2) |
+| App crashes on launch | Ensure your Android version is 8.0 or higher |
+
+### Updating the App
+
+To update to a newer version:
+1. Download the new APK from the `Installer/` folder
+2. Install it over the existing app (your settings will be preserved)
+3. If installation fails, uninstall the old version first, then install the new one
+
+## Overview
+
 Key goal: appliance-style operation — once a preferred device is set, a foreground service keeps connecting and polling in the background, with home screen widgets showing the latest readings. The app automatically connects on boot and maintains connection in the background.
 
 ## Features

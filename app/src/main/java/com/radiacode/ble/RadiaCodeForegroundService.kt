@@ -83,6 +83,11 @@ class RadiaCodeForegroundService : Service() {
     private lateinit var alertEvaluator: AlertEvaluator
     private var reconnectAttempts: Int = 0
     private var reconnectTask: ScheduledFuture<*>? = null
+    
+    // Prevent reconnect storms when we intentionally close
+    @Volatile private var intentionalClose = false
+    // Track last successful poll to detect stale connections
+    private var lastSuccessfulPollMs = 0L
 
     private val btStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -250,6 +255,8 @@ class RadiaCodeForegroundService : Service() {
 
     private fun stopInternal(reason: String) {
         Log.d(TAG, "service stopInternal: $reason")
+        intentionalClose = true  // Prevent reconnect storm from close callback
+        
         reconnectTask?.cancel(true)
         reconnectTask = null
 
@@ -264,6 +271,8 @@ class RadiaCodeForegroundService : Service() {
 
     private fun startOrRestartSession(why: String) {
         executor.execute {
+            intentionalClose = true  // Closing old client intentionally
+            
             reconnectTask?.cancel(true)
             reconnectTask = null
 
@@ -272,6 +281,10 @@ class RadiaCodeForegroundService : Service() {
 
             client?.close()
             client = null
+            
+            // Brief delay to let old connection fully close before starting new one
+            Thread.sleep(200)
+            intentionalClose = false  // New connection attempts are NOT intentional closes
 
             val address = targetAddress
             if (address.isNullOrBlank()) {
@@ -299,8 +312,9 @@ class RadiaCodeForegroundService : Service() {
             }
 
             val c = RadiacodeBleClient(applicationContext) { msg ->
-                // Detect disconnects via status callback.
-                if (msg.startsWith("Disconnected") || msg.startsWith("GATT error") || msg.startsWith("Service discovery failed")) {
+                // Detect disconnects via status callback, but ignore if we closed intentionally
+                if (!intentionalClose && 
+                    (msg.startsWith("Disconnected") || msg.startsWith("GATT error") || msg.startsWith("Service discovery failed"))) {
                     scheduleReconnect(msg)
                 }
                 notifyUpdate("Open RadiaCode", msg)
@@ -314,8 +328,14 @@ class RadiaCodeForegroundService : Service() {
             c.ready()
                 .thenCompose { c.initializeSession() }
                 .thenRun {
+                    // Connection fully established - reset all counters
                     reconnectAttempts = 0
+                    consecutivePollFailures = 0
+                    lastSuccessfulPollMs = System.currentTimeMillis()
                     notifyUpdate("Open RadiaCode", "Connected")
+                    
+                    // Brief settling delay before starting polls - let BLE stack stabilize
+                    Thread.sleep(300)
                     startPolling()
                 }
                 .exceptionally { t ->
@@ -343,6 +363,7 @@ class RadiaCodeForegroundService : Service() {
                     .thenAccept { buf ->
                         val rt = RadiacodeDataBuf.decodeLatestRealTime(buf) ?: return@thenAccept
                         consecutivePollFailures = 0
+                        lastSuccessfulPollMs = System.currentTimeMillis()
 
                         val uSvPerHour = rt.doseRate * 10000.0f
                         val timestampMs = System.currentTimeMillis()
@@ -382,7 +403,11 @@ class RadiaCodeForegroundService : Service() {
                     .exceptionally { t ->
                         consecutivePollFailures += 1
                         Log.e(TAG, "service poll failed (count=$consecutivePollFailures)", t)
-                        if (consecutivePollFailures >= 3) {
+                        // Be more forgiving: require 5 consecutive failures before reconnecting
+                        // Also check if we've had ANY recent success (within last 30s)
+                        val timeSinceSuccess = System.currentTimeMillis() - lastSuccessfulPollMs
+                        val shouldReconnect = consecutivePollFailures >= 5 || timeSinceSuccess > 30_000L
+                        if (shouldReconnect && consecutivePollFailures >= 3) {
                             scheduleReconnect("Read failed")
                         }
                         null
@@ -401,6 +426,8 @@ class RadiaCodeForegroundService : Service() {
 
     private fun forceReconnect(reason: String) {
         Log.d(TAG, "service forceReconnect: $reason")
+        intentionalClose = true  // Prevent reconnect storm
+        
         reconnectTask?.cancel(true)
         reconnectTask = null
         reconnectAttempts = 0
@@ -410,6 +437,8 @@ class RadiaCodeForegroundService : Service() {
 
         client?.close()
         client = null
+        
+        intentionalClose = false
 
         val addr = targetAddress ?: Prefs.getPreferredAddress(this)
         if (!addr.isNullOrBlank()) {
@@ -456,12 +485,22 @@ class RadiaCodeForegroundService : Service() {
     private fun scheduleReconnect(reason: String) {
         // Avoid spamming; schedule once.
         if (reconnectTask?.isDone == false) return
+        
+        // Don't reconnect if we're intentionally closing
+        if (intentionalClose) {
+            Log.d(TAG, "scheduleReconnect ignored (intentional close): $reason")
+            return
+        }
+        
+        intentionalClose = true  // Prevent cascade from close callback
 
         pollTask?.cancel(true)
         pollTask = null
 
         client?.close()
         client = null
+        
+        intentionalClose = false
 
         reconnectAttempts += 1
         val backoff = min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * reconnectAttempts.toLong())

@@ -46,6 +46,7 @@ class ProChartView @JvmOverloads constructor(
     private var secondarySamples: List<Float> = emptyList()
     private var secondaryAccentColor: Int = ContextCompat.getColor(context, R.color.pro_magenta)
     private var secondaryLabel: String = ""
+    private var primaryLabel: String = ""  // Label for left Y-axis
 
     // Interaction - Sticky marker
     private var selectedIndex: Int? = null
@@ -453,7 +454,7 @@ class ProChartView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         // Calculate chart bounds
         val yAxisWidth = density * 44f
-        val rightAxisWidth = if (hasSecondaryAxis) density * 60f else density * 12f  // Increased for secondary axis labels
+        val rightAxisWidth = if (hasSecondaryAxis) density * 100f else density * 12f  // Extra wide for secondary axis labels
         val xAxisHeight = density * 24f
         val padding = density * 12f
 
@@ -791,10 +792,11 @@ class ProChartView @JvmOverloads constructor(
         rollingAvgSamples = avgList
     }
 
-    fun setSecondarySeries(samples: List<Float>, color: Int, label: String = "") {
+    fun setSecondarySeries(samples: List<Float>, color: Int, label: String = "", primaryAxisLabel: String = "") {
         this.secondarySamples = samples
         this.secondaryAccentColor = color
         this.secondaryLabel = label
+        this.primaryLabel = primaryAxisLabel
         this.hasSecondaryAxis = samples.isNotEmpty()
         requestLayout() // Recalculate layout for right axis
         invalidate()
@@ -802,6 +804,8 @@ class ProChartView @JvmOverloads constructor(
 
     fun clearSecondarySeries() {
         this.secondarySamples = emptyList()
+        this.secondaryLabel = ""
+        this.primaryLabel = ""
         this.hasSecondaryAxis = false
         requestLayout()
         invalidate()
@@ -1262,6 +1266,16 @@ class ProChartView @JvmOverloads constructor(
             canvas.drawText(label, chartLeft - density * 6f, y + axisTextPaint.textSize / 3f, axisTextPaint)
         }
 
+        // Draw left Y-axis title if in comparison mode
+        if (hasSecondaryAxis && primaryLabel.isNotEmpty()) {
+            val labelPaint = Paint(axisTextPaint).apply {
+                textAlign = Paint.Align.LEFT
+                color = accentColor
+                textSize = density * 10f
+            }
+            canvas.drawText(primaryLabel, chartLeft - density * 4f, chartTop - density * 4f, labelPaint)
+        }
+
         axisTextPaint.textAlign = Paint.Align.LEFT
     }
 
@@ -1349,6 +1363,16 @@ class ProChartView @JvmOverloads constructor(
             val value = yMin + yRange * frac
             val label = formatValue(value)
             canvas.drawText(label, chartRight + density * 6f, y + axisTextPaint.textSize / 3f, axisTextPaint)
+        }
+        
+        // Draw right Y-axis title
+        if (secondaryLabel.isNotEmpty()) {
+            val labelPaint = Paint(axisTextPaint).apply {
+                textAlign = Paint.Align.RIGHT
+                color = secondaryAccentColor
+                textSize = density * 10f
+            }
+            canvas.drawText(secondaryLabel, chartRight + density * 94f, chartTop - density * 4f, labelPaint)
         }
 
         axisTextPaint.color = ContextCompat.getColor(context, R.color.pro_text_muted)

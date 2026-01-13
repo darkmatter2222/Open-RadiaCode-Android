@@ -2,6 +2,21 @@
 
 This file documents the repeatable build + deploy loop and development guidelines for this repo.
 
+## Versioning
+
+**Current Version:** See `app/build.gradle.kts` → `versionName`
+
+- **Format:** `MAJOR.MINOR` (e.g., `0.01`, `0.02`, `1.00`)
+- **Minor versions:** Agents increment minor version for each build (e.g., `0.01` → `0.02`)
+- **Major versions:** Only increment on GitHub releases (e.g., `0.99` → `1.00`)
+- **Starting version:** `0.01`
+
+When building, always check the current version and increment the minor:
+```kotlin
+// In app/build.gradle.kts
+versionName = "0.XX"  // Increment XX each build
+```
+
 ## Git Workflow
 
 **Repository:** `https://github.com/darkmatter2222/Open-RadiaCode-Android.git`
@@ -42,6 +57,23 @@ From repo root:
 
 # Install to connected device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# IMPORTANT: Copy APK to Installer folder (do this EVERY build)
+Copy-Item app/build/outputs/apk/debug/app-debug.apk -Destination Installer/OpenRadiaCode-v0.XX.apk
+```
+
+**ALWAYS** copy the APK to the `Installer/` folder after each successful build with the version number in the filename.
+
+## Installer Folder
+
+The `Installer/` folder contains distributable APK files:
+- Location: `<repo>/Installer/`
+- Naming convention: `OpenRadiaCode-v{VERSION}.apk`
+- Example: `OpenRadiaCode-v0.01.apk`
+
+After every build, copy the APK:
+```powershell
+Copy-Item app/build/outputs/apk/debug/app-debug.apk -Destination "Installer/OpenRadiaCode-v$VERSION.apk"
 ```
 
 ## Debug Logs

@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -14,7 +13,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.radiacode.ble.ui.ProChartView
 import java.io.File
@@ -72,12 +70,10 @@ class DetailedChartActivity : AppCompatActivity() {
     private lateinit var chipRollingAvg: Chip
     private lateinit var chipCompare: Chip
     private lateinit var chipExport: Chip
-    
-    // Action buttons
-    private lateinit var btnGoRealtime: ImageButton
-    private lateinit var btnResetZoom: ImageButton
-    private lateinit var btnSelectRange: MaterialButton
-    private lateinit var btnClearSelection: MaterialButton
+    private lateinit var chipSelectRange: Chip
+    private lateinit var chipClearSelection: Chip
+    private lateinit var chipResetZoom: Chip
+    private lateinit var chipGoRealtime: Chip
     
     private var kind: String = "dose"
     private var unit: String = "μSv/h"
@@ -168,11 +164,10 @@ class DetailedChartActivity : AppCompatActivity() {
         chipRollingAvg = findViewById(R.id.chipRollingAvg)
         chipCompare = findViewById(R.id.chipCompare)
         chipExport = findViewById(R.id.chipExport)
-        
-        btnGoRealtime = findViewById(R.id.btnGoRealtime)
-        btnResetZoom = findViewById(R.id.btnResetZoom)
-        btnSelectRange = findViewById(R.id.btnSelectRange)
-        btnClearSelection = findViewById(R.id.btnClearSelection)
+        chipSelectRange = findViewById(R.id.chipSelectRange)
+        chipClearSelection = findViewById(R.id.chipClearSelection)
+        chipResetZoom = findViewById(R.id.chipResetZoom)
+        chipGoRealtime = findViewById(R.id.chipGoRealtime)
     }
     
     private fun setupToolbar() {
@@ -188,10 +183,11 @@ class DetailedChartActivity : AppCompatActivity() {
                 if (zoomLevel > 1.01f) {
                     zoomIndicator.text = String.format(Locale.US, "%.1fx", zoomLevel)
                     zoomIndicator.visibility = View.VISIBLE
-                    btnResetZoom.alpha = 1f
+                    chipResetZoom.isEnabled = true
+                    chipResetZoom.alpha = 1f
                 } else {
                     zoomIndicator.visibility = View.GONE
-                    btnResetZoom.alpha = 0.5f
+                    chipResetZoom.alpha = 0.5f
                 }
             }
         })
@@ -199,7 +195,7 @@ class DetailedChartActivity : AppCompatActivity() {
         // Real-time state listener
         detailChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
             override fun onRealTimeStateChanged(isFollowingRealTime: Boolean) {
-                btnGoRealtime.alpha = if (isFollowingRealTime) 0.5f else 1f
+                chipGoRealtime.alpha = if (isFollowingRealTime) 0.5f else 1f
             }
         })
         
@@ -212,9 +208,22 @@ class DetailedChartActivity : AppCompatActivity() {
             }
         })
         
-        // Navigation buttons
-        btnGoRealtime.setOnClickListener { detailChart.goToRealTime() }
-        btnResetZoom.setOnClickListener { detailChart.resetZoom() }
+        // Navigation chips
+        chipGoRealtime.setOnClickListener { detailChart.goToRealTime() }
+        chipResetZoom.setOnClickListener { detailChart.resetZoom() }
+        
+        // Selection mode chips
+        chipSelectRange.setOnCheckedChangeListener { _, isChecked ->
+            isSelectionMode = isChecked
+            if (isChecked) {
+                selectionStartIdx = null
+                selectionEndIdx = null
+                chipSelectRange.text = "Selecting…"
+            } else {
+                chipSelectRange.text = "Select"
+            }
+        }
+        chipClearSelection.setOnClickListener { clearSelection() }
         
         // Sigma bands - only one can be active
         chipSigma1.setOnCheckedChangeListener { _, isChecked ->
@@ -271,14 +280,10 @@ class DetailedChartActivity : AppCompatActivity() {
         // Export button
         chipExport.setOnClickListener { exportData() }
         
-        // Selection mode
-        btnSelectRange.setOnClickListener { toggleSelectionMode() }
-        btnClearSelection.setOnClickListener { clearSelection() }
-        
         // Initial states
         detailChart.setRollingAverageWindow(10) // Rolling avg on by default
-        btnResetZoom.alpha = 0.5f
-        btnGoRealtime.alpha = 0.5f
+        chipResetZoom.alpha = 0.5f
+        chipGoRealtime.alpha = 0.5f
     }
     
     private fun loadDataFromIntent() {
@@ -371,8 +376,9 @@ class DetailedChartActivity : AppCompatActivity() {
                 } else {
                     ContextCompat.getColor(this, R.color.pro_magenta)
                 }
-                val secondaryLabel = if (kind == "cps") "Dose" else "Count"
-                detailChart.setSecondarySeries(secondaryValues, secondaryColor, secondaryLabel)
+                val secondaryLabel = if (kind == "cps") "Dose Rate" else "Count Rate"
+                val primaryLabel = if (kind == "cps") "Count Rate" else "Dose Rate"
+                detailChart.setSecondarySeries(secondaryValues, secondaryColor, secondaryLabel, primaryLabel)
             }
             
             updateStats(values)
@@ -528,16 +534,27 @@ class DetailedChartActivity : AppCompatActivity() {
             }
             val secondaryLabel = if (kind == "cps") {
                 when (Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)) {
-                    Prefs.DoseUnit.USV_H -> "μSv/h"
-                    Prefs.DoseUnit.NSV_H -> "nSv/h"
+                    Prefs.DoseUnit.USV_H -> "Dose (μSv/h)"
+                    Prefs.DoseUnit.NSV_H -> "Dose (nSv/h)"
                 }
             } else {
                 when (Prefs.getCountUnit(this, Prefs.CountUnit.CPS)) {
-                    Prefs.CountUnit.CPS -> "cps"
-                    Prefs.CountUnit.CPM -> "cpm"
+                    Prefs.CountUnit.CPS -> "Count (cps)"
+                    Prefs.CountUnit.CPM -> "Count (cpm)"
                 }
             }
-            detailChart.setSecondarySeries(secondaryValues, secondaryColor, secondaryLabel)
+            val primaryLabel = if (kind == "cps") {
+                when (Prefs.getCountUnit(this, Prefs.CountUnit.CPS)) {
+                    Prefs.CountUnit.CPS -> "Count (cps)"
+                    Prefs.CountUnit.CPM -> "Count (cpm)"
+                }
+            } else {
+                when (Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)) {
+                    Prefs.DoseUnit.USV_H -> "Dose (μSv/h)"
+                    Prefs.DoseUnit.NSV_H -> "Dose (nSv/h)"
+                }
+            }
+            detailChart.setSecondarySeries(secondaryValues, secondaryColor, secondaryLabel, primaryLabel)
         } else {
             detailChart.clearSecondarySeries()
         }
@@ -547,14 +564,14 @@ class DetailedChartActivity : AppCompatActivity() {
         if (selectionStartIdx == null) {
             // First point
             selectionStartIdx = index
-            btnSelectRange.text = "Tap second point..."
+            chipSelectRange.text = "Tap end…"
             Toast.makeText(this, "Start point selected. Tap end point.", Toast.LENGTH_SHORT).show()
         } else {
             // Second point - complete selection
             selectionEndIdx = index
             isSelectionMode = false
-            btnSelectRange.text = "Select Range"
-            btnSelectRange.setTextColor(ContextCompat.getColor(this, R.color.pro_text_secondary))
+            chipSelectRange.isChecked = false
+            chipSelectRange.text = "Select"
             
             // Show statistics for selected range
             updateSelectionStats(selectionStartIdx!!, selectionEndIdx!!)
@@ -569,33 +586,17 @@ class DetailedChartActivity : AppCompatActivity() {
         }
     }
     
-    private fun toggleSelectionMode() {
-        isSelectionMode = !isSelectionMode
-        
-        if (isSelectionMode) {
-            // Clear any previous selection
-            selectionStartIdx = null
-            selectionEndIdx = null
-            btnSelectRange.text = "Tap first point..."
-            btnSelectRange.setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
-            Toast.makeText(this, "Tap first point to start selection", Toast.LENGTH_SHORT).show()
-        } else {
-            btnSelectRange.text = "Select Range"
-            btnSelectRange.setTextColor(ContextCompat.getColor(this, R.color.pro_text_secondary))
-        }
-    }
-    
     private fun clearSelection() {
         selectionStartIdx = null
         selectionEndIdx = null
         selectionOverlay.visibility = View.GONE
-        btnClearSelection.visibility = View.GONE
+        chipClearSelection.visibility = View.GONE
         detailChart.clearStickyMarker()
         
         // Reset selection mode
         isSelectionMode = false
-        btnSelectRange.text = "Select Range"
-        btnSelectRange.setTextColor(ContextCompat.getColor(this, R.color.pro_text_secondary))
+        chipSelectRange.isChecked = false
+        chipSelectRange.text = "Select"
         
         // Update stats to show full data
         updateStats(values)
@@ -608,6 +609,7 @@ class DetailedChartActivity : AppCompatActivity() {
         if (start < 0 || end >= values.size) return
         
         val selectedData = values.subList(start, end + 1)
+        val selectedTs = timestampsMs.subList(start, end + 1)
         val stats = calculateStats(selectedData)
         
         val startTime = Instant.ofEpochMilli(timestampsMs[start])
@@ -617,19 +619,76 @@ class DetailedChartActivity : AppCompatActivity() {
             .atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("HH:mm:ss"))
         
-        val durationSec = (timestampsMs[end] - timestampsMs[start]) / 1000
+        val durationMs = timestampsMs[end] - timestampsMs[start]
+        val durationSec = durationMs / 1000.0
+        val durationHours = durationSec / 3600.0
         
-        selectionStats.text = """
-            Time: $startTime - $endTime (${durationSec}s)
-            Min: ${formatValue(stats.min)} $unit
-            Max: ${formatValue(stats.max)} $unit
-            Mean: ${formatValue(stats.mean)} $unit
-            σ: ${formatValue(stats.stdDev)} $unit
-            n: ${stats.count}
-        """.trimIndent()
+        // Calculate total exposure (integral of dose rate over time)
+        // For dose rate in μSv/h, integrate over hours to get μSv
+        val totalExposure = if (kind == "dose") {
+            var exposure = 0.0
+            for (i in 1 until selectedData.size) {
+                val dt = (selectedTs[i] - selectedTs[i-1]) / 3600000.0 // hours
+                val avgRate = (selectedData[i] + selectedData[i-1]) / 2.0 // trapezoidal
+                exposure += avgRate * dt
+            }
+            exposure
+        } else {
+            // For count rate, calculate total counts
+            var totalCounts = 0.0
+            for (i in 1 until selectedData.size) {
+                val dt = (selectedTs[i] - selectedTs[i-1]) / 1000.0 // seconds
+                val avgRate = (selectedData[i] + selectedData[i-1]) / 2.0
+                totalCounts += avgRate * dt
+            }
+            totalCounts
+        }
+        
+        // Calculate rate of change (slope per minute)
+        val rateOfChange = if (selectedData.size > 1 && durationSec > 0) {
+            ((selectedData.last() - selectedData.first()) / durationSec) * 60.0 // per minute
+        } else 0.0
+        
+        // Z-score of max value (how many σ above mean)
+        val maxZScore = if (stats.stdDev > 0) (stats.max - stats.mean) / stats.stdDev else 0f
+        
+        // Build comprehensive stats display
+        val exposureUnit = if (kind == "dose") "μSv" else "counts"
+        val rateChangeUnit = if (kind == "dose") "μSv/h/min" else "${unit}/min"
+        
+        selectionStats.text = buildString {
+            appendLine("⏱ $startTime → $endTime")
+            appendLine("Duration: ${formatDuration(durationMs)}")
+            appendLine("─────────────")
+            appendLine("n: ${stats.count} samples")
+            appendLine("Min: ${formatValue(stats.min)} $unit")
+            appendLine("Max: ${formatValue(stats.max)} $unit")
+            appendLine("Mean: ${formatValue(stats.mean)} $unit")
+            appendLine("Median: ${formatValue(stats.median)} $unit")
+            appendLine("σ: ${formatValue(stats.stdDev)} $unit")
+            appendLine("─────────────")
+            appendLine("∫ Total: ${formatValue(totalExposure.toFloat())} $exposureUnit")
+            appendLine("Δ/min: ${String.format(Locale.US, "%+.3f", rateOfChange)} $rateChangeUnit")
+            appendLine("P5→P95: ${formatValue(stats.p5)}→${formatValue(stats.p95)}")
+            appendLine("CV: ${String.format(Locale.US, "%.1f%%", stats.cv)}")
+            append("Max Z: ${String.format(Locale.US, "%.1fσ", maxZScore)}")
+        }
         
         selectionOverlay.visibility = View.VISIBLE
-        btnClearSelection.visibility = View.VISIBLE
+        chipClearSelection.visibility = View.VISIBLE
+    }
+    
+    private fun formatDuration(ms: Long): String {
+        val totalSec = ms / 1000
+        val hours = totalSec / 3600
+        val minutes = (totalSec % 3600) / 60
+        val seconds = totalSec % 60
+        
+        return when {
+            hours > 0 -> "${hours}h ${minutes}m ${seconds}s"
+            minutes > 0 -> "${minutes}m ${seconds}s"
+            else -> "${seconds}s"
+        }
     }
     
     private fun exportData() {
