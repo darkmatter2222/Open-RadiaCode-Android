@@ -68,6 +68,9 @@ class ProChartView @JvmOverloads constructor(
     private var lastPanX = 0f
     private var isFollowingRealTime: Boolean = true  // If true, auto-scroll to show newest data
     
+    // Anchor timestamp for preserving position when not following realtime
+    private var anchorTimestampMs: Long? = null  // The timestamp at center of view when not following realtime
+    
     // Display options
     private var showSpikeMarkers: Boolean = true
     private var showSpikePercentages: Boolean = true
@@ -193,20 +196,22 @@ class ProChartView @JvmOverloads constructor(
     private var touchDownTime: Long = 0L
     private var touchDownX: Float = 0f
     private var touchDownY: Float = 0f
-    private val markerDelayMs = 300L  // Don't show marker until held for 300ms
-    private val tapSlop = density * 10f  // Movement threshold to cancel tap
+    private val markerDelayMs = 400L  // Don't show marker until held for 400ms
+    private val tapSlop = density * 12f  // Movement threshold to cancel tap
     private var isWaitingForMarker = false
     
     // Fling/momentum scrolling
     private var flingVelocity: Float = 0f
     private var lastFlingTime: Long = 0L
-    private val flingDecay = 0.92f  // How quickly fling slows down
-    private val flingMinVelocity = density * 5f  // Stop fling below this velocity
+    private val flingDecay = 0.95f  // How quickly fling slows down (higher = more momentum)
+    private val flingMinVelocity = density * 3f  // Stop fling below this velocity
     
     private val flingRunnable = object : Runnable {
         override fun run() {
             if (abs(flingVelocity) < flingMinVelocity || zoomLevel <= 1f) {
                 flingVelocity = 0f
+                // Update anchor when fling stops
+                updateAnchorTimestamp()
                 return
             }
             
@@ -221,6 +226,9 @@ class ProChartView @JvmOverloads constructor(
                 isFollowingRealTime = newPan >= (1f - visibleFrac - 0.001f)
                 if (wasFollowing != isFollowingRealTime) {
                     notifyRealTimeStateChanged()
+                    if (isFollowingRealTime) {
+                        anchorTimestampMs = null  // Clear anchor when following realtime
+                    }
                 }
                 
                 panOffset = newPan
@@ -328,9 +336,18 @@ class ProChartView @JvmOverloads constructor(
                 isFollowingRealTime = newPan >= (1f - visibleFrac - 0.001f)
                 if (wasFollowing != isFollowingRealTime) {
                     notifyRealTimeStateChanged()
+                    if (isFollowingRealTime) {
+                        anchorTimestampMs = null  // Clear anchor when back to realtime
+                    }
                 }
                 
                 panOffset = newPan
+                
+                // Update anchor timestamp as we scroll
+                if (!isFollowingRealTime) {
+                    updateAnchorTimestamp()
+                }
+                
                 invalidate()
                 return true
             }
@@ -341,7 +358,8 @@ class ProChartView @JvmOverloads constructor(
             if (!isZoomPanEnabled || zoomLevel <= 1f) return false
             
             // Start momentum scrolling (negative because we pan opposite to swipe)
-            flingVelocity = -velocityX / 60f  // Scale down velocity
+            // Increased sensitivity for faster response
+            flingVelocity = -velocityX / 40f  // Less division = more speed
             lastFlingTime = System.currentTimeMillis()
             postOnAnimation(flingRunnable)
             return true
@@ -391,6 +409,12 @@ class ProChartView @JvmOverloads constructor(
 
     init {
         setLayerType(LAYER_TYPE_HARDWARE, null)
+        
+        // Disable quick-scale to make pinch-zoom more responsive
+        // Quick-scale adds a delay for double-tap-and-drag zoom which interferes
+        if (android.os.Build.VERSION.SDK_INT >= 19) {
+            scaleGestureDetector.isQuickScaleEnabled = false
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -495,6 +519,7 @@ class ProChartView @JvmOverloads constructor(
         }
         val wasFollowing = isFollowingRealTime
         isFollowingRealTime = true
+        anchorTimestampMs = null  // Clear anchor when going to realtime
         if (!wasFollowing) {
             notifyRealTimeStateChanged()
         }
@@ -515,6 +540,7 @@ class ProChartView @JvmOverloads constructor(
         if (!enabled) {
             zoomLevel = 1f
             panOffset = 0f
+            anchorTimestampMs = null  // Clear anchor
             val wasFollowing = isFollowingRealTime
             isFollowingRealTime = true
             if (!wasFollowing) notifyRealTimeStateChanged()
@@ -527,6 +553,7 @@ class ProChartView @JvmOverloads constructor(
     fun resetZoom() {
         zoomLevel = 1f
         panOffset = 0f
+        anchorTimestampMs = null  // Clear anchor
         val wasFollowing = isFollowingRealTime
         isFollowingRealTime = true
         if (!wasFollowing) notifyRealTimeStateChanged()
@@ -601,10 +628,25 @@ class ProChartView @JvmOverloads constructor(
             selectedIndex = null
         }
         
-        // If following real-time and zoomed, keep view at the end
-        if (isFollowingRealTime && zoomLevel > 1f) {
-            val visibleFrac = 1f / zoomLevel
-            panOffset = (1f - visibleFrac).coerceAtLeast(0f)
+        // Handle zoom/pan state based on whether we're following realtime
+        if (zoomLevel > 1f) {
+            if (isFollowingRealTime) {
+                // Following realtime: keep view at the end (newest data)
+                val visibleFrac = 1f / zoomLevel
+                panOffset = (1f - visibleFrac).coerceAtLeast(0f)
+            } else if (anchorTimestampMs != null && timestampsMs.isNotEmpty()) {
+                // NOT following realtime: preserve position based on anchor timestamp
+                // Find where our anchor timestamp falls in the new data
+                val anchorIdx = findIndexForTimestamp(anchorTimestampMs!!) ?: 0
+                val n = timestampsMs.size
+                if (n > 1) {
+                    // Calculate pan offset to keep anchor near center
+                    val anchorFrac = anchorIdx.toFloat() / (n - 1)
+                    val visibleFrac = 1f / zoomLevel
+                    panOffset = (anchorFrac - visibleFrac / 2).coerceIn(0f, 1f - visibleFrac)
+                }
+            }
+            // If not following and no anchor, keep current panOffset (don't move)
         }
         
         // Recalculate derived data
@@ -612,6 +654,20 @@ class ProChartView @JvmOverloads constructor(
         recalculateRollingAverage()
         
         invalidate()
+    }
+    
+    /** Update anchor timestamp based on current view center */
+    private fun updateAnchorTimestamp() {
+        if (timestampsMs.isEmpty() || zoomLevel <= 1f) {
+            anchorTimestampMs = null
+            return
+        }
+        
+        // Calculate the center of the visible range
+        val visibleFrac = 1f / zoomLevel
+        val centerFrac = panOffset + visibleFrac / 2
+        val centerIdx = (centerFrac * (timestampsMs.size - 1)).toInt().coerceIn(0, timestampsMs.size - 1)
+        anchorTimestampMs = timestampsMs[centerIdx]
     }
 
     /** Find the index closest to a given timestamp */

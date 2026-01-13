@@ -101,9 +101,9 @@ object Prefs {
     fun getWindowSeconds(context: Context, defaultSeconds: Int = 60): Int {
         val v = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getInt(KEY_WINDOW_SECONDS, defaultSeconds)
-        // Valid values: 30s, 1m, 5m, 15m, 1h, all (86400)
+        // Valid values: 30s, 1m, 5m, 15m, 1h
         return when (v) {
-            30, 60, 300, 900, 3600, 86400 -> v
+            30, 60, 300, 900, 3600 -> v
             else -> defaultSeconds
         }
     }

@@ -547,8 +547,7 @@ class MainActivity : AppCompatActivity() {
             R.id.chip1m to 60,
             R.id.chip5m to 300,
             R.id.chip15m to 900,
-            R.id.chip1h to 3600,
-            R.id.chipAll to Int.MAX_VALUE
+            R.id.chip1h to 3600
         )
 
         // Set initial chip selection based on saved preference
@@ -559,8 +558,7 @@ class MainActivity : AppCompatActivity() {
             300 -> findViewById<Chip>(R.id.chip5m).isChecked = true
             900 -> findViewById<Chip>(R.id.chip15m).isChecked = true
             3600 -> findViewById<Chip>(R.id.chip1h).isChecked = true
-            86400 -> findViewById<Chip>(R.id.chipAll).isChecked = true
-            else -> findViewById<Chip>(R.id.chip1m).isChecked = true
+            else -> findViewById<Chip>(R.id.chip1m).isChecked = true  // Default to 1m for any legacy values
         }
 
         timeWindowChips.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -568,7 +566,7 @@ class MainActivity : AppCompatActivity() {
             val chipId = checkedIds.first()
             val seconds = chipToSeconds[chipId] ?: 60
             
-            Prefs.setWindowSeconds(this, if (seconds == Int.MAX_VALUE) 86400 else seconds)
+            Prefs.setWindowSeconds(this, seconds)
             refreshSettingsRows()
             updateChartTitles()
             lastReadingTimestampMs = 0L
@@ -624,8 +622,41 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         registerReadingReceiver()
+        
+        // Reload chart history from persistent storage to fill in any gap
+        // from when the screen was locked (data was still being collected by service)
+        reloadChartHistoryFromStorage()
+        
         startUiLoop()
         refreshSettingsRows() // Refresh in case alerts were changed
+    }
+    
+    /**
+     * Reload chart history from persistent storage.
+     * This fills in data that was collected while the screen was locked.
+     */
+    private fun reloadChartHistoryFromStorage() {
+        val chartHistory = Prefs.getChartHistory(this)
+        if (chartHistory.isEmpty()) return
+        
+        // Get the last timestamp we have in memory
+        val lastInMemoryTs = doseHistory.lastN(1).timestampsMs.firstOrNull() ?: 0L
+        
+        // Add any readings from persistent storage that are newer than what we have
+        var addedCount = 0
+        for (reading in chartHistory) {
+            if (reading.timestampMs > lastInMemoryTs) {
+                doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+                cpsHistory.add(reading.timestampMs, reading.cps)
+                addedCount++
+            }
+        }
+        
+        if (addedCount > 0) {
+            sampleCount += addedCount
+            // Force a chart refresh
+            lastReadingTimestampMs = 0L
+        }
     }
 
     override fun onPause() {
@@ -981,7 +1012,6 @@ class MainActivity : AppCompatActivity() {
             600 -> "10m"
             900 -> "15m"
             3600 -> "1h"
-            86400 -> "All"
             else -> "${windowSeconds}s"
         }
         

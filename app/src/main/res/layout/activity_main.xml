@@ -196,18 +196,6 @@
                                         app:chipStrokeWidth="1dp"
                                         app:chipMinHeight="36dp" />
 
-                                    <com.google.android.material.chip.Chip
-                                        android:id="@+id/chipAll"
-                                        style="@style/Widget.MaterialComponents.Chip.Choice"
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="36dp"
-                                        android:text="ALL"
-                                        android:textColor="@color/chip_text_color"
-                                        app:chipBackgroundColor="@color/chip_bg_color"
-                                        app:chipStrokeColor="@color/pro_border"
-                                        app:chipStrokeWidth="1dp"
-                                        app:chipMinHeight="36dp" />
-
                                 </com.google.android.material.chip.ChipGroup>
                             </HorizontalScrollView>
                         </LinearLayout>
