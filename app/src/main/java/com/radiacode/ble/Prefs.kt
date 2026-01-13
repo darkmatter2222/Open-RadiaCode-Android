@@ -31,6 +31,13 @@ object Prefs {
     
     // Smart Alert keys
     private const val KEY_ALERTS_JSON = "alerts_json"
+    
+    // Multi-device keys
+    private const val KEY_DEVICES_JSON = "devices_json"
+    private const val KEY_SELECTED_DEVICE_ID = "selected_device_id"
+    private const val KEY_DEVICE_READINGS_PREFIX = "device_readings_"
+    private const val KEY_DEVICE_CHART_HISTORY_PREFIX = "device_chart_history_"
+    private const val MAX_DEVICES = 8
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -440,5 +447,275 @@ object Prefs {
                 } else null
             }
             .takeLast(maxCount)
+    }
+    
+    // ========== Multi-Device Management ==========
+    
+    /**
+     * Get all configured devices.
+     */
+    fun getDevices(context: Context): List<DeviceConfig> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_DEVICES_JSON, "[]") ?: "[]"
+        if (json == "[]") return emptyList()
+        
+        return json.removeSurrounding("[", "]")
+            .split("},{")
+            .map { it.trim().let { s -> if (!s.startsWith("{")) "{$s" else s }.let { s -> if (!s.endsWith("}")) "$s}" else s } }
+            .mapNotNull { DeviceConfig.fromJson(it) }
+    }
+    
+    /**
+     * Get all enabled devices (for auto-connect).
+     */
+    fun getEnabledDevices(context: Context): List<DeviceConfig> {
+        return getDevices(context).filter { it.enabled }
+    }
+    
+    /**
+     * Save all devices.
+     */
+    fun setDevices(context: Context, devices: List<DeviceConfig>) {
+        val json = "[${devices.joinToString(",") { it.toJson() }}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DEVICES_JSON, json)
+            .apply()
+    }
+    
+    /**
+     * Add a new device. Returns false if max devices reached or device already exists.
+     */
+    fun addDevice(context: Context, device: DeviceConfig): Boolean {
+        val devices = getDevices(context).toMutableList()
+        if (devices.size >= MAX_DEVICES) return false
+        if (devices.any { it.macAddress.equals(device.macAddress, ignoreCase = true) }) return false
+        
+        // Assign a color based on position
+        val coloredDevice = device.copy(colorHex = DeviceConfig.getColorForIndex(devices.size))
+        devices.add(coloredDevice)
+        setDevices(context, devices)
+        return true
+    }
+    
+    /**
+     * Update an existing device configuration.
+     */
+    fun updateDevice(context: Context, device: DeviceConfig) {
+        val devices = getDevices(context).toMutableList()
+        val idx = devices.indexOfFirst { it.id == device.id }
+        if (idx >= 0) {
+            devices[idx] = device
+            setDevices(context, devices)
+        }
+    }
+    
+    /**
+     * Delete a device by ID.
+     */
+    fun deleteDevice(context: Context, deviceId: String) {
+        val devices = getDevices(context).filter { it.id != deviceId }
+        setDevices(context, devices)
+        
+        // Also clean up per-device data
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_DEVICE_READINGS_PREFIX + deviceId)
+            .remove(KEY_DEVICE_CHART_HISTORY_PREFIX + deviceId)
+            .apply()
+    }
+    
+    /**
+     * Get device by MAC address.
+     */
+    fun getDeviceByMac(context: Context, macAddress: String): DeviceConfig? {
+        return getDevices(context).find { it.macAddress.equals(macAddress, ignoreCase = true) }
+    }
+    
+    /**
+     * Get device by ID.
+     */
+    fun getDeviceById(context: Context, deviceId: String): DeviceConfig? {
+        return getDevices(context).find { it.id == deviceId }
+    }
+    
+    /**
+     * Get currently selected device ID for dashboard display.
+     * null means "All Devices" view.
+     */
+    fun getSelectedDeviceId(context: Context): String? {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_SELECTED_DEVICE_ID, null)
+    }
+    
+    /**
+     * Set selected device ID for dashboard. null = "All Devices".
+     */
+    fun setSelectedDeviceId(context: Context, deviceId: String?) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SELECTED_DEVICE_ID, deviceId)
+            .apply()
+    }
+    
+    /**
+     * Add a reading for a specific device.
+     */
+    fun addDeviceReading(context: Context, deviceId: String, reading: LastReading) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val key = KEY_DEVICE_READINGS_PREFIX + deviceId
+        val chartKey = KEY_DEVICE_CHART_HISTORY_PREFIX + deviceId
+        val existing = prefs.getString(key, "") ?: ""
+        val chartExisting = prefs.getString(chartKey, "") ?: ""
+        
+        val newEntry = "${reading.timestampMs},${reading.uSvPerHour},${reading.cps}"
+        
+        // Widget history (small)
+        val entries = existing.split(";").filter { it.isNotBlank() }.toMutableList()
+        entries.add(newEntry)
+        while (entries.size > MAX_RECENT_READINGS) {
+            entries.removeAt(0)
+        }
+        
+        // Chart history (large)
+        val chartEntries = chartExisting.split(";").filter { it.isNotBlank() }.toMutableList()
+        chartEntries.add(newEntry)
+        while (chartEntries.size > MAX_CHART_HISTORY) {
+            chartEntries.removeAt(0)
+        }
+        
+        prefs.edit()
+            .putString(key, entries.joinToString(";"))
+            .putString(chartKey, chartEntries.joinToString(";"))
+            .apply()
+    }
+    
+    /**
+     * Get recent readings for a specific device.
+     */
+    fun getDeviceRecentReadings(context: Context, deviceId: String, maxCount: Int = MAX_RECENT_READINGS): List<LastReading> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_DEVICE_READINGS_PREFIX + deviceId, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        
+        return raw.split(";")
+            .filter { it.isNotBlank() }
+            .mapNotNull { entry ->
+                val parts = entry.split(",")
+                if (parts.size == 3) {
+                    try {
+                        LastReading(
+                            timestampMs = parts[0].toLong(),
+                            uSvPerHour = parts[1].toFloat(),
+                            cps = parts[2].toFloat()
+                        )
+                    } catch (_: Exception) { null }
+                } else null
+            }
+            .takeLast(maxCount)
+    }
+    
+    /**
+     * Get chart history for a specific device.
+     */
+    fun getDeviceChartHistory(context: Context, deviceId: String, maxCount: Int = MAX_CHART_HISTORY): List<LastReading> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_DEVICE_CHART_HISTORY_PREFIX + deviceId, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        
+        return raw.split(";")
+            .filter { it.isNotBlank() }
+            .mapNotNull { entry ->
+                val parts = entry.split(",")
+                if (parts.size == 3) {
+                    try {
+                        LastReading(
+                            timestampMs = parts[0].toLong(),
+                            uSvPerHour = parts[1].toFloat(),
+                            cps = parts[2].toFloat()
+                        )
+                    } catch (_: Exception) { null }
+                } else null
+            }
+            .takeLast(maxCount)
+    }
+    
+    /**
+     * Store the last reading for a device (for quick access).
+     */
+    fun setDeviceLastReading(context: Context, deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long = System.currentTimeMillis()) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat("device_last_usv_$deviceId", uSvPerHour)
+            .putFloat("device_last_cps_$deviceId", cps)
+            .putLong("device_last_ts_$deviceId", timestampMs)
+            .apply()
+    }
+    
+    /**
+     * Get the last reading for a device.
+     */
+    fun getDeviceLastReading(context: Context, deviceId: String): LastReading? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val ts = prefs.getLong("device_last_ts_$deviceId", 0L)
+        if (ts <= 0L) return null
+        return LastReading(
+            uSvPerHour = prefs.getFloat("device_last_usv_$deviceId", 0f),
+            cps = prefs.getFloat("device_last_cps_$deviceId", 0f),
+            timestampMs = ts
+        )
+    }
+    
+    /**
+     * Get all device last readings (for dashboard "All Devices" view).
+     */
+    fun getAllDeviceLastReadings(context: Context): Map<String, LastReading> {
+        val devices = getDevices(context)
+        val result = mutableMapOf<String, LastReading>()
+        for (device in devices) {
+            getDeviceLastReading(context, device.id)?.let {
+                result[device.id] = it
+            }
+        }
+        return result
+    }
+    
+    /**
+     * Migrate existing single-device data to multi-device format.
+     * Call this once on app upgrade.
+     */
+    fun migrateToMultiDevice(context: Context) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        
+        // Check if already migrated
+        if (prefs.getBoolean("multi_device_migrated", false)) return
+        
+        val existingAddress = getPreferredAddress(context)
+        if (!existingAddress.isNullOrBlank()) {
+            // Create a device config for the existing device
+            val existingDevice = DeviceConfig(
+                macAddress = existingAddress,
+                customName = "",  // User can name it later
+                enabled = isAutoConnectEnabled(context),
+                colorHex = "00E5FF"  // Primary cyan
+            )
+            
+            // Only add if not already present
+            val devices = getDevices(context)
+            if (devices.none { it.macAddress.equals(existingAddress, ignoreCase = true) }) {
+                addDevice(context, existingDevice)
+                
+                // Migrate readings to the new device
+                val chartHistory = getChartHistory(context)
+                for (reading in chartHistory) {
+                    addDeviceReading(context, existingDevice.id, reading)
+                }
+                
+                // Set as selected device
+                setSelectedDeviceId(context, existingDevice.id)
+            }
+        }
+        
+        prefs.edit().putBoolean("multi_device_migrated", true).apply()
     }
 }

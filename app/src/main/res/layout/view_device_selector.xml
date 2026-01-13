@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingVertical="8dp"
+    android:background="@drawable/widget_card_background">
+
+    <TextView
+        android:id="@+id/deviceSelectorLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Viewing:"
+        android:textColor="#9E9EA8"
+        android:textSize="12sp"
+        android:textAllCaps="true"
+        android:letterSpacing="0.08" />
+
+    <Spinner
+        android:id="@+id/deviceSpinner"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/spinner_background"
+        android:popupBackground="#1A1A1E"
+        android:dropDownVerticalOffset="4dp" />
+
+    <View
+        android:id="@+id/deviceStatusDot"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/status_dot" />
+
+</LinearLayout>

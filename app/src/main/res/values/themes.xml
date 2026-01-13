@@ -41,4 +41,15 @@
         <item name="android:textColor">@color/pro_text_muted</item>
     </style>
 
+    <!-- Dark dialog theme for device editing -->
+    <style name="DarkDialogTheme" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">@color/pro_surface</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorOnPrimary">@color/pro_background</item>
+        <item name="android:textColorPrimary">@color/pro_text_primary</item>
+        <item name="android:textColorSecondary">@color/pro_text_secondary</item>
+    </style>
+
 </resources>

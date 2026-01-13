@@ -161,9 +161,26 @@ class MainActivity : AppCompatActivity() {
     private val findDevicesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val address = result.data?.getStringExtra(FindDevicesActivity.EXTRA_DEVICE_ADDRESS) ?: return@registerForActivityResult
+        
+        // Multi-device: Add to device list instead of just setting preferred
+        val existingDevice = Prefs.getDeviceByMac(this, address)
+        if (existingDevice == null) {
+            val newDevice = DeviceConfig(
+                macAddress = address,
+                enabled = true
+            )
+            Prefs.addDevice(this, newDevice)
+        } else if (!existingDevice.enabled) {
+            // Re-enable if it was disabled
+            Prefs.updateDevice(this, existingDevice.copy(enabled = true))
+        }
+        
+        // Also set as preferred for backward compatibility
         Prefs.setPreferredAddress(this, address)
         Prefs.setAutoConnectEnabled(this, true)
-        RadiaCodeForegroundService.start(this, address)
+        
+        // Tell the service to reload device list (picks up the new device)
+        RadiaCodeForegroundService.reloadDevices(this)
 
         doseHistory.clear()
         cpsHistory.clear()
@@ -193,6 +210,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Migrate single device to multi-device if needed
+        Prefs.migrateToMultiDevice(this)
 
         bindViews()
         setupNavigation()
@@ -473,8 +493,6 @@ class MainActivity : AppCompatActivity() {
         cpsCard.setAccentColor(magentaColor)
         cpsCard.setValueText("—")
         cpsCard.setTrend(0f)
-
-        // Note: Delta cards no longer open focus view - use chart panels instead
     }
 
     private fun setupCharts() {
@@ -516,22 +534,12 @@ class MainActivity : AppCompatActivity() {
         })
         
         // Reset button click handlers
-        doseChartReset.setOnClickListener {
-            doseChart.resetZoom()
-        }
-        
-        cpsChartReset.setOnClickListener {
-            cpsChart.resetZoom()
-        }
+        doseChartReset.setOnClickListener { doseChart.resetZoom() }
+        cpsChartReset.setOnClickListener { cpsChart.resetZoom() }
         
         // Go-to-realtime button click handlers
-        doseChartGoRealtime.setOnClickListener {
-            doseChart.goToRealTime()
-        }
-        
-        cpsChartGoRealtime.setOnClickListener {
-            cpsChart.goToRealTime()
-        }
+        doseChartGoRealtime.setOnClickListener { doseChart.goToRealTime() }
+        cpsChartGoRealtime.setOnClickListener { cpsChart.goToRealTime() }
         
         // Setup real-time state listeners to show/hide go-to-realtime buttons
         doseChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
@@ -548,7 +556,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupTimeWindowChips() {
-        // Map chip IDs to window seconds
         val chipToSeconds = mapOf(
             R.id.chip30s to 30,
             R.id.chip1m to 60,
@@ -557,7 +564,6 @@ class MainActivity : AppCompatActivity() {
             R.id.chip1h to 3600
         )
 
-        // Set initial chip selection based on saved preference
         val currentWindow = Prefs.getWindowSeconds(this, 60)
         when (currentWindow) {
             30 -> findViewById<Chip>(R.id.chip30s).isChecked = true
@@ -565,7 +571,7 @@ class MainActivity : AppCompatActivity() {
             300 -> findViewById<Chip>(R.id.chip5m).isChecked = true
             900 -> findViewById<Chip>(R.id.chip15m).isChecked = true
             3600 -> findViewById<Chip>(R.id.chip1h).isChecked = true
-            else -> findViewById<Chip>(R.id.chip1m).isChecked = true  // Default to 1m for any legacy values
+            else -> findViewById<Chip>(R.id.chip1m).isChecked = true
         }
 
         timeWindowChips.setOnCheckedStateChangeListener { _, checkedIds ->
@@ -578,14 +584,12 @@ class MainActivity : AppCompatActivity() {
             updateChartTitles()
             lastReadingTimestampMs = 0L
             
-            // Reset chart zoom to show the new time window properly
             doseChart.resetZoom()
             cpsChart.resetZoom()
         }
     }
 
     private fun setupUnitChips() {
-        // Set initial chip selection based on saved preference
         val currentDoseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
         val currentCountUnit = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
         
@@ -629,27 +633,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         registerReadingReceiver()
-        
-        // Reload chart history from persistent storage to fill in any gap
-        // from when the screen was locked (data was still being collected by service)
         reloadChartHistoryFromStorage()
-        
         startUiLoop()
-        refreshSettingsRows() // Refresh in case alerts were changed
+        refreshSettingsRows()
     }
     
-    /**
-     * Reload chart history from persistent storage.
-     * This fills in data that was collected while the screen was locked.
-     */
     private fun reloadChartHistoryFromStorage() {
         val chartHistory = Prefs.getChartHistory(this)
         if (chartHistory.isEmpty()) return
         
-        // Get the last timestamp we have in memory
         val lastInMemoryTs = doseHistory.lastN(1).timestampsMs.firstOrNull() ?: 0L
         
-        // Add any readings from persistent storage that are newer than what we have
         var addedCount = 0
         for (reading in chartHistory) {
             if (reading.timestampMs > lastInMemoryTs) {
@@ -661,7 +655,6 @@ class MainActivity : AppCompatActivity() {
         
         if (addedCount > 0) {
             sampleCount += addedCount
-            // Force a chart refresh
             lastReadingTimestampMs = 0L
         }
     }
@@ -680,17 +673,6 @@ class MainActivity : AppCompatActivity() {
     private fun hasAllPermissions(): Boolean {
         return requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
-    @Suppress("UNUSED")
-    private fun isLocationEnabledForLegacyBle(): Boolean {
-        if (Build.VERSION.SDK_INT >= 31) return true
-        val lm = getSystemService(LocationManager::class.java) ?: return false
-        return try {
-            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-        } catch (_: Throwable) {
-            false
         }
     }
 
@@ -718,15 +700,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun shareCsv() {
         val file = File(filesDir, "readings.csv")
-        if (!file.exists() || file.length() == 0L) {
-            return
-        }
+        if (!file.exists() || file.length() == 0L) return
 
         val uri = try {
             FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
-        } catch (_: Throwable) {
-            return
-        }
+        } catch (_: Throwable) { return }
 
         val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/csv"
@@ -737,8 +715,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startServiceIfConfigured() {
+        // Multi-device: Check if we have any enabled devices
+        val devices = Prefs.getDevices(this)
+        val hasEnabledDevices = devices.any { it.enabled }
+        
+        // Fall back to legacy preferred address check
         val preferred = Prefs.getPreferredAddress(this)
-        if (Prefs.isAutoConnectEnabled(this) && !preferred.isNullOrBlank()) {
+        
+        if (Prefs.isAutoConnectEnabled(this) && (hasEnabledDevices || !preferred.isNullOrBlank())) {
             RadiaCodeForegroundService.start(this)
         }
         refreshSettingsRows()
@@ -746,7 +730,6 @@ class MainActivity : AppCompatActivity() {
 
         ensureHistoryCapacity()
         
-        // Load full chart history from persistent storage (survives app restart)
         val chartHistory = Prefs.getChartHistory(this)
         if (chartHistory.isNotEmpty()) {
             for (reading in chartHistory) {
@@ -754,10 +737,8 @@ class MainActivity : AppCompatActivity() {
                 cpsHistory.add(reading.timestampMs, reading.cps)
             }
             sampleCount = chartHistory.size
-            // Use the earliest timestamp as session start for continuity
             sessionStartMs = chartHistory.first().timestampMs
         } else {
-            // Fall back to just the last reading if no history
             Prefs.getLastReading(this)?.let {
                 doseHistory.add(it.timestampMs, it.uSvPerHour)
                 cpsHistory.add(it.timestampMs, it.cps)
@@ -776,24 +757,40 @@ class MainActivity : AppCompatActivity() {
                 val svc = Prefs.getServiceStatus(this@MainActivity)
                 val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
 
-                // Update device panel
-                preferredDeviceText.text = if (preferred.isNullOrBlank()) "Not set" else preferred
+                // Update device panel - show device count for multi-device
+                val devices = Prefs.getDevices(this@MainActivity)
+                val enabledCount = devices.count { it.enabled }
+                preferredDeviceText.text = when {
+                    enabledCount > 1 -> "$enabledCount devices"
+                    enabledCount == 1 -> devices.first { it.enabled }.displayName
+                    !preferred.isNullOrBlank() -> preferred
+                    else -> "Not set"
+                }
+                
                 if (autoConnectSwitch.isChecked != auto) {
                     autoConnectSwitch.isChecked = auto
                 }
 
-                // Connection status - check both status message AND if we're receiving fresh data
                 val hasRecentData = last != null && (System.currentTimeMillis() - last.timestampMs) < 10000
                 val statusIndicatesConnected = svc?.message?.contains("connected", ignoreCase = true) == true
                 val statusIndicatesLiveData = svc?.message?.contains("μSv/h", ignoreCase = true) == true
                 val isConnected = hasRecentData || statusIndicatesConnected || statusIndicatesLiveData
-                updateConnectionStatus(isConnected, svc?.message ?: "Disconnected")
+                
+                // Show device status on device panel
+                val deviceStatusMsg = when {
+                    svc?.message?.isNotBlank() == true -> svc.message
+                    enabledCount > 1 && isConnected -> "$enabledCount devices connected"
+                    enabledCount == 1 && isConnected -> "Connected"
+                    enabledCount > 0 -> "Connecting…"
+                    else -> "No devices configured"
+                }
+                updateConnectionStatus(isConnected, deviceStatusMsg)
 
-                // Toolbar status
                 val statusText = when {
                     !auto -> "OFF"
-                    preferred.isNullOrBlank() -> "NO DEVICE"
+                    enabledCount == 0 && preferred.isNullOrBlank() -> "NO DEVICE"
                     paused -> "PAUSED"
+                    isConnected && enabledCount > 1 -> "LIVE ($enabledCount)"
                     isConnected -> "LIVE"
                     else -> "CONNECTING"
                 }
@@ -904,7 +901,6 @@ class MainActivity : AppCompatActivity() {
             Prefs.CountUnit.CPM -> "cpm"
         }
 
-        // Calculate trends
         val doseTrend = if (previousDose > 0f) ((dose - previousDose) / previousDose) * 100f else 0f
         val cpsTrend = if (previousCps > 0f) ((cpsOrCpm - previousCps) / previousCps) * 100f else 0f
         previousDose = dose
@@ -942,7 +938,6 @@ class MainActivity : AppCompatActivity() {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
 
-            // Mini sparklines for cards (last ~20 points)
             val sparkDose = doseDec.second.takeLast(20)
             val sparkCps = cpsDec.second.takeLast(20)
             doseCard.setSparkline(sparkDose)
@@ -1053,30 +1048,24 @@ class MainActivity : AppCompatActivity() {
         
         val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
         valueSpikeMarkers.text = if (showSpikes) "On" else "Off"
-        valueSpikeMarkers.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
+        valueSpikeMarkers.setTextColor(ContextCompat.getColor(this, 
             if (showSpikes) R.color.pro_green else R.color.pro_text_muted))
 
         val showSpikePercent = Prefs.isShowSpikePercentagesEnabled(this)
         valueSpikePercentages.text = if (showSpikePercent) "On" else "Off"
-        valueSpikePercentages.setTextColor(androidx.core.content.ContextCompat.getColor(this, 
+        valueSpikePercentages.setTextColor(ContextCompat.getColor(this, 
             if (showSpikePercent) R.color.pro_green else R.color.pro_text_muted))
 
         valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
 
-        // Smart alerts count
         val alerts = Prefs.getSmartAlerts(this)
         val enabledCount = alerts.count { it.enabled }
         valueSmartAlerts.text = if (enabledCount == 0) "None" else "$enabledCount active"
-        valueSmartAlerts.setTextColor(androidx.core.content.ContextCompat.getColor(this,
+        valueSmartAlerts.setTextColor(ContextCompat.getColor(this,
             if (enabledCount > 0) R.color.pro_amber else R.color.pro_text_muted))
     }
 
-    private enum class Panel {
-        Dashboard,
-        Device,
-        Settings,
-        Logs,
-    }
+    private enum class Panel { Dashboard, Device, Settings, Logs }
 
     private fun setPanel(panel: Panel) {
         panelDashboard.visibility = if (panel == Panel.Dashboard) View.VISIBLE else View.GONE
@@ -1162,7 +1151,6 @@ class MainActivity : AppCompatActivity() {
         val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
         val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
 
-        // Primary series data
         val (ts, v) = if (kind == "cps") {
             val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
             val smooth = Prefs.getSmoothSeconds(this, 0)
@@ -1179,24 +1167,20 @@ class MainActivity : AppCompatActivity() {
             decimate(doseSeries?.timestampsMs.orEmpty(), vals)
         }
 
-        // Secondary series (for comparison mode)
         val secondaryV = if (kind == "cps") {
             val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
             val smooth = Prefs.getSmoothSeconds(this, 0)
             val poll = Prefs.getPollIntervalMs(this, 1000L)
             val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
-            val vals = convertDose(applySmoothing(doseSeries?.values.orEmpty(), smoothSamples), du)
-            vals.toList()
+            convertDose(applySmoothing(doseSeries?.values.orEmpty(), smoothSamples), du)
         } else {
             val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
             val smooth = Prefs.getSmoothSeconds(this, 0)
             val poll = Prefs.getPollIntervalMs(this, 1000L)
             val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
-            val vals = convertCount(applySmoothing(cpsSeries?.values.orEmpty(), smoothSamples), cu)
-            vals.toList()
+            convertCount(applySmoothing(cpsSeries?.values.orEmpty(), smoothSamples), cu)
         }
         
-        // Decimate secondary to match primary timestamps
         val (_, secondaryDecimated) = decimate(ts.indices.map { doseSeries?.timestampsMs?.getOrNull(it) ?: 0L }, secondaryV)
 
         val i = Intent(this, DetailedChartActivity::class.java)
@@ -1204,34 +1188,6 @@ class MainActivity : AppCompatActivity() {
             .putExtra("ts", ts.toLongArray())
             .putExtra("v", v.toFloatArray())
             .putExtra("secondary_v", secondaryDecimated.toFloatArray())
-        startActivity(i)
-    }
-
-    private fun openFocus(kind: String) {
-        val paused = Prefs.isPauseLiveEnabled(this)
-        val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
-        val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
-
-        val (ts, v) = if (kind == "cps") {
-            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-            val smooth = Prefs.getSmoothSeconds(this, 0)
-            val poll = Prefs.getPollIntervalMs(this, 1000L)
-            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
-            val vals = convertCount(applySmoothing(cpsSeries?.values.orEmpty(), smoothSamples), cu)
-            decimate(cpsSeries?.timestampsMs.orEmpty(), vals)
-        } else {
-            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-            val smooth = Prefs.getSmoothSeconds(this, 0)
-            val poll = Prefs.getPollIntervalMs(this, 1000L)
-            val smoothSamples = if (smooth <= 0) 0 else max(1, ((smooth * 1000L) / max(1L, poll)).toInt())
-            val vals = convertDose(applySmoothing(doseSeries?.values.orEmpty(), smoothSamples), du)
-            decimate(doseSeries?.timestampsMs.orEmpty(), vals)
-        }
-
-        val i = android.content.Intent(this, ChartFocusActivity::class.java)
-            .putExtra(ChartFocusActivity.EXTRA_KIND, kind)
-            .putExtra("ts", ts.toLongArray())
-            .putExtra("v", v.toFloatArray())
         startActivity(i)
     }
 
@@ -1244,14 +1200,12 @@ class MainActivity : AppCompatActivity() {
                 @Suppress("DEPRECATION")
                 registerReceiver(readingReceiver, filter)
             }
-        } catch (_: Throwable) {
-        }
+        } catch (_: Throwable) {}
     }
 
     private fun unregisterReadingReceiver() {
         try {
             unregisterReceiver(readingReceiver)
-        } catch (_: Throwable) {
-        }
+        } catch (_: Throwable) {}
     }
 }

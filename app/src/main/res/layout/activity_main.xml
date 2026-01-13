@@ -76,6 +76,14 @@
                     android:orientation="vertical"
                     android:padding="12dp">
 
+                    <!-- Device Selector (hidden if only 1 device) -->
+                    <com.radiacode.ble.ui.DeviceSelectorView
+                        android:id="@+id/deviceSelector"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:visibility="gone" />
+
                     <!-- Metric Cards Row -->
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -462,6 +470,7 @@
                     android:padding="16dp"
                     android:visibility="gone">
 
+                    <!-- Summary Card -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -469,7 +478,7 @@
                         android:orientation="vertical"
                         android:padding="20dp">
 
-                        <!-- Connection Status -->
+                        <!-- Connection Summary -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -484,79 +493,118 @@
 
                             <TextView
                                 android:id="@+id/connectionStatus"
-                                android:layout_width="wrap_content"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
+                                android:layout_weight="1"
                                 android:layout_marginStart="12dp"
-                                android:text="Disconnected"
+                                android:text="No devices"
                                 android:textColor="@color/pro_text_primary"
                                 android:textSize="16sp"
                                 android:textStyle="bold" />
+                                
+                            <TextView
+                                android:id="@+id/deviceCountText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 devices"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
                         </LinearLayout>
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="20dp"
-                            android:text="PREFERRED DEVICE"
-                            android:textColor="@color/pro_text_muted"
-                            android:textSize="11sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.1" />
-
-                        <TextView
-                            android:id="@+id/preferredDeviceText"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:text="Not set"
-                            android:textColor="@color/pro_text_secondary"
-                            android:textSize="14sp"
-                            android:fontFamily="monospace" />
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/autoConnectSwitch"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="20dp"
+                            android:layout_marginTop="16dp"
                             android:text="Auto-connect on startup"
                             android:textColor="@color/pro_text_primary" />
 
-                        <View
-                            android:layout_width="match_parent"
-                            android:layout_height="1dp"
-                            android:layout_marginTop="20dp"
-                            android:background="@color/pro_border" />
+                    </LinearLayout>
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/findDevicesButton"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:text="Find devices"
-                            app:backgroundTint="@color/pro_cyan"
-                            android:textColor="@color/pro_background" />
+                    <!-- Devices Section Header -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/reconnectButton"
-                            android:layout_width="match_parent"
+                        <TextView
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="Reconnect"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            app:strokeColor="@color/pro_border"
-                            android:textColor="@color/pro_text_secondary" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/stopServiceButton"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="Stop service"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            app:strokeColor="@color/pro_border"
-                            android:textColor="@color/pro_text_muted" />
+                            android:layout_weight="1"
+                            android:text="MY DEVICES"
+                            android:textColor="@color/pro_cyan"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1" />
 
                     </LinearLayout>
+
+                    <!-- Device List Container -->
+                    <LinearLayout
+                        android:id="@+id/deviceListContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:divider="@drawable/list_divider"
+                        android:showDividers="middle" />
+
+                    <!-- No devices placeholder -->
+                    <TextView
+                        android:id="@+id/noDevicesText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_background"
+                        android:padding="24dp"
+                        android:gravity="center"
+                        android:text="No devices configured.\nTap 'Add Device' to scan for RadiaCode devices."
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="14sp"
+                        android:visibility="gone" />
+                        
+                    <!-- Legacy preferred device text (hidden, for compatibility) -->
+                    <TextView
+                        android:id="@+id/preferredDeviceText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:text="Not set" />
+
+                    <!-- Action Buttons -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/findDevicesButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="Add Device"
+                        app:icon="@drawable/ic_add"
+                        app:backgroundTint="@color/pro_cyan"
+                        android:textColor="@color/pro_background" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/reconnectButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Reconnect All"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        app:strokeColor="@color/pro_border"
+                        android:textColor="@color/pro_text_secondary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/stopServiceButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Stop All"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        app:strokeColor="@color/pro_border"
+                        android:textColor="@color/pro_text_muted" />
+
                 </LinearLayout>
 
                 <!-- ==================== SETTINGS PANEL ==================== -->
