@@ -109,13 +109,16 @@ Three widget styles to choose from:
    - Dose rate with configurable units (µSv/h or nSv/h)
    - Count rate with configurable units (CPS or CPM)
    - Last update timestamp
+   - Device-specific binding for multi-device setups
 
 2. **RadiaCode Charts** - Full-featured widget with:
    - Connection status indicator
    - Dose rate with live sparkline chart
    - Count rate with live sparkline chart
+   - Multiple chart types: Sparkline, Bar, Candlestick, Area
    - Real-time updates every second
    - Gradient-filled chart visualization with glow effects
+   - Device-specific binding for multi-device setups
 
 3. **RadiaCode (Legacy)** - Original widget with trend indicators
 
@@ -123,7 +126,22 @@ All widgets:
 - Update in real-time as readings come in
 - Respect your unit preferences from Settings
 - Show connection status with color-coded indicator
+- **Per-device binding** - bind each widget to a specific device
+- **Dynamic colors** - value colors change based on radiation levels
+- **Anomaly badges** - ⚠ indicator when readings are unusual
 - Tap to open the app
+
+### Widget Crafter
+Configure widgets with advanced options when adding to your home screen:
+
+- **Device Selection** - Bind widget to a specific RadiaCode device
+- **Chart Type** - Choose from Sparkline, Bar, Candlestick, or Area charts
+- **Layout Templates** - Pre-built layouts like "Compact Text", "Dual Sparkline", "Chart Focus"
+- **Color Schemes** - Themes like Cyberpunk, Forest, Ocean, Fire, Grayscale
+- **Dynamic Colors** - Automatically color values based on radiation levels
+- **Field Toggles** - Show/hide dose, count rate, time, sparklines
+- **Update Interval** - Control how often the widget refreshes
+- **Live Preview** - See your widget configuration before applying
 
 ### Auto-Connect & Boot Start
 - **Auto-connect on app launch**: When you open the app, it automatically connects to your preferred device
@@ -214,11 +232,29 @@ adb logcat -v time -s RadiaCode
 | `MainActivity` | Main dashboard with charts and cards |
 | `RadiaCodeForegroundService` | Persistent background service for BLE communication |
 | `BootReceiver` | Starts service on device boot (BOOT_COMPLETED, USER_UNLOCKED) |
-| `SimpleWidgetProvider` | Compact home screen widget |
-| `ChartWidgetProvider` | Widget with sparkline charts |
+| `SimpleWidgetProvider` | Compact home screen widget with device binding |
+| `ChartWidgetProvider` | Widget with multi-type charts and device binding |
 | `RadiaCodeWidgetProvider` | Legacy widget with trend indicators |
+| `WidgetConfigActivity` | Widget configuration UI when adding widgets |
+| `WidgetCrafterActivity` | Widget management hub (from hamburger menu) |
+| `WidgetConfig` | Data class for per-widget configuration |
+| `DeviceConfig` | Data class for device settings (name, color) |
 | `Prefs` | SharedPreferences wrapper for settings and readings |
 | `SmartAlertsManager` | Handles alert evaluation and notifications |
+| `ChartGenerator` | Multi-type chart rendering (sparkline, bar, candle, area) |
+| `DynamicColorCalculator` | Value-based color interpolation |
+| `StatisticsCalculator` | Statistical analysis utilities |
+| `IntelligenceEngine` | Anomaly detection and predictions |
+
+### Multi-Device Support
+
+The app supports multiple RadiaCode devices simultaneously:
+
+- **Device List**: Manage multiple devices with custom names and colors
+- **Per-Device Storage**: Each device stores its own reading history
+- **Per-Widget Binding**: Each widget can be bound to a specific device
+- **Device Colors**: Assign colors to devices for easy identification on charts
+- **Concurrent Connections**: Service can poll multiple devices (sequentially)
 
 ### Data Flow
 

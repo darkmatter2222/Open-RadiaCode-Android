@@ -2,8 +2,9 @@
 
 > **Status:** ✅ Phase 1-6 Core Implementation Complete  
 > **Created:** January 13, 2026  
-> **Version:** 0.06  
-> **Branch:** `feature/widget-crafter`
+> **Version:** 0.07  
+> **Branch:** `multi-device`
+> **Last Bug Fix:** Device ID mismatch fixed (v0.07)
 
 ---
 
@@ -20,13 +21,14 @@
 ### 1.3 Widget Configuration Activity
 - [x] Create `WidgetConfigActivity.kt`
 - [x] Create `activity_widget_config.xml` layout
-- [x] Device dropdown selector
+- [x] Device dropdown selector (single device only, no aggregate)
 - [x] Chart type picker (Line / Bar / Candle / Sparkline)
 - [x] Field toggles (Dose, CPS, Time, Status)
-- [x] Live preview pane
+- [x] Live preview pane with real device data
 - [x] Register in `AndroidManifest.xml` as widget configure activity
 - [x] Update `widget_chart_info.xml` to use configure activity
 - [x] Update `widget_simple_info.xml` to use configure activity
+- [x] Fixed device ID lookup (use device.id not macAddress)
 
 ---
 
