@@ -110,16 +110,27 @@ class WidgetConfigActivity : AppCompatActivity() {
     private fun setupDeviceSpinner() {
         devices = Prefs.getDevices(this)
         
-        val deviceNames = mutableListOf("All Devices (Aggregate)")
-        devices.forEach { deviceNames.add(it.displayName) }
+        // If no devices, show placeholder
+        if (devices.isEmpty()) {
+            val adapter = ArrayAdapter(this, R.layout.item_device_spinner_simple, listOf("No devices paired"))
+            deviceSpinner.adapter = adapter
+            deviceSpinner.isEnabled = false
+            return
+        }
+        
+        // Build device list - no aggregate option, just real devices
+        val deviceNames = devices.map { it.displayName }
         
         val adapter = ArrayAdapter(this, R.layout.item_device_spinner_simple, deviceNames)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         deviceSpinner.adapter = adapter
         
+        // Default to first device
+        selectedDeviceId = devices.firstOrNull()?.id
+        
         deviceSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedDeviceId = if (position == 0) null else devices.getOrNull(position - 1)?.id
+                selectedDeviceId = devices.getOrNull(position)?.id
                 updatePreview()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -247,7 +258,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         // Restore device selection
         selectedDeviceId = existingConfig.deviceId
         val deviceIndex = if (selectedDeviceId == null) 0 
-            else devices.indexOfFirst { it.id == selectedDeviceId } + 1
+            else devices.indexOfFirst { it.id == selectedDeviceId }
         if (deviceIndex >= 0) deviceSpinner.setSelection(deviceIndex)
         
         // Restore template
@@ -311,38 +322,71 @@ class WidgetConfigActivity : AppCompatActivity() {
     }
     
     private fun updatePreview() {
+        // Get selected device
+        val selectedDevice = devices.find { it.id == selectedDeviceId }
+        
         // Update device name
-        val deviceName = if (selectedDeviceId == null) {
-            "All Devices"
-        } else {
-            devices.find { it.id == selectedDeviceId }?.shortDisplayName ?: "Device"
-        }
+        val deviceName = selectedDevice?.shortDisplayName ?: "Device"
         previewDeviceName.text = deviceName
         
-        // Update colors
-        try {
-            val doseColor = Color.parseColor("#${selectedColorScheme.lineColor}")
-            previewDoseValue.setTextColor(doseColor)
-            
-            // Preview dynamic coloring if enabled
-            if (dynamicColorSwitch.isChecked) {
-                val thresholds = Prefs.getDynamicColorThresholds(this)
-                // Show elevated color as example
-                previewDoseValue.setTextColor(Color.parseColor("#${thresholds.elevatedColor}"))
-            }
+        // Get the device's color
+        val deviceColor = try {
+            Color.parseColor("#${selectedDevice?.colorHex ?: selectedColorScheme.lineColor}")
         } catch (_: Exception) {
-            previewDoseValue.setTextColor(Color.parseColor("#00E5FF"))
+            Color.parseColor("#00E5FF")
         }
+        
+        // Get actual reading data if available
+        val reading = if (selectedDeviceId != null) {
+            Prefs.getDeviceLastReading(this, selectedDeviceId!!)
+        } else {
+            Prefs.getLastReading(this)
+        }
+        
+        // Update colors - use device color as primary
+        var doseColor = deviceColor
+        
+        // Preview dynamic coloring if enabled
+        if (dynamicColorSwitch.isChecked && reading != null) {
+            val thresholds = Prefs.getDynamicColorThresholds(this)
+            val doseValue = reading.uSvPerHour
+            doseColor = Color.parseColor("#${thresholds.getColorForValue(doseValue)}")
+        }
+        previewDoseValue.setTextColor(doseColor)
+        
+        // CPS uses scheme color or default magenta
+        try {
+            previewCpsValue.setTextColor(Color.parseColor("#E040FB"))
+        } catch (_: Exception) {}
         
         // Show/hide elements based on switches
         previewDoseValue.visibility = if (showDoseSwitch.isChecked) View.VISIBLE else View.GONE
         previewCpsValue.visibility = if (showCpsSwitch.isChecked) View.VISIBLE else View.GONE
         
-        // Update preview values with sample data
-        previewDoseValue.text = "0.057"
-        previewCpsValue.text = "8.2"
-        previewStatusDot.text = "●"
-        previewStatusDot.setTextColor(Color.parseColor("#69F0AE"))
+        // Update preview values with actual data if available, else sample
+        if (reading != null) {
+            val doseUnit = Prefs.getDoseUnit(this)
+            val countUnit = Prefs.getCountUnit(this)
+            // Format dose value
+            val (doseStr, _) = when (doseUnit) {
+                Prefs.DoseUnit.USV_H -> String.format("%.3f", reading.uSvPerHour) to "μSv/h"
+                Prefs.DoseUnit.NSV_H -> String.format("%.1f", reading.uSvPerHour * 1000f) to "nSv/h"
+            }
+            // Format count value
+            val (cpsStr, _) = when (countUnit) {
+                Prefs.CountUnit.CPS -> String.format("%.1f", reading.cps) to "cps"
+                Prefs.CountUnit.CPM -> String.format("%.0f", reading.cps * 60f) to "cpm"
+            }
+            previewDoseValue.text = doseStr
+            previewCpsValue.text = cpsStr
+            previewStatusDot.text = "●"
+            previewStatusDot.setTextColor(Color.parseColor("#69F0AE"))
+        } else {
+            previewDoseValue.text = "0.057"
+            previewCpsValue.text = "8.2"
+            previewStatusDot.text = "○"
+            previewStatusDot.setTextColor(Color.parseColor("#FF5252"))
+        }
     }
     
     private fun saveConfigAndFinish() {

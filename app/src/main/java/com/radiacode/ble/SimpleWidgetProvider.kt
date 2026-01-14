@@ -124,7 +124,7 @@ class SimpleWidgetProvider : AppWidgetProvider() {
             // Device name - show bound device or default title
             val deviceName = if (deviceId != null) {
                 val devices = Prefs.getDevices(context)
-                devices.find { it.macAddress == deviceId }?.displayName ?: "RadiaCode"
+                devices.find { it.id == deviceId }?.displayName ?: "RadiaCode"
             } else {
                 "Open RadiaCode"
             }
@@ -261,7 +261,7 @@ class SimpleWidgetProvider : AppWidgetProvider() {
             // Try to use device-specific color if available
             if (config.deviceId != null) {
                 val devices = Prefs.getDevices(context)
-                val device = devices.find { it.macAddress == config.deviceId }
+                val device = devices.find { it.id == config.deviceId }
                 if (device != null) {
                     val deviceColor = parseColor(device.colorHex, COLOR_CYAN)
                     return deviceColor to parseColor(scheme.lineColor, COLOR_MAGENTA)

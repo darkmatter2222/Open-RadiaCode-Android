@@ -118,7 +118,7 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
             // Device name - show bound device or default title
             val deviceName = if (deviceId != null) {
                 val devices = Prefs.getDevices(context)
-                devices.find { it.macAddress == deviceId }?.displayName?.uppercase() ?: "RADIACODE"
+                devices.find { it.id == deviceId }?.displayName?.uppercase() ?: "RADIACODE"
             } else {
                 "OPEN RADIACODE"
             }

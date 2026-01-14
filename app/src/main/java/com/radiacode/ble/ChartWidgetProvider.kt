@@ -135,7 +135,7 @@ class ChartWidgetProvider : AppWidgetProvider() {
             // Device name - show bound device or default title
             val deviceName = if (deviceId != null) {
                 val devices = Prefs.getDevices(context)
-                devices.find { it.macAddress == deviceId }?.displayName ?: "RadiaCode"
+                devices.find { it.id == deviceId }?.displayName ?: "RadiaCode"
             } else {
                 "Open RadiaCode"
             }
@@ -433,7 +433,20 @@ class ChartWidgetProvider : AppWidgetProvider() {
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             
+            // Draw subtle background for visibility
+            val bgPaint = Paint().apply {
+                color = Color.argb(30, 255, 255, 255)
+            }
+            canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 8f, 8f, bgPaint)
+            
             if (readings.size < 4) {
+                // Show placeholder text for insufficient data
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.argb(80, 255, 255, 255)
+                    textSize = height / 3f
+                    textAlign = Paint.Align.CENTER
+                }
+                canvas.drawText("—", width / 2f, height / 2f + textPaint.textSize / 3f, textPaint)
                 return bitmap
             }
             
@@ -601,7 +614,7 @@ class ChartWidgetProvider : AppWidgetProvider() {
             // Try to use device-specific color if available
             if (config.deviceId != null) {
                 val devices = Prefs.getDevices(context)
-                val device = devices.find { it.macAddress == config.deviceId }
+                val device = devices.find { it.id == config.deviceId }
                 if (device != null) {
                     val deviceColor = parseColor(device.colorHex, COLOR_CYAN)
                     // Use device color for dose, scheme color or default for CPS
