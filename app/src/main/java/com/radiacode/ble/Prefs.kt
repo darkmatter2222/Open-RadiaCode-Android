@@ -752,4 +752,122 @@ object Prefs {
         
         prefs.edit().putBoolean("multi_device_migrated", true).apply()
     }
+    
+    // ========== Widget Configuration ==========
+    
+    private const val KEY_WIDGET_CONFIGS_JSON = "widget_configs_json"
+    private const val KEY_WIDGET_CONFIG_PREFIX = "widget_config_"
+    private const val KEY_DYNAMIC_COLOR_THRESHOLDS = "dynamic_color_thresholds"
+    
+    /**
+     * Get configuration for a specific widget instance.
+     */
+    fun getWidgetConfig(context: Context, widgetId: Int): WidgetConfig? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_WIDGET_CONFIG_PREFIX + widgetId, null) ?: return null
+        return WidgetConfig.fromJson(json)
+    }
+    
+    /**
+     * Save configuration for a specific widget instance.
+     */
+    fun setWidgetConfig(context: Context, config: WidgetConfig) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_WIDGET_CONFIG_PREFIX + config.widgetId, config.toJson())
+            .apply()
+        
+        // Also update the master list of widget IDs
+        val widgetIds = getConfiguredWidgetIds(context).toMutableSet()
+        widgetIds.add(config.widgetId)
+        saveConfiguredWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Delete configuration for a widget instance (when widget is removed).
+     */
+    fun deleteWidgetConfig(context: Context, widgetId: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_WIDGET_CONFIG_PREFIX + widgetId)
+            .apply()
+        
+        val widgetIds = getConfiguredWidgetIds(context).toMutableSet()
+        widgetIds.remove(widgetId)
+        saveConfiguredWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Get all configured widget IDs.
+     */
+    fun getConfiguredWidgetIds(context: Context): Set<Int> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_WIDGET_CONFIGS_JSON, "[]") ?: "[]"
+        return json.removeSurrounding("[", "]")
+            .split(",")
+            .filter { it.isNotBlank() }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .toSet()
+    }
+    
+    private fun saveConfiguredWidgetIds(context: Context, ids: Set<Int>) {
+        val json = "[${ids.joinToString(",")}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_WIDGET_CONFIGS_JSON, json)
+            .apply()
+    }
+    
+    /**
+     * Get all widget configurations.
+     */
+    fun getAllWidgetConfigs(context: Context): List<WidgetConfig> {
+        return getConfiguredWidgetIds(context)
+            .mapNotNull { getWidgetConfig(context, it) }
+    }
+    
+    /**
+     * Get widget configs bound to a specific device.
+     */
+    fun getWidgetConfigsForDevice(context: Context, deviceId: String?): List<WidgetConfig> {
+        return getAllWidgetConfigs(context)
+            .filter { it.deviceId == deviceId }
+    }
+    
+    /**
+     * Duplicate a widget config for a different device.
+     */
+    fun duplicateWidgetConfig(context: Context, sourceWidgetId: Int, newWidgetId: Int, newDeviceId: String?): WidgetConfig? {
+        val source = getWidgetConfig(context, sourceWidgetId) ?: return null
+        val duplicate = source.copy(
+            widgetId = newWidgetId,
+            deviceId = newDeviceId,
+            createdAtMs = System.currentTimeMillis()
+        )
+        setWidgetConfig(context, duplicate)
+        return duplicate
+    }
+    
+    /**
+     * Get dynamic color thresholds configuration.
+     */
+    fun getDynamicColorThresholds(context: Context): DynamicColorThresholds {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_DYNAMIC_COLOR_THRESHOLDS, null)
+        return if (json != null) {
+            DynamicColorThresholds.fromJson(json) ?: DynamicColorThresholds.DEFAULT
+        } else {
+            DynamicColorThresholds.DEFAULT
+        }
+    }
+    
+    /**
+     * Save dynamic color thresholds configuration.
+     */
+    fun setDynamicColorThresholds(context: Context, thresholds: DynamicColorThresholds) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DYNAMIC_COLOR_THRESHOLDS, thresholds.toJson())
+            .apply()
+    }
 }

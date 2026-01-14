@@ -59,6 +59,21 @@
             android:exported="false"
             android:label="Smart Alerts" />
 
+        <activity
+            android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Widget Configuration">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".WidgetCrafterActivity"
+            android:exported="false"
+            android:label="Widget Crafter" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

@@ -344,6 +344,9 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_dashboard -> setPanel(Panel.Dashboard)
                 R.id.nav_device -> setPanel(Panel.Device)
+                R.id.nav_widget_crafter -> {
+                    startActivity(Intent(this, WidgetCrafterActivity::class.java))
+                }
                 R.id.nav_settings -> setPanel(Panel.Settings)
                 R.id.nav_logs -> setPanel(Panel.Logs)
             }

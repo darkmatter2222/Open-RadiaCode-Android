@@ -25,13 +25,14 @@ import kotlin.math.min
 /**
  * Chart widget showing dose rate and count rate with sparkline charts.
  * Larger widget for visualizing trends alongside current values.
+ * Supports per-widget device binding and color customization.
  */
 class ChartWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         appWidgetIds.forEach { id ->
             val options = appWidgetManager.getAppWidgetOptions(id)
-            appWidgetManager.updateAppWidget(id, buildViews(context, options))
+            appWidgetManager.updateAppWidget(id, buildViews(context, id, options))
         }
     }
 
@@ -41,7 +42,15 @@ class ChartWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: Bundle
     ) {
-        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, newOptions))
+        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId, newOptions))
+    }
+    
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        // Clean up widget configurations when widgets are removed
+        appWidgetIds.forEach { id ->
+            Prefs.deleteWidgetConfig(context, id)
+        }
+        super.onDeleted(context, appWidgetIds)
     }
 
     companion object {
@@ -59,21 +68,61 @@ class ChartWidgetProvider : AppWidgetProvider() {
             ids.forEach { id ->
                 val options = mgr.getAppWidgetOptions(id)
                 try {
-                    mgr.updateAppWidget(id, buildViews(context, options))
+                    mgr.updateAppWidget(id, buildViews(context, id, options))
                 } catch (e: Exception) {
                     android.util.Log.e("RadiaCode", "ChartWidget updateAll error", e)
                 }
             }
         }
+        
+        /**
+         * Update a specific widget by ID (for targeted updates based on device).
+         */
+        fun updateWidget(context: Context, widgetId: Int) {
+            val mgr = AppWidgetManager.getInstance(context) ?: return
+            val options = mgr.getAppWidgetOptions(widgetId)
+            try {
+                mgr.updateAppWidget(widgetId, buildViews(context, widgetId, options))
+            } catch (e: Exception) {
+                android.util.Log.e("RadiaCode", "ChartWidget updateWidget error for $widgetId", e)
+            }
+        }
+        
+        /**
+         * Update all widgets bound to a specific device.
+         */
+        fun updateForDevice(context: Context, deviceId: String?) {
+            val mgr = AppWidgetManager.getInstance(context) ?: return
+            val ids = mgr.getAppWidgetIds(ComponentName(context, ChartWidgetProvider::class.java))
+            
+            ids.forEach { id ->
+                val config = Prefs.getWidgetConfig(context, id)
+                // Update if widget is bound to this device OR if widget has no config (legacy)
+                if (config == null || config.deviceId == deviceId) {
+                    val options = mgr.getAppWidgetOptions(id)
+                    try {
+                        mgr.updateAppWidget(id, buildViews(context, id, options))
+                    } catch (e: Exception) {
+                        android.util.Log.e("RadiaCode", "ChartWidget updateForDevice error", e)
+                    }
+                }
+            }
+        }
 
-        private fun buildViews(context: Context, options: Bundle?): RemoteViews {
+        private fun buildViews(context: Context, widgetId: Int, options: Bundle?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_chart)
             
             try {
-
-            val last = Prefs.getLastReading(context)
-            val recentReadings = Prefs.getRecentReadings(context, 60)
+            // Get widget configuration (or use defaults for legacy widgets)
+            val config = Prefs.getWidgetConfig(context, widgetId)
+            val deviceId = config?.deviceId
+            
+            // Get data based on device binding
+            val (last, recentReadings) = getDataForDevice(context, deviceId)
             val isConnected = last != null && (System.currentTimeMillis() - last.timestampMs) < 30000
+            
+            // Get colors from config or use defaults
+            val (doseColor, cpsColor) = getColors(config)
             
             // Get user's preferred units
             val doseUnit = Prefs.getDoseUnit(context, Prefs.DoseUnit.USV_H)
@@ -98,6 +147,10 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widgetTime, "No data")
                 views.setTextColor(R.id.widgetTime, COLOR_MUTED)
             } else {
+                // Check if dynamic coloring is enabled
+                val dynamicColorEnabled = config?.dynamicColorEnabled ?: false
+                val thresholds = if (dynamicColorEnabled) Prefs.getDynamicColorThresholds(context) else null
+                
                 // Convert and format dose value based on user's unit preference
                 val (doseValue, doseUnitStr) = when (doseUnit) {
                     Prefs.DoseUnit.USV_H -> last.uSvPerHour to "μSv/h"
@@ -112,7 +165,14 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 }
                 views.setTextViewText(R.id.widgetDoseValue, doseStr)
                 views.setTextViewText(R.id.widgetDoseUnit, doseUnitStr)
-                views.setTextColor(R.id.widgetDoseValue, COLOR_CYAN)
+                
+                // Apply dynamic color if enabled, otherwise use config color
+                val finalDoseColor = if (dynamicColorEnabled) {
+                    DynamicColorCalculator.getColorForDose(last.uSvPerHour, thresholds)
+                } else {
+                    doseColor
+                }
+                views.setTextColor(R.id.widgetDoseValue, finalDoseColor)
                 
                 // Convert and format count value based on user's unit preference
                 val (cpsValue, cpsUnitStr) = when (countUnit) {
@@ -128,29 +188,38 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 }
                 views.setTextViewText(R.id.widgetCpsValue, cpsStr)
                 views.setTextViewText(R.id.widgetCpsUnit, cpsUnitStr)
-                views.setTextColor(R.id.widgetCpsValue, COLOR_MAGENTA)
+                
+                // Apply dynamic color to CPS if enabled
+                val finalCpsColor = if (dynamicColorEnabled) {
+                    DynamicColorCalculator.getColorForCps(last.cps, thresholds)
+                } else {
+                    cpsColor
+                }
+                views.setTextColor(R.id.widgetCpsValue, finalCpsColor)
                 
                 // Timestamp
                 val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
                 views.setTextViewText(R.id.widgetTime, fmt.format(Date(last.timestampMs)))
                 views.setTextColor(R.id.widgetTime, if (isConnected) COLOR_MUTED else COLOR_RED)
                 
-                // Generate sparklines if we have enough data
+                // Generate charts based on chart type from config
                 if (recentReadings.size >= 5) {
-                    // Dose sparkline (convert to user's unit)
+                    val chartType = config?.chartType ?: ChartType.SPARKLINE
+                    
+                    // Dose chart (convert to user's unit)
                     val doseValues = when (doseUnit) {
                         Prefs.DoseUnit.USV_H -> recentReadings.map { it.uSvPerHour }
                         Prefs.DoseUnit.NSV_H -> recentReadings.map { it.uSvPerHour * 1000f }
                     }
-                    val doseBitmap = createSparkline(doseValues, sparkWidth, sparkHeight, COLOR_CYAN)
+                    val doseBitmap = createChart(doseValues, recentReadings, sparkWidth, sparkHeight, doseColor, chartType, true)
                     views.setImageViewBitmap(R.id.widgetDoseSparkline, doseBitmap)
                     
-                    // CPS sparkline (convert to user's unit)
+                    // CPS chart (convert to user's unit)
                     val cpsValues = when (countUnit) {
                         Prefs.CountUnit.CPS -> recentReadings.map { it.cps }
                         Prefs.CountUnit.CPM -> recentReadings.map { it.cps * 60f }
                     }
-                    val cpsBitmap = createSparkline(cpsValues, sparkWidth, sparkHeight, COLOR_MAGENTA)
+                    val cpsBitmap = createChart(cpsValues, recentReadings, sparkWidth, sparkHeight, cpsColor, chartType, false)
                     views.setImageViewBitmap(R.id.widgetCpsSparkline, cpsBitmap)
                 }
             }
@@ -167,6 +236,27 @@ class ChartWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widgetRoot, pi)
 
             return views
+        }
+        
+        /**
+         * Create chart bitmap based on chart type.
+         */
+        private fun createChart(
+            values: List<Float>,
+            readings: List<Prefs.LastReading>,
+            width: Int,
+            height: Int,
+            color: Int,
+            chartType: ChartType,
+            isDose: Boolean
+        ): Bitmap {
+            return when (chartType) {
+                ChartType.SPARKLINE, ChartType.LINE -> createSparkline(values, width, height, color)
+                ChartType.BAR -> createBarChart(values, width, height, color)
+                ChartType.CANDLE -> createCandlestickChart(readings, width, height, isDose)
+                ChartType.AREA -> createAreaChart(values, width, height, color)
+                ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            }
         }
         
         private fun createSparkline(values: List<Float>, width: Int, height: Int, color: Int): Bitmap {
@@ -260,6 +350,240 @@ class ChartWidgetProvider : AppWidgetProvider() {
             canvas.drawPath(linePath, linePaint)
             
             return bitmap
+        }
+        
+        /**
+         * Create bar chart for widget display.
+         */
+        private fun createBarChart(values: List<Float>, width: Int, height: Int, color: Int): Bitmap {
+            if (width <= 0 || height <= 0) {
+                return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            }
+            
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            
+            if (values.isEmpty()) {
+                return bitmap
+            }
+            
+            val padding = 8f
+            val chartWidth = width - 2 * padding
+            val chartHeight = height - 2 * padding
+            val barGap = 2f
+            val barWidth = (chartWidth - barGap * (values.size - 1)) / values.size
+            
+            val minVal = 0f
+            val maxVal = values.maxOrNull() ?: 1f
+            val range = if (maxVal > 0.001f) maxVal else 1f
+            
+            val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+            }
+            
+            values.forEachIndexed { index, value ->
+                val x = padding + index * (barWidth + barGap)
+                val barHeight = ((value - minVal) / range) * chartHeight
+                val y = padding + chartHeight - barHeight
+                
+                canvas.drawRoundRect(x, y, x + barWidth, padding + chartHeight, 2f, 2f, barPaint)
+            }
+            
+            return bitmap
+        }
+        
+        /**
+         * Create candlestick chart for widget display.
+         */
+        private fun createCandlestickChart(
+            readings: List<Prefs.LastReading>,
+            width: Int,
+            height: Int,
+            isDose: Boolean
+        ): Bitmap {
+            if (width <= 0 || height <= 0) {
+                return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            }
+            
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            
+            if (readings.size < 4) {
+                return bitmap
+            }
+            
+            // Group readings into buckets for candlestick representation
+            val bucketCount = min(readings.size / 2, 15)
+            val bucketSize = (readings.size + bucketCount - 1) / bucketCount
+            
+            val candles = readings.chunked(bucketSize).map { bucket ->
+                val values = if (isDose) bucket.map { it.uSvPerHour } else bucket.map { it.cps }
+                if (values.isEmpty()) {
+                    CandleData(0f, 0f, 0f, 0f)
+                } else {
+                    CandleData(
+                        open = values.first(),
+                        close = values.last(),
+                        high = values.maxOrNull() ?: 0f,
+                        low = values.minOrNull() ?: 0f
+                    )
+                }
+            }
+            
+            if (candles.isEmpty()) return bitmap
+            
+            val padding = 8f
+            val chartWidth = width - 2 * padding
+            val chartHeight = height - 2 * padding
+            val candleGap = 2f
+            val candleWidth = (chartWidth - candleGap * (candles.size - 1)) / candles.size
+            
+            val minVal = candles.minOfOrNull { it.low } ?: 0f
+            val maxVal = candles.maxOfOrNull { it.high } ?: 1f
+            val range = if (maxVal - minVal > 0.001f) maxVal - minVal else 1f
+            
+            val upColor = 0xFF69F0AE.toInt()
+            val downColor = 0xFFFF5252.toInt()
+            val wickColor = 0xFF9E9E9E.toInt()
+            
+            val wickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = wickColor
+                strokeWidth = 1f
+            }
+            
+            candles.forEachIndexed { index, candle ->
+                val centerX = padding + index * (candleWidth + candleGap) + candleWidth / 2
+                
+                fun toY(value: Float) = padding + chartHeight - ((value - minVal) / range) * chartHeight
+                
+                val highY = toY(candle.high)
+                val lowY = toY(candle.low)
+                val openY = toY(candle.open)
+                val closeY = toY(candle.close)
+                
+                canvas.drawLine(centerX, highY, centerX, lowY, wickPaint)
+                
+                val isUp = candle.close >= candle.open
+                val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = if (isUp) upColor else downColor
+                }
+                
+                val bodyTop = min(openY, closeY)
+                val bodyBottom = max(openY, closeY)
+                val bodyLeft = padding + index * (candleWidth + candleGap)
+                val bodyRight = bodyLeft + candleWidth
+                val actualBottom = if (bodyBottom - bodyTop < 2f) bodyTop + 2f else bodyBottom
+                
+                canvas.drawRect(bodyLeft, bodyTop, bodyRight, actualBottom, bodyPaint)
+            }
+            
+            return bitmap
+        }
+        
+        /**
+         * Create area chart for widget display.
+         */
+        private fun createAreaChart(values: List<Float>, width: Int, height: Int, color: Int): Bitmap {
+            if (width <= 0 || height <= 0) {
+                return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            }
+            
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            
+            if (values.isEmpty() || values.size < 2) {
+                return bitmap
+            }
+            
+            val minV = values.minOrNull() ?: 0f
+            val maxV = values.maxOrNull() ?: 1f
+            val range = max(0.0001f, maxV - minV)
+            
+            val padLeft = 8f
+            val padRight = 8f
+            val padTop = 8f
+            val padBottom = 8f
+            val chartWidth = width - padLeft - padRight
+            val chartHeight = height - padTop - padBottom
+            
+            val fillPath = Path()
+            val n = values.size
+            
+            for (i in 0 until n) {
+                val x = padLeft + (i.toFloat() / max(1, n - 1)) * chartWidth
+                val yNorm = (values[i] - minV) / range
+                val y = padTop + chartHeight * (1f - yNorm)
+                
+                if (i == 0) {
+                    fillPath.moveTo(x, height.toFloat() - padBottom)
+                    fillPath.lineTo(x, y)
+                } else {
+                    fillPath.lineTo(x, y)
+                }
+            }
+            
+            fillPath.lineTo(padLeft + chartWidth, height.toFloat() - padBottom)
+            fillPath.close()
+            
+            // Draw solid fill with high opacity
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                shader = LinearGradient(
+                    0f, padTop, 0f, height.toFloat() - padBottom,
+                    Color.argb(150, Color.red(color), Color.green(color), Color.blue(color)),
+                    Color.argb(30, Color.red(color), Color.green(color), Color.blue(color)),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawPath(fillPath, fillPaint)
+            
+            return bitmap
+        }
+        
+        /**
+         * Get reading data for a specific device or aggregate all devices.
+         */
+        private fun getDataForDevice(context: Context, deviceId: String?): Pair<Prefs.LastReading?, List<Prefs.LastReading>> {
+            return if (deviceId == null) {
+                // No device bound - use global readings (legacy behavior or aggregate)
+                val last = Prefs.getLastReading(context)
+                val recent = Prefs.getRecentReadings(context, 60)
+                last to recent
+            } else {
+                // Device-specific data
+                val last = Prefs.getDeviceLastReading(context, deviceId)
+                val recent = Prefs.getDeviceRecentReadings(context, deviceId, 60)
+                last to recent
+            }
+        }
+        
+        /**
+         * Get colors from widget config or use defaults.
+         */
+        private fun getColors(config: WidgetConfig?): Pair<Int, Int> {
+            if (config == null) {
+                return COLOR_CYAN to COLOR_MAGENTA
+            }
+            
+            val scheme = config.colorScheme
+            val customColors = config.customColors
+            
+            return when {
+                scheme == ColorScheme.CUSTOM && customColors != null -> {
+                    parseColor(customColors.doseColor, COLOR_CYAN) to parseColor(customColors.cpsColor, COLOR_MAGENTA)
+                }
+                else -> {
+                    parseColor(scheme.lineColor, COLOR_CYAN) to COLOR_MAGENTA
+                }
+            }
+        }
+        
+        private fun parseColor(hex: String, default: Int): Int {
+            return try {
+                Color.parseColor("#$hex")
+            } catch (_: Exception) {
+                default
+            }
         }
     }
 }

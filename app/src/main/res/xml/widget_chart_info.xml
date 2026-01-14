@@ -11,4 +11,5 @@
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
     android:previewImage="@mipmap/ic_launcher"
-    android:description="@string/widget_chart_description" />
+    android:description="@string/widget_chart_description"
+    android:configure="com.radiacode.ble.WidgetConfigActivity" />

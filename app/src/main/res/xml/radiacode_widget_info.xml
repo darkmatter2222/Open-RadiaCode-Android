@@ -10,4 +10,5 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
-    android:description="@string/widget_description" />
+    android:description="@string/widget_description"
+    android:configure="com.radiacode.ble.WidgetConfigActivity" />

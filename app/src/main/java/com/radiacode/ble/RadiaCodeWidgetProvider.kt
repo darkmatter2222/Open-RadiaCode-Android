@@ -16,11 +16,15 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+/**
+ * Legacy widget with statistical z-score trend indicators.
+ * Supports per-widget device binding and color customization.
+ */
 class RadiaCodeWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         appWidgetIds.forEach { id ->
-            appWidgetManager.updateAppWidget(id, buildViews(context))
+            appWidgetManager.updateAppWidget(id, buildViews(context, id))
         }
     }
 
@@ -30,7 +34,15 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
         appWidgetId: Int,
         newOptions: Bundle
     ) {
-        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context))
+        appWidgetManager.updateAppWidget(appWidgetId, buildViews(context, appWidgetId))
+    }
+    
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        // Clean up widget configurations when widgets are removed
+        appWidgetIds.forEach { id ->
+            Prefs.deleteWidgetConfig(context, id)
+        }
+        super.onDeleted(context, appWidgetIds)
     }
 
     companion object {
@@ -47,15 +59,56 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
             if (ids.isEmpty()) return
             
             ids.forEach { id ->
-                mgr.updateAppWidget(id, buildViews(context))
+                try {
+                    mgr.updateAppWidget(id, buildViews(context, id))
+                } catch (e: Exception) {
+                    android.util.Log.e("RadiaCode", "RadiaCodeWidget updateAll error", e)
+                }
+            }
+        }
+        
+        /**
+         * Update a specific widget by ID.
+         */
+        fun updateWidget(context: Context, widgetId: Int) {
+            val mgr = AppWidgetManager.getInstance(context) ?: return
+            try {
+                mgr.updateAppWidget(widgetId, buildViews(context, widgetId))
+            } catch (e: Exception) {
+                android.util.Log.e("RadiaCode", "RadiaCodeWidget updateWidget error for $widgetId", e)
+            }
+        }
+        
+        /**
+         * Update all widgets bound to a specific device.
+         */
+        fun updateForDevice(context: Context, deviceId: String?) {
+            val mgr = AppWidgetManager.getInstance(context) ?: return
+            val ids = mgr.getAppWidgetIds(ComponentName(context, RadiaCodeWidgetProvider::class.java))
+            
+            ids.forEach { id ->
+                val config = Prefs.getWidgetConfig(context, id)
+                // Update if widget is bound to this device OR if widget has no config (legacy)
+                if (config == null || config.deviceId == deviceId) {
+                    try {
+                        mgr.updateAppWidget(id, buildViews(context, id))
+                    } catch (e: Exception) {
+                        android.util.Log.e("RadiaCode", "RadiaCodeWidget updateForDevice error", e)
+                    }
+                }
             }
         }
 
-        private fun buildViews(context: Context): RemoteViews {
+        private fun buildViews(context: Context, widgetId: Int): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.radiacode_widget_simple)
 
-            val last = Prefs.getLastReading(context)
-            val recentReadings = Prefs.getRecentReadings(context, 30)
+            try {
+            // Get widget configuration (or use defaults for legacy widgets)
+            val config = Prefs.getWidgetConfig(context, widgetId)
+            val deviceId = config?.deviceId
+            
+            // Get data based on device binding
+            val (last, recentReadings) = getDataForDevice(context, deviceId)
             val isConnected = last != null && (System.currentTimeMillis() - last.timestampMs) < 30000
             
             // Status indicator color
@@ -105,15 +158,35 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widgetCpsTrend, cpsTrendText)
                 views.setTextColor(R.id.widgetCpsTrend, cpsTrendColor)
                 
-                // Color the main values based on z-score intensity
-                views.setTextColor(R.id.widgetDose, getValueColor(doseZScore, COLOR_CYAN))
-                views.setTextColor(R.id.widgetCps, getValueColor(cpsZScore, COLOR_MAGENTA))
+                // Color the main values based on z-score intensity or dynamic color
+                val dynamicColorEnabled = config?.dynamicColorEnabled == true
+                val thresholds = if (dynamicColorEnabled) Prefs.getDynamicColorThresholds(context) else null
+                
+                val effectiveDoseColor = if (dynamicColorEnabled) {
+                    DynamicColorCalculator.getColorForDose(last.uSvPerHour, thresholds)
+                } else {
+                    getValueColor(doseZScore, COLOR_CYAN)
+                }
+                
+                val effectiveCpsColor = if (dynamicColorEnabled) {
+                    DynamicColorCalculator.getColorForCps(last.cps, thresholds)
+                } else {
+                    getValueColor(cpsZScore, COLOR_MAGENTA)
+                }
+                
+                views.setTextColor(R.id.widgetDose, effectiveDoseColor)
+                views.setTextColor(R.id.widgetCps, effectiveCpsColor)
                 
                 // Status/Timestamp
                 val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
                 val statusText = if (isConnected) "● ${fmt.format(Date(last.timestampMs))}" else fmt.format(Date(last.timestampMs))
                 views.setTextViewText(R.id.widgetStatus, statusText)
                 views.setTextColor(R.id.widgetStatus, if (isConnected) COLOR_GREEN else COLOR_MUTED)
+            }
+            } catch (e: Exception) {
+                android.util.Log.e("RadiaCode", "RadiaCodeWidget buildViews error", e)
+                views.setTextViewText(R.id.widgetDose, "ERR")
+                views.setTextViewText(R.id.widgetCps, "ERR")
             }
 
             // Click handler to launch app
@@ -123,6 +196,31 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widgetRoot, pi)
 
             return views
+        }
+        
+        /**
+         * Get reading data for a specific device or aggregate all devices.
+         */
+        private fun getDataForDevice(context: Context, deviceId: String?): Pair<Prefs.LastReading?, List<Prefs.LastReading>> {
+            return if (deviceId == null) {
+                // No device bound - use global readings (legacy behavior)
+                val last = Prefs.getLastReading(context)
+                val recent = Prefs.getRecentReadings(context, 30)
+                last to recent
+            } else {
+                // Device-specific data
+                val last = Prefs.getDeviceLastReading(context, deviceId)
+                val recent = Prefs.getDeviceRecentReadings(context, deviceId, 30)
+                last to recent
+            }
+        }
+        
+        private fun parseColor(hex: String, default: Int): Int {
+            return try {
+                Color.parseColor("#$hex")
+            } catch (_: Exception) {
+                default
+            }
         }
         
         private data class Stats(val mean: Float, val stdDev: Float)
