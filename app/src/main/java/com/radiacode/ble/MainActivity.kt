@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.core.view.GravityCompat
@@ -84,6 +85,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cpsStats: StatRowView
 
     private lateinit var sessionInfo: TextView
+    
+    // Intelligence card
+    private lateinit var intelligenceCard: LinearLayout
+    private lateinit var intelligenceSummary: TextView
+    private lateinit var intelligenceAlertBadge: TextView
+    private lateinit var doseTrendLabel: TextView
+    private lateinit var predictedDoseLabel: TextView
+    private lateinit var anomalyCountLabel: TextView
 
     // Dashboard - Time window chips
     private lateinit var timeWindowChips: ChipGroup
@@ -281,6 +290,14 @@ class MainActivity : AppCompatActivity() {
         cpsStats = findViewById(R.id.cpsStats)
 
         sessionInfo = findViewById(R.id.sessionInfo)
+        
+        // Intelligence card
+        intelligenceCard = findViewById(R.id.intelligenceCard)
+        intelligenceSummary = findViewById(R.id.intelligenceSummary)
+        intelligenceAlertBadge = findViewById(R.id.intelligenceAlertBadge)
+        doseTrendLabel = findViewById(R.id.doseTrendLabel)
+        predictedDoseLabel = findViewById(R.id.predictedDoseLabel)
+        anomalyCountLabel = findViewById(R.id.anomalyCountLabel)
 
         timeWindowChips = findViewById(R.id.timeWindowChips)
         doseUnitChips = findViewById(R.id.doseUnitChips)
@@ -1009,6 +1026,7 @@ class MainActivity : AppCompatActivity() {
                 updateCharts(doseSeries, cpsSeries)
 
                 updateSessionInfo()
+                updateIntelligenceCard()
 
                 mainHandler.postDelayed(this, 1000)
             }
@@ -1184,6 +1202,78 @@ class MainActivity : AppCompatActivity() {
         }
         mainHandler.post {
             sessionInfo.text = "SESSION: $timeStr • $sampleCount samples"
+        }
+    }
+    
+    private fun updateIntelligenceCard() {
+        if (sampleCount < 10) {
+            // Not enough data yet
+            mainHandler.post {
+                intelligenceCard.visibility = View.GONE
+            }
+            return
+        }
+        
+        // Get intelligence report (use selected device if applicable)
+        val currentDeviceId = Prefs.getSelectedDeviceId(this)
+        val report = IntelligenceEngine.analyzeReadings(this, currentDeviceId)
+        
+        mainHandler.post {
+            if (!report.hasEnoughData) {
+                intelligenceCard.visibility = View.GONE
+                return@post
+            }
+            
+            intelligenceCard.visibility = View.VISIBLE
+            intelligenceSummary.text = report.summary
+            
+            // Update alert badge
+            val alertCount = report.alerts.size
+            if (alertCount > 0) {
+                intelligenceAlertBadge.visibility = View.VISIBLE
+                intelligenceAlertBadge.text = alertCount.toString()
+                // Color by severity
+                val hasHighAlert = report.alerts.any { it.severity == AlertSeverity.HIGH }
+                val badgeColor = if (hasHighAlert) getColor(R.color.pro_red) else getColor(R.color.pro_amber)
+                intelligenceAlertBadge.background.setTint(badgeColor)
+            } else {
+                intelligenceAlertBadge.visibility = View.GONE
+            }
+            
+            // Update trend label
+            val dosePrediction = report.predictions.firstOrNull { it.type == PredictionType.NEXT_DOSE }
+            if (dosePrediction != null) {
+                val trendDirection = when {
+                    dosePrediction.predictedValue > (lastShownReading?.uSvPerHour ?: 0f) * 1.05f -> "↑ Rising"
+                    dosePrediction.predictedValue < (lastShownReading?.uSvPerHour ?: 0f) * 0.95f -> "↓ Falling"
+                    else -> "→ Stable"
+                }
+                val trendColor = when {
+                    trendDirection.contains("Rising") -> getColor(R.color.pro_amber)
+                    trendDirection.contains("Falling") -> getColor(R.color.pro_cyan)
+                    else -> getColor(R.color.pro_green)
+                }
+                doseTrendLabel.text = trendDirection
+                doseTrendLabel.setTextColor(trendColor)
+                
+                // Predicted value
+                val doseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+                val predictedStr = when (doseUnit) {
+                    Prefs.DoseUnit.USV_H -> String.format("%.3f μSv/h", dosePrediction.predictedValue)
+                    Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", dosePrediction.predictedValue * 1000)
+                }
+                predictedDoseLabel.text = predictedStr
+            }
+            
+            // Update anomaly count
+            val anomalyCount = report.anomalies.size
+            anomalyCountLabel.text = anomalyCount.toString()
+            val anomalyColor = when {
+                anomalyCount == 0 -> getColor(R.color.pro_green)
+                anomalyCount <= 2 -> getColor(R.color.pro_amber)
+                else -> getColor(R.color.pro_red)
+            }
+            anomalyCountLabel.setTextColor(anomalyColor)
         }
     }
 

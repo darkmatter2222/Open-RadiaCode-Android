@@ -89,6 +89,23 @@ class ChartWidgetProvider : AppWidgetProvider() {
         }
         
         /**
+         * Get trend indicator symbol and color based on rate of change.
+         * Returns a pair of (symbol, color).
+         */
+        private fun getTrendIndicator(rateOfChange: Float, avgValue: Float): Pair<String, Int> {
+            // Calculate threshold based on average value (5% of average as threshold)
+            val threshold = avgValue * 0.05f
+            
+            return when {
+                rateOfChange > threshold * 2 -> "↑↑" to COLOR_RED       // Rapid rise
+                rateOfChange > threshold -> "↑" to 0xFFFFD600.toInt()    // Rising (yellow)
+                rateOfChange < -threshold * 2 -> "↓↓" to 0xFF4DD0E1.toInt() // Rapid fall (cyan)
+                rateOfChange < -threshold -> "↓" to COLOR_GREEN          // Falling
+                else -> "" to 0 // Stable - no indicator
+            }
+        }
+        
+        /**
          * Update all widgets bound to a specific device.
          */
         fun updateForDevice(context: Context, deviceId: String?) {
@@ -132,14 +149,20 @@ class ChartWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widgetStatusDot, if (isConnected) "●" else "○")
             views.setTextColor(R.id.widgetStatusDot, if (isConnected) COLOR_GREEN else COLOR_RED)
             
-            // Device name - show bound device or default title
-            val deviceName = if (deviceId != null) {
-                val devices = Prefs.getDevices(context)
-                devices.find { it.id == deviceId }?.displayName ?: "RadiaCode"
-            } else {
-                "Open RadiaCode"
-            }
+            // Device name and color - show bound device or default title
+            val device = if (deviceId != null) {
+                Prefs.getDevices(context).find { it.id == deviceId }
+            } else null
+            
+            val deviceName = device?.displayName ?: "Open RadiaCode"
             views.setTextViewText(R.id.widgetDeviceName, deviceName)
+            
+            // Set device color on accent bar and dot
+            val deviceColorInt = try {
+                Color.parseColor("#${device?.colorHex ?: "00E5FF"}")
+            } catch (_: Exception) { COLOR_CYAN }
+            views.setInt(R.id.widgetDeviceColorBar, "setBackgroundColor", deviceColorInt)
+            views.setTextColor(R.id.widgetDeviceColorDot, deviceColorInt)
             
             // Anomaly detection badge
             if (recentReadings.size >= 10 && config?.showIntelligence != false) {
@@ -222,6 +245,48 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 }
                 views.setTextColor(R.id.widgetCpsValue, finalCpsColor)
                 
+                // Calculate and display rate of change (trend indicators)
+                if (recentReadings.size >= 10) {
+                    val doseRateValues = when (doseUnit) {
+                        Prefs.DoseUnit.USV_H -> recentReadings.map { it.uSvPerHour }
+                        Prefs.DoseUnit.NSV_H -> recentReadings.map { it.uSvPerHour * 1000f }
+                    }
+                    val cpsRateValues = when (countUnit) {
+                        Prefs.CountUnit.CPS -> recentReadings.map { it.cps }
+                        Prefs.CountUnit.CPM -> recentReadings.map { it.cps * 60f }
+                    }
+                    
+                    // Calculate rate of change (using last 10 samples)
+                    val doseRoc = StatisticsCalculator.calculateRateOfChange(doseRateValues.takeLast(10))
+                    val cpsRoc = StatisticsCalculator.calculateRateOfChange(cpsRateValues.takeLast(10))
+                    
+                    // Determine trend symbols and colors
+                    val (doseTrendSymbol, doseTrendColor) = getTrendIndicator(doseRoc, doseRateValues.average().toFloat())
+                    val (cpsTrendSymbol, cpsTrendColor) = getTrendIndicator(cpsRoc, cpsRateValues.average().toFloat())
+                    
+                    // Set dose trend
+                    if (doseTrendSymbol.isNotEmpty()) {
+                        views.setTextViewText(R.id.widgetDoseTrend, doseTrendSymbol)
+                        views.setTextColor(R.id.widgetDoseTrend, doseTrendColor)
+                        views.setViewVisibility(R.id.widgetDoseTrend, android.view.View.VISIBLE)
+                    } else {
+                        views.setViewVisibility(R.id.widgetDoseTrend, android.view.View.GONE)
+                    }
+                    
+                    // Set CPS trend
+                    if (cpsTrendSymbol.isNotEmpty()) {
+                        views.setTextViewText(R.id.widgetCpsTrend, cpsTrendSymbol)
+                        views.setTextColor(R.id.widgetCpsTrend, cpsTrendColor)
+                        views.setViewVisibility(R.id.widgetCpsTrend, android.view.View.VISIBLE)
+                    } else {
+                        views.setViewVisibility(R.id.widgetCpsTrend, android.view.View.GONE)
+                    }
+                } else {
+                    // Not enough data for trend
+                    views.setViewVisibility(R.id.widgetDoseTrend, android.view.View.GONE)
+                    views.setViewVisibility(R.id.widgetCpsTrend, android.view.View.GONE)
+                }
+                
                 // Timestamp
                 val fmt = SimpleDateFormat("HH:mm:ss", Locale.US)
                 views.setTextViewText(R.id.widgetTime, fmt.format(Date(last.timestampMs)))
@@ -230,13 +295,14 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 // Generate charts based on chart type from config
                 if (recentReadings.size >= 5) {
                     val chartType = config?.chartType ?: ChartType.SPARKLINE
+                    val showBands = config?.showBollingerBands ?: false
                     
                     // Dose chart (convert to user's unit)
                     val doseValues = when (doseUnit) {
                         Prefs.DoseUnit.USV_H -> recentReadings.map { it.uSvPerHour }
                         Prefs.DoseUnit.NSV_H -> recentReadings.map { it.uSvPerHour * 1000f }
                     }
-                    val doseBitmap = createChart(doseValues, recentReadings, sparkWidth, sparkHeight, doseColor, chartType, true)
+                    val doseBitmap = createChart(doseValues, recentReadings, sparkWidth, sparkHeight, doseColor, chartType, true, showBands)
                     views.setImageViewBitmap(R.id.widgetDoseSparkline, doseBitmap)
                     
                     // CPS chart (convert to user's unit)
@@ -244,7 +310,7 @@ class ChartWidgetProvider : AppWidgetProvider() {
                         Prefs.CountUnit.CPS -> recentReadings.map { it.cps }
                         Prefs.CountUnit.CPM -> recentReadings.map { it.cps * 60f }
                     }
-                    val cpsBitmap = createChart(cpsValues, recentReadings, sparkWidth, sparkHeight, cpsColor, chartType, false)
+                    val cpsBitmap = createChart(cpsValues, recentReadings, sparkWidth, sparkHeight, cpsColor, chartType, false, showBands)
                     views.setImageViewBitmap(R.id.widgetCpsSparkline, cpsBitmap)
                 }
             }
@@ -273,10 +339,11 @@ class ChartWidgetProvider : AppWidgetProvider() {
             height: Int,
             color: Int,
             chartType: ChartType,
-            isDose: Boolean
+            isDose: Boolean,
+            showBollingerBands: Boolean = false
         ): Bitmap {
             return when (chartType) {
-                ChartType.SPARKLINE, ChartType.LINE -> createSparkline(values, width, height, color)
+                ChartType.SPARKLINE, ChartType.LINE -> createSparkline(values, width, height, color, showBollingerBands)
                 ChartType.BAR -> createBarChart(values, width, height, color)
                 ChartType.CANDLE -> createCandlestickChart(readings, width, height, isDose)
                 ChartType.AREA -> createAreaChart(values, width, height, color)
@@ -284,7 +351,7 @@ class ChartWidgetProvider : AppWidgetProvider() {
             }
         }
         
-        private fun createSparkline(values: List<Float>, width: Int, height: Int, color: Int): Bitmap {
+        private fun createSparkline(values: List<Float>, width: Int, height: Int, color: Int, showBollingerBands: Boolean = false): Bitmap {
             if (width <= 0 || height <= 0) {
                 return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             }
@@ -341,6 +408,79 @@ class ChartWidgetProvider : AppWidgetProvider() {
             // Close fill path
             fillPath.lineTo(padLeft + chartWidth, height.toFloat() - padBottom)
             fillPath.close()
+            
+            // Draw Bollinger Bands if enabled
+            if (showBollingerBands && values.size >= 10) {
+                val windowSize = min(20, values.size / 2).coerceAtLeast(5)
+                val bands = StatisticsCalculator.calculateBollingerBands(values, windowSize, 2.0f)
+                
+                if (!bands.isEmpty()) {
+                    // Calculate expanded range to include bands
+                    val bandMin = bands.lower.minOrNull() ?: minV
+                    val bandMax = bands.upper.maxOrNull() ?: maxV
+                    val expandedMin = min(minV, bandMin)
+                    val expandedMax = max(maxV, bandMax)
+                    val expandedRange = max(0.0001f, expandedMax - expandedMin)
+                    
+                    // Draw band fill (area between upper and lower)
+                    val bandFillPath = Path()
+                    val startIndex = values.size - bands.middle.size
+                    
+                    // Upper band line (forward)
+                    for (i in bands.upper.indices) {
+                        val dataIndex = startIndex + i
+                        val x = padLeft + (dataIndex.toFloat() / max(1, n - 1)) * chartWidth
+                        val yNorm = (bands.upper[i] - expandedMin) / expandedRange
+                        val y = padTop + chartHeight * (1f - yNorm)
+                        if (i == 0) bandFillPath.moveTo(x, y) else bandFillPath.lineTo(x, y)
+                    }
+                    // Lower band line (backward)
+                    for (i in bands.lower.indices.reversed()) {
+                        val dataIndex = startIndex + i
+                        val x = padLeft + (dataIndex.toFloat() / max(1, n - 1)) * chartWidth
+                        val yNorm = (bands.lower[i] - expandedMin) / expandedRange
+                        val y = padTop + chartHeight * (1f - yNorm)
+                        bandFillPath.lineTo(x, y)
+                    }
+                    bandFillPath.close()
+                    
+                    // Draw band fill with semi-transparent color
+                    val bandFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.FILL
+                        this.color = Color.argb(30, 255, 255, 255)
+                    }
+                    canvas.drawPath(bandFillPath, bandFillPaint)
+                    
+                    // Draw upper and lower band lines
+                    val bandLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1f
+                        this.color = Color.argb(100, 255, 255, 255)
+                    }
+                    
+                    // Upper band
+                    val upperPath = Path()
+                    for (i in bands.upper.indices) {
+                        val dataIndex = startIndex + i
+                        val x = padLeft + (dataIndex.toFloat() / max(1, n - 1)) * chartWidth
+                        val yNorm = (bands.upper[i] - expandedMin) / expandedRange
+                        val y = padTop + chartHeight * (1f - yNorm)
+                        if (i == 0) upperPath.moveTo(x, y) else upperPath.lineTo(x, y)
+                    }
+                    canvas.drawPath(upperPath, bandLinePaint)
+                    
+                    // Lower band
+                    val lowerPath = Path()
+                    for (i in bands.lower.indices) {
+                        val dataIndex = startIndex + i
+                        val x = padLeft + (dataIndex.toFloat() / max(1, n - 1)) * chartWidth
+                        val yNorm = (bands.lower[i] - expandedMin) / expandedRange
+                        val y = padTop + chartHeight * (1f - yNorm)
+                        if (i == 0) lowerPath.moveTo(x, y) else lowerPath.lineTo(x, y)
+                    }
+                    canvas.drawPath(lowerPath, bandLinePaint)
+                }
+            }
             
             // Draw gradient fill
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

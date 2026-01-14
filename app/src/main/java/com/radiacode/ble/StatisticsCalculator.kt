@@ -181,6 +181,17 @@ object StatisticsCalculator {
             }
         }
     }
+    
+    /**
+     * Calculate rate of change between first and last values in a list.
+     * Returns the absolute change per sample (useful for trend indicators).
+     */
+    fun calculateRateOfChange(values: List<Float>): Float {
+        if (values.size < 2) return 0f
+        val first = values.first()
+        val last = values.last()
+        return (last - first) / values.size
+    }
 
     /**
      * Predict next value using linear regression.
@@ -188,6 +199,36 @@ object StatisticsCalculator {
     fun predictNextValue(values: List<Float>): Float {
         val trend = calculateTrend(values)
         return trend.slope * values.size + trend.intercept
+    }
+
+    /**
+     * Calculate Bollinger Bands.
+     * Returns middle band (SMA), upper band (SMA + k*stdDev), lower band (SMA - k*stdDev)
+     */
+    fun calculateBollingerBands(
+        values: List<Float>,
+        windowSize: Int = 20,
+        numStdDev: Float = 2.0f
+    ): BollingerBands {
+        if (values.size < windowSize) {
+            return BollingerBands(emptyList(), emptyList(), emptyList())
+        }
+        
+        val middleBand = mutableListOf<Float>()
+        val upperBand = mutableListOf<Float>()
+        val lowerBand = mutableListOf<Float>()
+        
+        for (i in (windowSize - 1) until values.size) {
+            val window = values.subList(i - windowSize + 1, i + 1)
+            val mean = window.average().toFloat()
+            val stdDev = sqrt(window.map { (it - mean).pow(2) }.average().toFloat())
+            
+            middleBand.add(mean)
+            upperBand.add(mean + numStdDev * stdDev)
+            lowerBand.add(mean - numStdDev * stdDev)
+        }
+        
+        return BollingerBands(middleBand, upperBand, lowerBand)
     }
 
     /**
@@ -267,4 +308,15 @@ enum class TrendDirection {
 
 enum class TrendStrength {
     VERY_WEAK, WEAK, MODERATE, STRONG, VERY_STRONG
+}
+
+/**
+ * Bollinger Bands result.
+ */
+data class BollingerBands(
+    val middle: List<Float>,  // SMA line
+    val upper: List<Float>,   // Upper band (SMA + k*stdDev)
+    val lower: List<Float>    // Lower band (SMA - k*stdDev)
+) {
+    fun isEmpty() = middle.isEmpty()
 }

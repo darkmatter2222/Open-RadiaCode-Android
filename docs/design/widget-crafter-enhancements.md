@@ -2,9 +2,9 @@
 
 > **Status:** ✅ Phase 1-6 Core Implementation Complete  
 > **Created:** January 13, 2026  
-> **Version:** 0.07  
+> **Version:** 0.08  
 > **Branch:** `multi-device`
-> **Last Bug Fix:** Device ID mismatch fixed (v0.07)
+> **Last Update:** Added Intelligence Report card, Bollinger Bands, Rate of Change indicators (v0.08)
 
 ---
 
@@ -114,9 +114,9 @@
 
 ### 4.15 Device-Specific Colors (Extend)
 - [x] Widget shows device name when bound
-- [ ] Widget backgrounds tinted with device color
+- [x] Widget color bar shows device color
+- [x] Widget color dot shows device color
 - [x] Chart lines auto-use device color
-- [ ] Legend shows device name + color dot
 
 ---
 
@@ -134,13 +134,13 @@
 ### 5.10 Moving Average Bands
 - [x] SMA (Simple Moving Average) in StatisticsCalculator
 - [x] EMA (Exponential Moving Average) in StatisticsCalculator
-- [ ] Bollinger Bands overlay in chart
-- [ ] UI toggle in chart settings
-- [ ] Configurable window size
+- [x] Bollinger Bands overlay in chart
+- [x] UI toggle in chart settings (WidgetConfigActivity)
+- [x] Configurable window size
 
 ### 5.11 Rate of Change Overlay
 - [x] Calculate rate of change in StatisticsCalculator
-- [ ] Overlay on existing chart (UI pending)
+- [x] Trend indicators (↑↑ ↑ → ↓ ↓↓) on widget values
 
 ---
 
@@ -166,13 +166,16 @@
 - [x] Rising trend alerts
 - [x] High variability alerts
 - [x] Elevated reading alerts
-- [ ] Push notification integration (pending)
+- [x] Push notification integration (via AlertEvaluator)
 
 ### 6.20 Intelligence Report Summary
 - [x] Combined IntelligenceReport class
 - [x] Summary text generation
 - [x] Anomaly, prediction, and alert lists
-- [ ] Display in Dashboard/Widget (UI pending)
+- [x] Intelligence Report card in Dashboard
+- [x] Trend direction indicator
+- [x] Predicted next value display
+- [x] Anomaly count display
 
 ---
 

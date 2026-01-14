@@ -121,14 +121,20 @@ class SimpleWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widgetStatusDot, if (isConnected) "●" else "○")
             views.setTextColor(R.id.widgetStatusDot, if (isConnected) COLOR_GREEN else COLOR_RED)
             
-            // Device name - show bound device or default title
-            val deviceName = if (deviceId != null) {
-                val devices = Prefs.getDevices(context)
-                devices.find { it.id == deviceId }?.displayName ?: "RadiaCode"
-            } else {
-                "Open RadiaCode"
-            }
+            // Device name and color - show bound device or default title
+            val device = if (deviceId != null) {
+                Prefs.getDevices(context).find { it.id == deviceId }
+            } else null
+            
+            val deviceName = device?.displayName ?: "Open RadiaCode"
             views.setTextViewText(R.id.widgetDeviceName, deviceName)
+            
+            // Set device color on accent bar and dot
+            val deviceColorInt = try {
+                Color.parseColor("#${device?.colorHex ?: "00E5FF"}")
+            } catch (_: Exception) { COLOR_CYAN }
+            views.setInt(R.id.widgetDeviceColorBar, "setBackgroundColor", deviceColorInt)
+            views.setTextColor(R.id.widgetDeviceColorDot, deviceColorInt)
             
             // Anomaly detection badge
             if (recentReadings.size >= 10 && config?.showIntelligence != false) {

@@ -36,6 +36,7 @@ class WidgetConfigActivity : AppCompatActivity() {
     private lateinit var showTimeSwitch: SwitchMaterial
     private lateinit var showSparklineSwitch: SwitchMaterial
     private lateinit var showIntelligenceSwitch: SwitchMaterial
+    private lateinit var showBollingerBandsSwitch: SwitchMaterial
     private lateinit var dynamicColorSwitch: SwitchMaterial
     private lateinit var previewCard: MaterialCardView
     private lateinit var previewDoseValue: TextView
@@ -97,6 +98,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         showTimeSwitch = findViewById(R.id.showTimeSwitch)
         showSparklineSwitch = findViewById(R.id.showSparklineSwitch)
         showIntelligenceSwitch = findViewById(R.id.showIntelligenceSwitch)
+        showBollingerBandsSwitch = findViewById(R.id.showBollingerBandsSwitch)
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch)
         previewCard = findViewById(R.id.previewCard)
         previewDoseValue = findViewById(R.id.previewDoseValue)
@@ -238,6 +240,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         showCpsSwitch.setOnCheckedChangeListener { _, _ -> updatePreview() }
         showTimeSwitch.setOnCheckedChangeListener { _, _ -> updatePreview() }
         showSparklineSwitch.setOnCheckedChangeListener { _, _ -> updatePreview() }
+        showBollingerBandsSwitch.setOnCheckedChangeListener { _, _ -> updatePreview() }
         dynamicColorSwitch.setOnCheckedChangeListener { _, _ -> updatePreview() }
     }
     
@@ -282,6 +285,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         showTimeSwitch.isChecked = existingConfig.showTime
         showSparklineSwitch.isChecked = existingConfig.showSparkline
         showIntelligenceSwitch.isChecked = existingConfig.showIntelligence
+        showBollingerBandsSwitch.isChecked = existingConfig.showBollingerBands
         dynamicColorSwitch.isChecked = existingConfig.dynamicColorEnabled
     }
     
@@ -400,6 +404,7 @@ class WidgetConfigActivity : AppCompatActivity() {
             showStatus = true,
             showSparkline = showSparklineSwitch.isChecked,
             showIntelligence = showIntelligenceSwitch.isChecked,
+            showBollingerBands = showBollingerBandsSwitch.isChecked,
             updateIntervalSeconds = selectedUpdateInterval,
             timeWindowSeconds = selectedTimeWindow,
             colorScheme = selectedColorScheme,

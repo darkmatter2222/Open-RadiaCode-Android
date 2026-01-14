@@ -463,6 +463,140 @@
                             android:textSize="11sp" />
                     </LinearLayout>
 
+                    <!-- Intelligence Report Card -->
+                    <LinearLayout
+                        android:id="@+id/intelligenceCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="12dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="INTELLIGENCE REPORT"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <!-- Alert badge count -->
+                            <TextView
+                                android:id="@+id/intelligenceAlertBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/badge_background"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="2dp"
+                                android:text="0"
+                                android:textColor="@color/pro_background"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <!-- Summary text -->
+                        <TextView
+                            android:id="@+id/intelligenceSummary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Analyzing data..."
+                            android:textColor="@color/pro_text_secondary"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="4dp" />
+
+                        <!-- Trend indicator row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+                            
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Dose Trend"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/doseTrendLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="—"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                            
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Predicted Next"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/predictedDoseLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="—"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="14sp" />
+                            </LinearLayout>
+                            
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Anomalies"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/anomalyCountLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="0"
+                                    android:textColor="@color/pro_green"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                    </LinearLayout>
+
                 </LinearLayout>
                 
                 <!-- All Devices overlay (shown when no specific device selected) -->

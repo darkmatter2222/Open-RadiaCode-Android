@@ -7,6 +7,14 @@
     android:background="@drawable/widget_background"
     android:padding="12dp">
 
+    <!-- Device Color Accent Bar -->
+    <View
+        android:id="@+id/widgetDeviceColorBar"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_marginBottom="6dp"
+        android:background="#00E5FF" />
+
     <!-- Header Row -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,10 +22,20 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
+        <!-- Device Color Dot -->
+        <TextView
+            android:id="@+id/widgetDeviceColorDot"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="●"
+            android:textSize="10sp"
+            android:textColor="#00E5FF" />
+
         <TextView
             android:id="@+id/widgetStatusDot"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="3dp"
             android:text="●"
             android:textSize="12sp"
             android:textColor="#69F0AE" />
