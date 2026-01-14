@@ -115,6 +115,31 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widgetStatusIndicator, if (isConnected) COLOR_GREEN else COLOR_RED)
             views.setTextViewText(R.id.widgetStatusIndicator, if (isConnected) "●" else "○")
             
+            // Device name - show bound device or default title
+            val deviceName = if (deviceId != null) {
+                val devices = Prefs.getDevices(context)
+                devices.find { it.macAddress == deviceId }?.displayName?.uppercase() ?: "RADIACODE"
+            } else {
+                "OPEN RADIACODE"
+            }
+            views.setTextViewText(R.id.widgetDeviceName, deviceName)
+            
+            // Anomaly detection badge
+            if (recentReadings.size >= 10 && config?.showIntelligence != false) {
+                val doseValues = recentReadings.map { it.uSvPerHour }
+                val anomalyIndices = StatisticsCalculator.detectAnomaliesZScore(doseValues, 2.5f)
+                if (anomalyIndices.isNotEmpty()) {
+                    views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.VISIBLE)
+                    // Color by severity: recent anomaly = red, older = yellow
+                    val recentAnomaly = anomalyIndices.any { it >= recentReadings.size - 3 }
+                    views.setTextColor(R.id.widgetAnomalyBadge, if (recentAnomaly) COLOR_RED else 0xFFFFD600.toInt())
+                } else {
+                    views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.GONE)
+                }
+            } else {
+                views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.GONE)
+            }
+            
             if (last == null) {
                 views.setTextViewText(R.id.widgetDose, "—")
                 views.setTextViewText(R.id.widgetCps, "—")

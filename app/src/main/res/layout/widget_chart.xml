@@ -23,13 +23,27 @@
             android:textColor="#69F0AE" />
 
         <TextView
+            android:id="@+id/widgetDeviceName"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:text="Open RadiaCode"
             android:textColor="#9E9EA8"
-            android:textSize="13sp" />
+            android:textSize="13sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <!-- Anomaly Badge -->
+        <TextView
+            android:id="@+id/widgetAnomalyBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="⚠"
+            android:textSize="14sp"
+            android:textColor="#FFD600"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/widgetTime"

@@ -35,6 +35,7 @@ class WidgetConfigActivity : AppCompatActivity() {
     private lateinit var showCpsSwitch: SwitchMaterial
     private lateinit var showTimeSwitch: SwitchMaterial
     private lateinit var showSparklineSwitch: SwitchMaterial
+    private lateinit var showIntelligenceSwitch: SwitchMaterial
     private lateinit var dynamicColorSwitch: SwitchMaterial
     private lateinit var previewCard: MaterialCardView
     private lateinit var previewDoseValue: TextView
@@ -95,6 +96,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         showCpsSwitch = findViewById(R.id.showCpsSwitch)
         showTimeSwitch = findViewById(R.id.showTimeSwitch)
         showSparklineSwitch = findViewById(R.id.showSparklineSwitch)
+        showIntelligenceSwitch = findViewById(R.id.showIntelligenceSwitch)
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch)
         previewCard = findViewById(R.id.previewCard)
         previewDoseValue = findViewById(R.id.previewDoseValue)
@@ -268,6 +270,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         showCpsSwitch.isChecked = existingConfig.showCps
         showTimeSwitch.isChecked = existingConfig.showTime
         showSparklineSwitch.isChecked = existingConfig.showSparkline
+        showIntelligenceSwitch.isChecked = existingConfig.showIntelligence
         dynamicColorSwitch.isChecked = existingConfig.dynamicColorEnabled
     }
     
@@ -352,6 +355,7 @@ class WidgetConfigActivity : AppCompatActivity() {
             showTime = showTimeSwitch.isChecked,
             showStatus = true,
             showSparkline = showSparklineSwitch.isChecked,
+            showIntelligence = showIntelligenceSwitch.isChecked,
             updateIntervalSeconds = selectedUpdateInterval,
             timeWindowSeconds = selectedTimeWindow,
             colorScheme = selectedColorScheme,

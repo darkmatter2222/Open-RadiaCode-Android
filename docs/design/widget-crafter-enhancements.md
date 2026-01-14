@@ -2,7 +2,7 @@
 
 > **Status:** ✅ Phase 1-6 Core Implementation Complete  
 > **Created:** January 13, 2026  
-> **Version:** 0.05  
+> **Version:** 0.06  
 > **Branch:** `feature/widget-crafter`
 
 ---
@@ -113,7 +113,7 @@
 ### 4.15 Device-Specific Colors (Extend)
 - [x] Widget shows device name when bound
 - [ ] Widget backgrounds tinted with device color
-- [ ] Chart lines auto-use device color
+- [x] Chart lines auto-use device color
 - [ ] Legend shows device name + color dot
 
 ---
@@ -150,7 +150,7 @@
 - [x] IQR-based anomaly detection (in StatisticsCalculator)
 - [x] Anomaly severity classification (LOW/MEDIUM/HIGH)
 - [x] Generate anomaly reports with timestamps
-- [ ] Widget badge for anomalies (UI pending)
+- [x] Widget badge for anomalies (⚠ indicator)
 
 ### 6.18 Trend Analysis & Predictions
 - [x] Linear regression slope analysis
@@ -202,13 +202,13 @@
 | Phase | Status | Completion |
 |-------|--------|------------|
 | Phase 1: Foundation | ✅ Complete | 100% |
-| Phase 2: Widget Crafter | ✅ Complete | 90% |
+| Phase 2: Widget Crafter | ✅ Complete | 95% |
 | Phase 3: Charts | ✅ Complete | 100% |
-| Phase 4: Color/Theme | ✅ Complete | 85% |
-| Phase 5: Analytics | ✅ Complete | 80% |
-| Phase 6: Intelligence | ✅ Complete | 85% |
+| Phase 4: Color/Theme | ✅ Complete | 90% |
+| Phase 5: Analytics | ✅ Complete | 85% |
+| Phase 6: Intelligence | ✅ Complete | 95% |
 
-**Overall Progress: ~90% Core Features Complete**
+**Overall Progress: ~95% Core Features Complete**
 
 ---
 

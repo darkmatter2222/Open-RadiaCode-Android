@@ -121,8 +121,8 @@ class ChartWidgetProvider : AppWidgetProvider() {
             val (last, recentReadings) = getDataForDevice(context, deviceId)
             val isConnected = last != null && (System.currentTimeMillis() - last.timestampMs) < 30000
             
-            // Get colors from config or use defaults
-            val (doseColor, cpsColor) = getColors(config)
+            // Get colors from config, device, or use defaults
+            val (doseColor, cpsColor) = getColors(context, config)
             
             // Get user's preferred units
             val doseUnit = Prefs.getDoseUnit(context, Prefs.DoseUnit.USV_H)
@@ -131,6 +131,31 @@ class ChartWidgetProvider : AppWidgetProvider() {
             // Status indicator
             views.setTextViewText(R.id.widgetStatusDot, if (isConnected) "●" else "○")
             views.setTextColor(R.id.widgetStatusDot, if (isConnected) COLOR_GREEN else COLOR_RED)
+            
+            // Device name - show bound device or default title
+            val deviceName = if (deviceId != null) {
+                val devices = Prefs.getDevices(context)
+                devices.find { it.macAddress == deviceId }?.displayName ?: "RadiaCode"
+            } else {
+                "Open RadiaCode"
+            }
+            views.setTextViewText(R.id.widgetDeviceName, deviceName)
+            
+            // Anomaly detection badge
+            if (recentReadings.size >= 10 && config?.showIntelligence != false) {
+                val doseValues = recentReadings.map { it.uSvPerHour }
+                val anomalyIndices = StatisticsCalculator.detectAnomaliesZScore(doseValues, 2.5f)
+                if (anomalyIndices.isNotEmpty()) {
+                    views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.VISIBLE)
+                    // Color by severity: recent anomaly = red, older = yellow
+                    val recentAnomaly = anomalyIndices.any { it >= recentReadings.size - 3 }
+                    views.setTextColor(R.id.widgetAnomalyBadge, if (recentAnomaly) COLOR_RED else 0xFFFFD600.toInt())
+                } else {
+                    views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.GONE)
+                }
+            } else {
+                views.setViewVisibility(R.id.widgetAnomalyBadge, android.view.View.GONE)
+            }
             
             // Get widget dimensions for sparkline sizing
             val density = context.resources.displayMetrics.density
@@ -558,9 +583,9 @@ class ChartWidgetProvider : AppWidgetProvider() {
         }
         
         /**
-         * Get colors from widget config or use defaults.
+         * Get colors from widget config, device config, or use defaults.
          */
-        private fun getColors(config: WidgetConfig?): Pair<Int, Int> {
+        private fun getColors(context: Context, config: WidgetConfig?): Pair<Int, Int> {
             if (config == null) {
                 return COLOR_CYAN to COLOR_MAGENTA
             }
@@ -568,14 +593,24 @@ class ChartWidgetProvider : AppWidgetProvider() {
             val scheme = config.colorScheme
             val customColors = config.customColors
             
-            return when {
-                scheme == ColorScheme.CUSTOM && customColors != null -> {
-                    parseColor(customColors.doseColor, COLOR_CYAN) to parseColor(customColors.cpsColor, COLOR_MAGENTA)
-                }
-                else -> {
-                    parseColor(scheme.lineColor, COLOR_CYAN) to COLOR_MAGENTA
+            // If config has custom colors or a specific scheme, use those
+            if (scheme == ColorScheme.CUSTOM && customColors != null) {
+                return parseColor(customColors.doseColor, COLOR_CYAN) to parseColor(customColors.cpsColor, COLOR_MAGENTA)
+            }
+            
+            // Try to use device-specific color if available
+            if (config.deviceId != null) {
+                val devices = Prefs.getDevices(context)
+                val device = devices.find { it.macAddress == config.deviceId }
+                if (device != null) {
+                    val deviceColor = parseColor(device.colorHex, COLOR_CYAN)
+                    // Use device color for dose, scheme color or default for CPS
+                    return deviceColor to parseColor(scheme.lineColor, COLOR_MAGENTA)
                 }
             }
+            
+            // Fall back to scheme colors
+            return parseColor(scheme.lineColor, COLOR_CYAN) to COLOR_MAGENTA
         }
         
         private fun parseColor(hex: String, default: Int): Int {

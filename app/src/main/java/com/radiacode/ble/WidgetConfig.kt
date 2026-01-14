@@ -15,6 +15,7 @@ data class WidgetConfig(
     val showTime: Boolean = true,
     val showStatus: Boolean = true,
     val showSparkline: Boolean = true,
+    val showIntelligence: Boolean = true,  // Show anomaly badge
     val updateIntervalSeconds: Int = 1,  // 1 = real-time, 5, 30, 60, 300
     val timeWindowSeconds: Int = 60,  // Chart time window
     val colorScheme: ColorScheme = ColorScheme.DEFAULT,
@@ -26,7 +27,7 @@ data class WidgetConfig(
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -43,6 +44,7 @@ data class WidgetConfig(
                 val showTime = json.substringAfter("\"showTime\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showStatus = json.substringAfter("\"showStatus\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showSparkline = json.substringAfter("\"showSparkline\":").substringBefore(",").toBooleanStrictOrNull() ?: true
+                val showIntelligence = json.substringAfter("\"showIntelligence\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val updateIntervalSeconds = json.substringAfter("\"updateIntervalSeconds\":").substringBefore(",").toIntOrNull() ?: 1
                 val timeWindowSeconds = json.substringAfter("\"timeWindowSeconds\":").substringBefore(",").toIntOrNull() ?: 60
                 val colorScheme = try {
@@ -72,6 +74,7 @@ data class WidgetConfig(
                     showTime = showTime,
                     showStatus = showStatus,
                     showSparkline = showSparkline,
+                    showIntelligence = showIntelligence,
                     updateIntervalSeconds = updateIntervalSeconds,
                     timeWindowSeconds = timeWindowSeconds,
                     colorScheme = colorScheme,
