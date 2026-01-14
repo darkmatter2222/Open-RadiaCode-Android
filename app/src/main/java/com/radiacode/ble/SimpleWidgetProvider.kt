@@ -211,6 +211,24 @@ class SimpleWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widgetTime, fmt.format(Date(last.timestampMs)))
                 views.setTextColor(R.id.widgetTime, if (isConnected) COLOR_MUTED else COLOR_RED)
             }
+            
+            // Apply visibility based on config settings
+            val showDose = config?.showDose ?: true
+            val showCps = config?.showCps ?: true
+            val showTime = config?.showTime ?: true
+            
+            // Hide/show dose row
+            views.setViewVisibility(R.id.widgetDoseRow, 
+                if (showDose) android.view.View.VISIBLE else android.view.View.GONE)
+            
+            // Hide/show CPS row
+            views.setViewVisibility(R.id.widgetCpsRow,
+                if (showCps) android.view.View.VISIBLE else android.view.View.GONE)
+            
+            // Hide/show timestamp
+            views.setViewVisibility(R.id.widgetTime,
+                if (showTime) android.view.View.VISIBLE else android.view.View.GONE)
+            
             } catch (e: Exception) {
                 android.util.Log.e("RadiaCode", "SimpleWidget buildViews error", e)
                 views.setTextViewText(R.id.widgetDoseValue, "ERR")
@@ -250,6 +268,7 @@ class SimpleWidgetProvider : AppWidgetProvider() {
         
         /**
          * Get colors from widget config, device config, or use defaults.
+         * Returns (doseColor, cpsColor) pair.
          */
         private fun getColors(context: Context, config: WidgetConfig?): Pair<Int, Int> {
             if (config == null) {
@@ -264,18 +283,34 @@ class SimpleWidgetProvider : AppWidgetProvider() {
                 return parseColor(customColors.doseColor, COLOR_CYAN) to parseColor(customColors.cpsColor, COLOR_MAGENTA)
             }
             
-            // Try to use device-specific color if available
+            // Apply color scheme - line color for dose, derive CPS color
+            val schemeColor = parseColor(scheme.lineColor, COLOR_CYAN)
+            
+            // For non-custom schemes, use the scheme's line color for dose
+            // and derive a complementary CPS color based on the scheme
+            val cpsColor = when (scheme) {
+                ColorScheme.DEFAULT -> COLOR_MAGENTA
+                ColorScheme.CYBERPUNK -> parseColor("00FFFF", COLOR_MAGENTA)
+                ColorScheme.FOREST -> parseColor("81C784", COLOR_MAGENTA)
+                ColorScheme.OCEAN -> parseColor("29B6F6", COLOR_MAGENTA)
+                ColorScheme.FIRE -> parseColor("FFAB91", COLOR_MAGENTA)
+                ColorScheme.GRAYSCALE -> parseColor("757575", COLOR_MAGENTA)
+                ColorScheme.AMBER -> parseColor("FFE082", COLOR_MAGENTA)
+                ColorScheme.PURPLE -> parseColor("CE93D8", COLOR_MAGENTA)
+                else -> COLOR_MAGENTA
+            }
+            
+            // If device is specified, optionally use device color as override
             if (config.deviceId != null) {
                 val devices = Prefs.getDevices(context)
                 val device = devices.find { it.id == config.deviceId }
                 if (device != null) {
-                    val deviceColor = parseColor(device.colorHex, COLOR_CYAN)
-                    return deviceColor to parseColor(scheme.lineColor, COLOR_MAGENTA)
+                    val deviceColor = parseColor(device.colorHex, schemeColor)
+                    return deviceColor to cpsColor
                 }
             }
             
-            // Fall back to scheme colors
-            return parseColor(scheme.lineColor, COLOR_CYAN) to COLOR_MAGENTA
+            return schemeColor to cpsColor
         }
         
         private fun parseColor(hex: String, default: Int): Int {

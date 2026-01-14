@@ -208,6 +208,24 @@ class RadiaCodeWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widgetStatus, statusText)
                 views.setTextColor(R.id.widgetStatus, if (isConnected) COLOR_GREEN else COLOR_MUTED)
             }
+            
+            // Apply visibility based on config settings
+            val showDose = config?.showDose ?: true
+            val showCps = config?.showCps ?: true
+            val showTime = config?.showTime ?: true
+            
+            // Hide/show dose card
+            views.setViewVisibility(R.id.widgetDoseCard, 
+                if (showDose) android.view.View.VISIBLE else android.view.View.GONE)
+            
+            // Hide/show CPS card
+            views.setViewVisibility(R.id.widgetCpsCard,
+                if (showCps) android.view.View.VISIBLE else android.view.View.GONE)
+            
+            // Hide/show status/timestamp
+            views.setViewVisibility(R.id.widgetStatus,
+                if (showTime) android.view.View.VISIBLE else android.view.View.GONE)
+            
             } catch (e: Exception) {
                 android.util.Log.e("RadiaCode", "RadiaCodeWidget buildViews error", e)
                 views.setTextViewText(R.id.widgetDose, "ERR")

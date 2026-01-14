@@ -8,7 +8,7 @@
     android:padding="12dp">
 
     <!-- Device Color Accent Bar -->
-    <View
+    <TextView
         android:id="@+id/widgetDeviceColorBar"
         android:layout_width="match_parent"
         android:layout_height="2dp"
@@ -17,6 +17,7 @@
 
     <!-- Header Row -->
     <LinearLayout
+        android:id="@+id/widgetHeaderRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -73,8 +74,9 @@
             android:textSize="10sp" />
     </LinearLayout>
 
-    <!-- Dose Rate -->
+    <!-- Dose Rate Row -->
     <LinearLayout
+        android:id="@+id/widgetDoseRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
@@ -88,8 +90,7 @@
             android:text="—"
             android:textColor="#00E5FF"
             android:textSize="28sp"
-            android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/widgetDoseUnit"
@@ -101,8 +102,9 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Count Rate -->
+    <!-- Count Rate Row -->
     <LinearLayout
+        android:id="@+id/widgetCpsRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
@@ -116,8 +118,7 @@
             android:text="—"
             android:textColor="#E040FB"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/widgetCpsUnit"

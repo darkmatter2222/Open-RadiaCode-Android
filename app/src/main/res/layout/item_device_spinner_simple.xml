@@ -6,4 +6,6 @@
     android:padding="12dp"
     android:textColor="@color/pro_text_primary"
     android:textSize="14sp"
+    android:singleLine="false"
+    android:ellipsize="none"
     android:background="@color/pro_surface" />
