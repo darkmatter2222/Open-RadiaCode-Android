@@ -24,12 +24,13 @@
         android:gravity="center_vertical"
         android:layout_marginBottom="8dp">
 
-        <!-- Connection Status Indicator -->
-        <View
+        <!-- Connection Status Indicator (ImageView for RemoteViews compatibility) -->
+        <ImageView
             android:id="@+id/statusIndicator"
             android:layout_width="8dp"
             android:layout_height="8dp"
-            android:background="@drawable/status_dot_connected" />
+            android:src="@drawable/status_dot_connected"
+            android:scaleType="fitCenter" />
 
         <!-- Timestamp -->
         <TextView
@@ -41,8 +42,8 @@
             android:textColor="#6E6E78"
             android:textSize="11sp" />
 
-        <!-- Spacer -->
-        <View
+        <!-- Spacer (FrameLayout because RemoteViews doesn't allow plain View) -->
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
@@ -148,8 +149,8 @@
 
         </LinearLayout>
 
-        <!-- Spacer between sections -->
-        <View
+        <!-- Spacer between sections (FrameLayout because RemoteViews doesn't allow plain View) -->
+        <FrameLayout
             android:id="@+id/sectionSpacer"
             android:layout_width="match_parent"
             android:layout_height="4dp"

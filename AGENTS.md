@@ -145,27 +145,53 @@ The app uses a professional dark theme. Always use these colors:
 
 ### Widget Types
 
-1. **SimpleWidgetProvider** - Compact, values only
-2. **ChartWidgetProvider** - Values + sparkline charts
-3. **RadiaCodeWidgetProvider** - Legacy with trend indicators
+1. **UnifiedWidgetProvider** - The ONLY widget provider (V2 system)
+   - Uses `WidgetRenderer` for all rendering
+   - Same rendering code for preview AND widget
+   - Configuration via `WidgetConfigActivityV2`
 
-### Widget Layout Rules
+### Widget Layout Rules (RemoteViews Gotchas)
 
-- Use `@drawable/widget_background` for outer container
-- Use `@drawable/widget_card_background` for inner cards
-- Avoid `fontFamily="monospace"` (can cause inflation issues)
-- Avoid `android:gravity="baseline"` (not supported in RemoteViews)
-- Use fixed heights for ImageViews when possible
-- Keep layouts simple - complex nesting can fail on some launchers
+**CRITICAL: "Can't load widget" errors are caused by RemoteViews incompatibilities.**
+
+RemoteViews only supports a LIMITED subset of Views and methods. Common pitfalls:
+
+#### ❌ DO NOT USE:
+- `<View>` elements - **NOT ALLOWED AT ALL** in RemoteViews! Use `FrameLayout` or `Space` instead
+- `fontFamily="monospace"` - Can cause inflation issues on some devices
+- `android:gravity="baseline"` - NOT supported in RemoteViews
+- `View` with `setBackgroundResource()` via `setInt()` - Use ImageView instead
+- Complex nested layouts - Keep it simple
+- Custom views - Only standard Android views work
+- `ConstraintLayout` - Not supported by RemoteViews
+
+#### ✅ SAFE ALTERNATIVES:
+- For spacers: Use `FrameLayout` or `Space` instead of plain `View`
+- For status indicators: Use `ImageView` + `setImageViewResource()` instead of `View` + `setBackgroundResource()`
+- For backgrounds: Use `setImageViewResource()` or static drawables
+- For text: `setTextViewText()`, `setTextColor()` work reliably
+- For visibility: `setViewVisibility()` works on all supported views
+
+#### Supported RemoteViews Methods:
+```kotlin
+// SAFE - These work reliably:
+views.setTextViewText(R.id.myText, "value")
+views.setTextColor(R.id.myText, color)
+views.setViewVisibility(R.id.myView, View.VISIBLE)
+views.setImageViewResource(R.id.myImage, R.drawable.icon)
+views.setImageViewBitmap(R.id.myImage, bitmap)
+views.setOnClickPendingIntent(R.id.root, pendingIntent)
+
+// DANGEROUS - Can fail on some devices:
+views.setInt(R.id.view, "setBackgroundResource", drawable)  // ❌ Use ImageView instead
+```
 
 ### Widget Updates
 
 Widgets are updated from `RadiaCodeForegroundService`:
 
 ```kotlin
-RadiaCodeWidgetProvider.updateAll(this)
-SimpleWidgetProvider.updateAll(this)
-ChartWidgetProvider.updateAll(this)
+UnifiedWidgetProvider.updateAll(this)
 ```
 
 ### Sparkline Generation

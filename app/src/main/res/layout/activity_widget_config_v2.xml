@@ -194,7 +194,10 @@
                             android:layout_height="wrap_content"
                             android:text="None"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_cyan"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/doseChartSparkline"
@@ -202,7 +205,10 @@
                             android:layout_height="wrap_content"
                             android:text="Sparkline"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_cyan"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/doseChartLine"
@@ -210,7 +216,10 @@
                             android:layout_height="wrap_content"
                             android:text="Line"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_cyan"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/doseChartBar"
@@ -218,7 +227,10 @@
                             android:layout_height="wrap_content"
                             android:text="Bar"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_cyan"
+                            app:chipStrokeWidth="1dp" />
 
                     </com.google.android.material.chip.ChipGroup>
 
@@ -312,7 +324,10 @@
                             android:layout_height="wrap_content"
                             android:text="None"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_magenta"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/countChartSparkline"
@@ -320,7 +335,10 @@
                             android:layout_height="wrap_content"
                             android:text="Sparkline"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_magenta"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/countChartLine"
@@ -328,7 +346,10 @@
                             android:layout_height="wrap_content"
                             android:text="Line"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_magenta"
+                            app:chipStrokeWidth="1dp" />
 
                         <com.google.android.material.chip.Chip
                             android:id="@+id/countChartBar"
@@ -336,45 +357,14 @@
                             android:layout_height="wrap_content"
                             android:text="Bar"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
-                            app:chipBackgroundColor="@color/chip_background_selector" />
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_magenta"
+                            app:chipStrokeWidth="1dp" />
 
                     </com.google.android.material.chip.ChipGroup>
 
                 </LinearLayout>
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- Timestamp toggle -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            app:cardBackgroundColor="@color/pro_surface"
-            app:cardCornerRadius="12dp"
-            app:strokeColor="@color/pro_border"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Show Timestamp"
-                    android:textColor="@color/pro_text_primary"
-                    android:textSize="14sp" />
-
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/showTimestampSwitch"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

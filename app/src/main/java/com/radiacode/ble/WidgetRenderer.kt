@@ -75,13 +75,13 @@ object WidgetRenderer {
         val countUnit = Prefs.getCountUnit(context)
 
         // === HEADER ===
-        // Status indicator
+        // Status indicator (using ImageView + setImageViewResource for RemoteViews compatibility)
         val statusDrawable = if (data.isConnected) {
             R.drawable.status_dot_connected
         } else {
             R.drawable.status_dot_disconnected
         }
-        views.setInt(R.id.statusIndicator, "setBackgroundResource", statusDrawable)
+        views.setImageViewResource(R.id.statusIndicator, statusDrawable)
 
         // Timestamp
         if (config.showTime && data.timestamp != null) {
@@ -127,12 +127,12 @@ object WidgetRenderer {
                 views.setViewVisibility(R.id.doseTrend, View.GONE)
             }
 
-            // Chart
-            if (config.showSparkline && config.chartType != ChartType.NONE && data.doseHistory.size >= 3) {
+            // Chart - use independent doseChartType
+            if (config.doseChartType != ChartType.NONE && data.doseHistory.size >= 3) {
                 val chartWidth = (widgetWidth * 0.4f).toInt().coerceIn(80, 400)
                 val chartHeight = (widgetHeight * 0.25f).toInt().coerceIn(30, 100)
                 val chartBitmap = generateChartBitmap(
-                    config.chartType,
+                    config.doseChartType,
                     data.doseHistory,
                     doseColor,
                     theme.backgroundColor,
@@ -177,12 +177,12 @@ object WidgetRenderer {
                 views.setViewVisibility(R.id.countTrend, View.GONE)
             }
 
-            // Chart
-            if (config.showSparkline && config.chartType != ChartType.NONE && data.countHistory.size >= 3) {
+            // Chart - use independent countChartType
+            if (config.countChartType != ChartType.NONE && data.countHistory.size >= 3) {
                 val chartWidth = (widgetWidth * 0.4f).toInt().coerceIn(80, 400)
                 val chartHeight = (widgetHeight * 0.25f).toInt().coerceIn(30, 100)
                 val chartBitmap = generateChartBitmap(
-                    config.chartType,
+                    config.countChartType,
                     data.countHistory,
                     countColor,
                     theme.backgroundColor,
@@ -219,8 +219,9 @@ object WidgetRenderer {
         val countUnit = Prefs.getCountUnit(context)
 
         // === HEADER ===
-        rootView.findViewById<View>(R.id.statusIndicator)?.apply {
-            setBackgroundResource(
+        // Status indicator (now ImageView for consistency with widget)
+        rootView.findViewById<ImageView>(R.id.statusIndicator)?.apply {
+            setImageResource(
                 if (data.isConnected) R.drawable.status_dot_connected
                 else R.drawable.status_dot_disconnected
             )
@@ -269,11 +270,11 @@ object WidgetRenderer {
                 }
             }
 
-            // Chart
+            // Chart - use independent doseChartType
             val doseChartView = rootView.findViewById<ImageView>(R.id.doseChart)
-            if (config.showSparkline && config.chartType != ChartType.NONE && data.doseHistory.size >= 3) {
+            if (config.doseChartType != ChartType.NONE && data.doseHistory.size >= 3) {
                 val chartBitmap = generateChartBitmap(
-                    config.chartType,
+                    config.doseChartType,
                     data.doseHistory,
                     doseColor,
                     theme.backgroundColor,
@@ -320,11 +321,11 @@ object WidgetRenderer {
                 }
             }
 
-            // Chart
+            // Chart - use independent countChartType
             val countChartView = rootView.findViewById<ImageView>(R.id.countChart)
-            if (config.showSparkline && config.chartType != ChartType.NONE && data.countHistory.size >= 3) {
+            if (config.countChartType != ChartType.NONE && data.countHistory.size >= 3) {
                 val chartBitmap = generateChartBitmap(
-                    config.chartType,
+                    config.countChartType,
                     data.countHistory,
                     countColor,
                     theme.backgroundColor,

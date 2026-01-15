@@ -9,7 +9,9 @@ import java.util.UUID
 data class WidgetConfig(
     val widgetId: Int,
     val deviceId: String? = null,  // null = "All Devices" aggregate
-    val chartType: ChartType = ChartType.LINE,
+    val chartType: ChartType = ChartType.LINE,  // Legacy: used for backward compatibility
+    val doseChartType: ChartType = ChartType.SPARKLINE,  // NEW: Independent chart type for dose
+    val countChartType: ChartType = ChartType.SPARKLINE,  // NEW: Independent chart type for count
     val showDose: Boolean = true,
     val showCps: Boolean = true,
     val showTime: Boolean = true,
@@ -28,7 +30,7 @@ data class WidgetConfig(
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -40,6 +42,17 @@ data class WidgetConfig(
                 val chartType = try {
                     ChartType.valueOf(json.substringAfter("\"chartType\":\"").substringBefore("\""))
                 } catch (_: Exception) { ChartType.LINE }
+                // NEW: Parse independent chart types (fall back to chartType for old configs)
+                val doseChartType = try {
+                    if (json.contains("\"doseChartType\":")) {
+                        ChartType.valueOf(json.substringAfter("\"doseChartType\":\"").substringBefore("\""))
+                    } else chartType
+                } catch (_: Exception) { chartType }
+                val countChartType = try {
+                    if (json.contains("\"countChartType\":")) {
+                        ChartType.valueOf(json.substringAfter("\"countChartType\":\"").substringBefore("\""))
+                    } else chartType
+                } catch (_: Exception) { chartType }
                 val showDose = json.substringAfter("\"showDose\":").substringBefore(",").toBoolean()
                 val showCps = json.substringAfter("\"showCps\":").substringBefore(",").toBoolean()
                 val showTime = json.substringAfter("\"showTime\":").substringBefore(",").toBooleanStrictOrNull() ?: true
@@ -71,6 +84,8 @@ data class WidgetConfig(
                     widgetId = widgetId,
                     deviceId = deviceId,
                     chartType = chartType,
+                    doseChartType = doseChartType,
+                    countChartType = countChartType,
                     showDose = showDose,
                     showCps = showCps,
                     showTime = showTime,

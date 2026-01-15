@@ -35,7 +35,6 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private lateinit var deviceSpinner: Spinner
     private lateinit var showDoseSwitch: SwitchMaterial
     private lateinit var showCountSwitch: SwitchMaterial
-    private lateinit var showTimestampSwitch: SwitchMaterial
     private lateinit var doseChartOptions: LinearLayout
     private lateinit var countChartOptions: LinearLayout
     private lateinit var doseChartTypeChips: ChipGroup
@@ -60,7 +59,6 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     // Current configuration (builds up as user makes changes)
     private var showDose = true
     private var showCount = true
-    private var showTimestamp = true
     private var doseChartType = ChartType.SPARKLINE
     private var countChartType = ChartType.SPARKLINE
     private var colorScheme = ColorScheme.DEFAULT
@@ -110,7 +108,6 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         deviceSpinner = findViewById(R.id.deviceSpinner)
         showDoseSwitch = findViewById(R.id.showDoseSwitch)
         showCountSwitch = findViewById(R.id.showCountSwitch)
-        showTimestampSwitch = findViewById(R.id.showTimestampSwitch)
         doseChartOptions = findViewById(R.id.doseChartOptions)
         countChartOptions = findViewById(R.id.countChartOptions)
         doseChartTypeChips = findViewById(R.id.doseChartTypeChips)
@@ -174,11 +171,6 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             if (!isChecked && !showDose) {
                 showDoseSwitch.isChecked = true
             }
-            updatePreview()
-        }
-
-        showTimestampSwitch.setOnCheckedChangeListener { _, isChecked ->
-            showTimestamp = isChecked
             updatePreview()
         }
     }
@@ -327,14 +319,12 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         // Restore toggles
         showDose = existingConfig.showDose
         showCount = existingConfig.showCps
-        showTimestamp = existingConfig.showTime
         showDoseSwitch.isChecked = showDose
         showCountSwitch.isChecked = showCount
-        showTimestampSwitch.isChecked = showTimestamp
 
-        // Restore chart types
-        doseChartType = if (existingConfig.showSparkline) existingConfig.chartType else ChartType.NONE
-        countChartType = if (existingConfig.showSparkline) existingConfig.chartType else ChartType.NONE
+        // Restore chart types - use new independent fields, fall back to legacy
+        doseChartType = existingConfig.doseChartType
+        countChartType = existingConfig.countChartType
         updateDoseChartTypeSelection()
         updateCountChartTypeSelection()
 
@@ -415,22 +405,17 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     }
 
     private fun buildConfig(): WidgetConfig {
-        // Determine chart type: use dose chart type as primary, or count if dose is off
-        val primaryChartType = when {
-            showDose && doseChartType != ChartType.NONE -> doseChartType
-            showCount && countChartType != ChartType.NONE -> countChartType
-            else -> ChartType.NONE
-        }
-
         return WidgetConfig(
             widgetId = appWidgetId,
             deviceId = selectedDeviceId,
-            chartType = primaryChartType,
+            chartType = doseChartType,  // Legacy field - use dose chart type
+            doseChartType = doseChartType,  // NEW: Independent dose chart type
+            countChartType = countChartType,  // NEW: Independent count chart type
             showDose = showDose,
             showCps = showCount,
-            showTime = showTimestamp,
+            showTime = false,  // Timestamp removed from UI
             showStatus = true,
-            showSparkline = primaryChartType != ChartType.NONE,
+            showSparkline = doseChartType != ChartType.NONE || countChartType != ChartType.NONE,
             showIntelligence = showTrend || showAnomaly,
             showBollingerBands = bollingerBands,
             updateIntervalSeconds = 1,
@@ -447,10 +432,8 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         val config = buildConfig()
         Prefs.setWidgetConfig(this, config)
 
-        // Update the widget immediately using unified renderer
-        ChartWidgetProvider.updateWidget(this, appWidgetId)
-        SimpleWidgetProvider.updateWidget(this, appWidgetId)
-        RadiaCodeWidgetProvider.updateWidget(this, appWidgetId)
+        // Update the widget immediately using UnifiedWidgetProvider
+        UnifiedWidgetProvider.updateWidget(this, appWidgetId)
 
         // Return success
         val resultValue = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Chip background color selector for choice chips -->
+<!-- Chip background color selector for choice chips - semi-transparent when checked -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="@color/pro_cyan" android:state_checked="true" />
+    <item android:color="#3300E5FF" android:state_checked="true" />
     <item android:color="@color/pro_surface" />
 </selector>
