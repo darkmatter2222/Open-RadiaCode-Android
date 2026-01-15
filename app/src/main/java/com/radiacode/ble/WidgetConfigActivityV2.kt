@@ -458,12 +458,19 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         // Build config from current UI state
         val config = buildConfig()
 
+        // Get device name for display
+        val deviceName = if (selectedDeviceId != null) {
+            devices.find { it.id == selectedDeviceId }?.displayName ?: "RadiaCode"
+        } else {
+            "RadiaCode"
+        }
+
         // Get data (real or sample)
         val data = if (selectedDeviceId != null) {
             val realData = WidgetRenderer.loadWidgetData(this, selectedDeviceId)
-            if (realData.doseValue != null) realData else WidgetRenderer.generateSampleData()
+            if (realData.doseValue != null) realData else WidgetRenderer.generateSampleData().copy(deviceName = deviceName)
         } else {
-            WidgetRenderer.generateSampleData()
+            WidgetRenderer.generateSampleData().copy(deviceName = deviceName)
         }
 
         // Render using shared renderer - EXACT same code as widget uses

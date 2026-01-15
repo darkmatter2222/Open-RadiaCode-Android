@@ -32,6 +32,19 @@
             android:src="@drawable/status_dot_connected"
             android:scaleType="fitCenter" />
 
+        <!-- Device Name -->
+        <TextView
+            android:id="@+id/deviceName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="RadiaCode"
+            android:textColor="#9E9EA8"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:maxWidth="100dp" />
+
         <!-- Timestamp -->
         <TextView
             android:id="@+id/timestamp"

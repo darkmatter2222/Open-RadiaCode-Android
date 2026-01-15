@@ -105,17 +105,17 @@ Key goal: appliance-style operation — once a preferred device is set, a foregr
 Three widget styles to choose from:
 
 1. **RadiaCode Simple** - Compact widget showing:
-   - Connection status indicator (green dot = connected)
+   - Connection status with device name (green dot = connected)
    - Dose rate with configurable units (µSv/h or nSv/h)
    - Count rate with configurable units (CPS or CPM)
    - Last update timestamp
    - Device-specific binding for multi-device setups
 
 2. **RadiaCode Charts** - Full-featured widget with:
-   - Connection status indicator
+   - Connection status with device name
    - Dose rate with live sparkline chart
    - Count rate with live sparkline chart
-   - Multiple chart types: Sparkline, Bar, Candlestick, Area
+   - Multiple chart types: Sparkline, Line, Bar, Delta
    - Real-time updates every second
    - Gradient-filled chart visualization with glow effects
    - Device-specific binding for multi-device setups
@@ -123,6 +123,7 @@ Three widget styles to choose from:
 3. **RadiaCode (Legacy)** - Original widget with trend indicators
 
 All widgets:
+- **Device name display** - Shows which device is bound to the widget
 - Update in real-time as readings come in
 - Respect your unit preferences from Settings
 - Show connection status with color-coded indicator
@@ -135,12 +136,15 @@ All widgets:
 Configure widgets with advanced options when adding to your home screen:
 
 - **Device Selection** - Bind widget to a specific RadiaCode device
-- **Chart Type** - Choose from Sparkline, Bar, Candlestick, or Area charts
-- **Layout Templates** - Pre-built layouts like "Compact Text", "Dual Sparkline", "Chart Focus"
+- **Chart Types** - Choose from Sparkline, Line, Bar, or **Delta** (z-score colored)
+- **Delta Charts** - Segments colored green/red based on statistical deviation from mean
 - **Color Schemes** - Themes like Cyberpunk, Forest, Ocean, Fire, Grayscale
+- **Background Opacity** - 100%, 75%, 50%, 25%, or fully transparent
+- **Transparent Charts** - Chart backgrounds blend with widget panel
+- **Show/Hide Border** - Toggle widget outline
 - **Dynamic Colors** - Automatically color values based on radiation levels
-- **Field Toggles** - Show/hide dose, count rate, time, sparklines
-- **Update Interval** - Control how often the widget refreshes
+- **Bollinger Bands** - Statistical bands overlay on charts
+- **Field Toggles** - Show/hide dose, count rate, time
 - **Live Preview** - See your widget configuration before applying
 
 ### Auto-Connect & Boot Start

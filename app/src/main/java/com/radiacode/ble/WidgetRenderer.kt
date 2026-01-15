@@ -42,6 +42,7 @@ object WidgetRenderer {
         val countValue: Float?,
         val timestamp: Long?,
         val isConnected: Boolean,
+        val deviceName: String = "",
         val doseHistory: List<Float> = emptyList(),
         val countHistory: List<Float> = emptyList(),
         val hasAnomaly: Boolean = false,
@@ -90,6 +91,9 @@ object WidgetRenderer {
             R.drawable.status_dot_disconnected
         }
         views.setImageViewResource(R.id.statusIndicator, statusDrawable)
+
+        // Device name (always shown next to status indicator)
+        views.setTextViewText(R.id.deviceName, data.deviceName)
 
         // Timestamp
         if (config.showTime && data.timestamp != null) {
@@ -245,6 +249,9 @@ object WidgetRenderer {
                 else R.drawable.status_dot_disconnected
             )
         }
+
+        // Device name (always shown next to status indicator)
+        rootView.findViewById<TextView>(R.id.deviceName)?.text = data.deviceName
 
         rootView.findViewById<TextView>(R.id.timestamp)?.apply {
             if (config.showTime && data.timestamp != null) {
@@ -1010,6 +1017,13 @@ object WidgetRenderer {
             Prefs.getRecentReadings(context)
         }
 
+        // Get device display name
+        val deviceName = if (deviceId != null) {
+            Prefs.getDevices(context).find { it.id == deviceId }?.displayName ?: "Unknown"
+        } else {
+            "RadiaCode"
+        }
+
         val isConnected = reading != null && 
             (System.currentTimeMillis() - reading.timestampMs) < 30000
 
@@ -1037,6 +1051,7 @@ object WidgetRenderer {
             countValue = reading?.cps,
             timestamp = reading?.timestampMs,
             isConnected = isConnected,
+            deviceName = deviceName,
             doseHistory = readings.map { it.uSvPerHour },
             countHistory = readings.map { it.cps },
             hasAnomaly = hasAnomaly,
@@ -1061,6 +1076,7 @@ object WidgetRenderer {
             countValue = 8.2f,
             timestamp = System.currentTimeMillis(),
             isConnected = true,
+            deviceName = "RadiaCode",
             doseHistory = sampleDose,
             countHistory = sampleCount,
             hasAnomaly = false,
