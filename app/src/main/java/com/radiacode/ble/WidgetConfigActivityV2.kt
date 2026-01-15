@@ -62,17 +62,17 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     // Current configuration (builds up as user makes changes)
     private var showDose = true
     private var showCount = true
-    private var doseChartType = ChartType.SPARKLINE
-    private var countChartType = ChartType.SPARKLINE
+    private var doseChartType = ChartType.LINE
+    private var countChartType = ChartType.LINE
     private var colorScheme = ColorScheme.DEFAULT
     private var backgroundOpacity = 100
     private var showBorder = true
     private var timeWindowSeconds = 60
-    private var showTrend = false
+    private var showTrend = true
     private var showAnomaly = false
     private var dynamicColor = false
     private var bollingerBands = false
-    private var transparentChartBg = false
+    private var transparentChartBg = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -390,7 +390,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         updateTimeWindowSelection()
 
         // Restore advanced options
-        showTrend = existingConfig.showIntelligence
+        showTrend = existingConfig.showTrendArrows
         showAnomaly = existingConfig.showIntelligence
         dynamicColor = existingConfig.dynamicColorEnabled
         bollingerBands = existingConfig.showBollingerBands
@@ -482,14 +482,15 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             widgetId = appWidgetId,
             deviceId = selectedDeviceId,
             chartType = doseChartType,  // Legacy field - use dose chart type
-            doseChartType = doseChartType,  // NEW: Independent dose chart type
-            countChartType = countChartType,  // NEW: Independent count chart type
+            doseChartType = doseChartType,  // Independent dose chart type
+            countChartType = countChartType,  // Independent count chart type
             showDose = showDose,
             showCps = showCount,
             showTime = false,  // Timestamp removed from UI
             showStatus = true,
             showSparkline = doseChartType != ChartType.NONE || countChartType != ChartType.NONE,
-            showIntelligence = showTrend || showAnomaly,
+            showIntelligence = showAnomaly,  // Anomaly badge only
+            showTrendArrows = showTrend,  // Trend arrows setting
             showBollingerBands = bollingerBands,
             updateIntervalSeconds = 1,
             timeWindowSeconds = timeWindowSeconds,

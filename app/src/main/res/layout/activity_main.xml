@@ -1262,6 +1262,36 @@
                                     android:textSize="15sp"
                                     android:fontFamily="monospace" />
                             </LinearLayout>
+                            
+                            <!-- Show Trend Arrows -->
+                            <LinearLayout
+                                android:id="@+id/rowTrendArrows"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Show trend arrows"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueTrendArrows"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="On"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
 
                         </LinearLayout>
                     </LinearLayout>

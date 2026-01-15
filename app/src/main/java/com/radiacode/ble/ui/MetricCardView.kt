@@ -37,6 +37,7 @@ class MetricCardView @JvmOverloads constructor(
     private var trend: Float = 0f // percentage change
     private var sparklineData: List<Float> = emptyList()
     private var accentColor: Int = ContextCompat.getColor(context, R.color.pro_cyan)
+    private var showTrendArrows: Boolean = true  // Toggle for trend arrow visibility
     
     // Statistics (calculated from sparkline data)
     private var mean: Float = 0f
@@ -117,6 +118,11 @@ class MetricCardView @JvmOverloads constructor(
 
     fun setTrend(percentage: Float) {
         this.trend = percentage
+        invalidate()
+    }
+    
+    fun setShowTrendArrows(show: Boolean) {
+        this.showTrendArrows = show
         invalidate()
     }
 
@@ -201,6 +207,9 @@ class MetricCardView @JvmOverloads constructor(
     }
 
     private fun drawTrend(canvas: Canvas, rightX: Float, y: Float) {
+        // Skip drawing if trend arrows are disabled
+        if (!showTrendArrows) return
+        
         val colorGreen = ContextCompat.getColor(context, R.color.pro_green)
         val colorRed = ContextCompat.getColor(context, R.color.pro_red)
         val colorMuted = ContextCompat.getColor(context, R.color.pro_text_muted)

@@ -26,6 +26,7 @@ object Prefs {
     private const val KEY_COMPACT_LAYOUT = "compact_layout"
     private const val KEY_SHOW_SPIKE_MARKERS = "show_spike_markers"
     private const val KEY_SHOW_SPIKE_PERCENTAGES = "show_spike_percentages"
+    private const val KEY_SHOW_TREND_ARROWS = "show_trend_arrows"
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
     
@@ -226,6 +227,18 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SHOW_SPIKE_PERCENTAGES, enabled)
+            .apply()
+    }
+    
+    fun isShowTrendArrowsEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_TREND_ARROWS, true)  // Default ON
+    }
+
+    fun setShowTrendArrowsEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_TREND_ARROWS, enabled)
             .apply()
     }
     

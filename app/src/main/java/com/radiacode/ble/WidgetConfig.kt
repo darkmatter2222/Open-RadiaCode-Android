@@ -10,14 +10,15 @@ data class WidgetConfig(
     val widgetId: Int,
     val deviceId: String? = null,  // null = "All Devices" aggregate
     val chartType: ChartType = ChartType.LINE,  // Legacy: used for backward compatibility
-    val doseChartType: ChartType = ChartType.SPARKLINE,  // NEW: Independent chart type for dose
-    val countChartType: ChartType = ChartType.SPARKLINE,  // NEW: Independent chart type for count
+    val doseChartType: ChartType = ChartType.LINE,  // Independent chart type for dose
+    val countChartType: ChartType = ChartType.LINE,  // Independent chart type for count
     val showDose: Boolean = true,
     val showCps: Boolean = true,
     val showTime: Boolean = true,
     val showStatus: Boolean = true,
     val showSparkline: Boolean = true,
     val showIntelligence: Boolean = true,  // Show anomaly badge
+    val showTrendArrows: Boolean = true,  // Show trend arrows on values
     val showBollingerBands: Boolean = false,  // Show Bollinger Bands on charts
     val updateIntervalSeconds: Int = 1,  // 1 = real-time, 5, 30, 60, 300
     val timeWindowSeconds: Int = 60,  // Chart time window
@@ -28,12 +29,12 @@ data class WidgetConfig(
     val dynamicColorEnabled: Boolean = false,
     val backgroundOpacity: Int = 100,  // Background opacity: 0, 25, 50, 75, 100 percent
     val showBorder: Boolean = true,  // Show/hide widget border
-    val transparentChartBg: Boolean = false,  // Transparent chart background (blends with widget)
+    val transparentChartBg: Boolean = true,  // Transparent chart background (blends with widget)
     val createdAtMs: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"transparentChartBg":$transparentChartBg,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showTrendArrows":$showTrendArrows,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"transparentChartBg":$transparentChartBg,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -62,6 +63,7 @@ data class WidgetConfig(
                 val showStatus = json.substringAfter("\"showStatus\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showSparkline = json.substringAfter("\"showSparkline\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showIntelligence = json.substringAfter("\"showIntelligence\":").substringBefore(",").toBooleanStrictOrNull() ?: true
+                val showTrendArrows = json.substringAfter("\"showTrendArrows\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showBollingerBands = json.substringAfter("\"showBollingerBands\":").substringBefore(",").toBooleanStrictOrNull() ?: false
                 val updateIntervalSeconds = json.substringAfter("\"updateIntervalSeconds\":").substringBefore(",").toIntOrNull() ?: 1
                 val timeWindowSeconds = json.substringAfter("\"timeWindowSeconds\":").substringBefore(",").toIntOrNull() ?: 60
@@ -98,6 +100,7 @@ data class WidgetConfig(
                     showStatus = showStatus,
                     showSparkline = showSparkline,
                     showIntelligence = showIntelligence,
+                    showTrendArrows = showTrendArrows,
                     showBollingerBands = showBollingerBands,
                     updateIntervalSeconds = updateIntervalSeconds,
                     timeWindowSeconds = timeWindowSeconds,

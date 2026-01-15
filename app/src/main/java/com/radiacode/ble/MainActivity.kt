@@ -120,6 +120,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowPause: View
     private lateinit var rowSpikePercentages: View
     private lateinit var rowSmartAlerts: View
+    private lateinit var rowTrendArrows: View
 
     private lateinit var valueWindow: TextView
     private lateinit var valueSmoothing: TextView
@@ -128,6 +129,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valueUnits: TextView
     private lateinit var valuePause: TextView
     private lateinit var valueSmartAlerts: TextView
+    private lateinit var valueTrendArrows: TextView
     
     // Settings sections (expandable)
     private lateinit var sectionChartHeader: View
@@ -164,6 +166,9 @@ class MainActivity : AppCompatActivity() {
     // Trend tracking
     private var previousDose: Float = 0f
     private var previousCps: Float = 0f
+    
+    // Track device connection states from service broadcasts
+    private val deviceConnectionStates = mutableMapOf<String, DeviceConnectionState>()
 
     private val readingReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -171,6 +176,22 @@ class MainActivity : AppCompatActivity() {
             val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
             if (paused) return
             lastReadingTimestampMs = 0L
+        }
+    }
+    
+    private val deviceStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != RadiaCodeForegroundService.ACTION_DEVICE_STATE_CHANGED) return
+            val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID) ?: return
+            val stateName = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_CONNECTION_STATE) ?: return
+            val state = try {
+                DeviceConnectionState.valueOf(stateName)
+            } catch (_: Exception) {
+                DeviceConnectionState.DISCONNECTED
+            }
+            deviceConnectionStates[deviceId] = state
+            // Update device selector with new states
+            updateDeviceSelectorStates()
         }
     }
 
@@ -320,6 +341,7 @@ class MainActivity : AppCompatActivity() {
         rowUnits = findViewById(R.id.rowUnits)
         rowPause = findViewById(R.id.rowPause)
         rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
+        rowTrendArrows = findViewById(R.id.rowTrendArrows)
 
         valueWindow = findViewById(R.id.valueWindow)
         valueSmoothing = findViewById(R.id.valueSmoothing)
@@ -328,6 +350,7 @@ class MainActivity : AppCompatActivity() {
         valueUnits = findViewById(R.id.valueUnits)
         valuePause = findViewById(R.id.valuePause)
         valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
+        valueTrendArrows = findViewById(R.id.valueTrendArrows)
         
         // Expandable section headers and content
         sectionChartHeader = findViewById(R.id.sectionChartHeader)
@@ -483,6 +506,13 @@ class MainActivity : AppCompatActivity() {
             refreshSettingsRows()
             lastReadingTimestampMs = 0L
         }
+        
+        rowTrendArrows.setOnClickListener {
+            val next = !Prefs.isShowTrendArrowsEnabled(this)
+            Prefs.setShowTrendArrowsEnabled(this, next)
+            refreshSettingsRows()
+            applyTrendArrowsSettings()
+        }
 
         rowSmartAlerts.setOnClickListener {
             startActivity(Intent(this, AlertConfigActivity::class.java))
@@ -532,6 +562,15 @@ class MainActivity : AppCompatActivity() {
         cpsCard.setAccentColor(magentaColor)
         cpsCard.setValueText("—")
         cpsCard.setTrend(0f)
+        
+        // Apply trend arrows setting
+        applyTrendArrowsSettings()
+    }
+    
+    private fun applyTrendArrowsSettings() {
+        val showTrend = Prefs.isShowTrendArrowsEnabled(this)
+        doseCard.setShowTrendArrows(showTrend)
+        cpsCard.setShowTrendArrows(showTrend)
     }
 
     private fun setupCharts() {
@@ -927,8 +966,9 @@ class MainActivity : AppCompatActivity() {
                 val enabledCount = devices.count { it.enabled }
                 val selectedDeviceId = Prefs.getSelectedDeviceId(this@MainActivity)
                 
-                // Update device selector
-                deviceSelector.setDevices(devices)
+                // Update device selector with current connection states
+                val statesMap = buildDeviceStatesMap(devices)
+                deviceSelector.setDevices(devices, statesMap)
                 
                 // Update overlay visibility based on selection
                 val isAllDevicesMode = selectedDeviceId == null && devices.size > 1
@@ -1330,6 +1370,11 @@ class MainActivity : AppCompatActivity() {
             if (showSpikePercent) R.color.pro_green else R.color.pro_text_muted))
 
         valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
+        
+        val showTrendArrows = Prefs.isShowTrendArrowsEnabled(this)
+        valueTrendArrows.text = if (showTrendArrows) "On" else "Off"
+        valueTrendArrows.setTextColor(ContextCompat.getColor(this, 
+            if (showTrendArrows) R.color.pro_green else R.color.pro_text_muted))
 
         val alerts = Prefs.getSmartAlerts(this)
         val enabledCount = alerts.count { it.enabled }
@@ -1465,13 +1510,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun registerReadingReceiver() {
-        val filter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_READING)
+        val readingFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_READING)
+        val stateFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_DEVICE_STATE_CHANGED)
         try {
             if (Build.VERSION.SDK_INT >= 33) {
-                registerReceiver(readingReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                registerReceiver(readingReceiver, readingFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                registerReceiver(deviceStateReceiver, stateFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
-                registerReceiver(readingReceiver, filter)
+                registerReceiver(readingReceiver, readingFilter)
+                @Suppress("DEPRECATION")
+                registerReceiver(deviceStateReceiver, stateFilter)
             }
         } catch (_: Throwable) {}
     }
@@ -1480,5 +1529,30 @@ class MainActivity : AppCompatActivity() {
         try {
             unregisterReceiver(readingReceiver)
         } catch (_: Throwable) {}
+        try {
+            unregisterReceiver(deviceStateReceiver)
+        } catch (_: Throwable) {}
+    }
+    
+    /**
+     * Build a states map for the device selector from tracked connection states.
+     */
+    private fun buildDeviceStatesMap(devices: List<DeviceConfig>): Map<String, DeviceState> {
+        return devices.associate { device ->
+            val connectionState = deviceConnectionStates[device.id] ?: DeviceConnectionState.DISCONNECTED
+            device.id to DeviceState(
+                config = device,
+                connectionState = connectionState
+            )
+        }
+    }
+    
+    /**
+     * Update the device selector's states without rebuilding the whole list.
+     */
+    private fun updateDeviceSelectorStates() {
+        val devices = Prefs.getDevices(this)
+        val statesMap = buildDeviceStatesMap(devices)
+        deviceSelector.updateStates(statesMap)
     }
 }
