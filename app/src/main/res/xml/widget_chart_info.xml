@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:initialLayout="@layout/widget_chart"
+    android:initialLayout="@layout/widget_unified"
     android:minWidth="250dp"
     android:minHeight="120dp"
     android:minResizeWidth="200dp"
@@ -12,4 +12,4 @@
     android:widgetCategory="home_screen"
     android:previewImage="@mipmap/ic_launcher"
     android:description="@string/widget_chart_description"
-    android:configure="com.radiacode.ble.WidgetConfigActivity" />
+    android:configure="com.radiacode.ble.WidgetConfigActivityV2" />

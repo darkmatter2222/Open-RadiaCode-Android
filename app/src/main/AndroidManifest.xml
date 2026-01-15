@@ -70,6 +70,16 @@
         </activity>
 
         <activity
+            android:name=".WidgetConfigActivityV2"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Configure Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:name=".WidgetCrafterActivity"
             android:exported="false"
             android:label="Widget Crafter" />
@@ -125,6 +135,19 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_chart_info" />
+        </receiver>
+
+        <receiver
+            android:name=".UnifiedWidgetProvider"
+            android:exported="true"
+            android:label="RadiaCode Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_unified_info" />
         </receiver>
 
         <provider
