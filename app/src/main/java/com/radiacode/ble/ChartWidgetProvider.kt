@@ -372,6 +372,7 @@ class ChartWidgetProvider : AppWidgetProvider() {
                 ChartType.BAR -> createBarChart(values, width, height, color)
                 ChartType.CANDLE -> createCandlestickChart(readings, width, height, isDose)
                 ChartType.AREA -> createAreaChart(values, width, height, color)
+                ChartType.DELTA -> createSparkline(values, width, height, color, false) // Fallback for legacy widget
                 ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             }
         }

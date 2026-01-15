@@ -232,6 +232,17 @@
                             app:chipStrokeColor="@color/pro_cyan"
                             app:chipStrokeWidth="1dp" />
 
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/doseChartDelta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Delta"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_cyan"
+                            app:chipStrokeWidth="1dp" />
+
                     </com.google.android.material.chip.ChipGroup>
 
                 </LinearLayout>
@@ -356,6 +367,17 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Bar"
+                            style="@style/Widget.MaterialComponents.Chip.Choice"
+                            android:textColor="@color/chip_text_selector"
+                            app:chipBackgroundColor="@color/chip_background_selector"
+                            app:chipStrokeColor="@color/pro_magenta"
+                            app:chipStrokeWidth="1dp" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/countChartDelta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Delta"
                             style="@style/Widget.MaterialComponents.Chip.Choice"
                             android:textColor="@color/chip_text_selector"
                             app:chipBackgroundColor="@color/chip_background_selector"
@@ -685,6 +707,44 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:checked="true" />
+
+                    </LinearLayout>
+
+                    <!-- Transparent Chart Background Toggle -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Transparent Chart"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Chart blends with widget panel"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/transparentChartSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="false" />
 
                     </LinearLayout>
 

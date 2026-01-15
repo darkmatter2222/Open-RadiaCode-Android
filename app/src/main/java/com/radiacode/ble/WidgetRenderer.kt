@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -146,7 +147,8 @@ object WidgetRenderer {
                     theme.backgroundColor,
                     chartWidth,
                     chartHeight,
-                    config.showBollingerBands
+                    config.showBollingerBands,
+                    config.transparentChartBg
                 )
                 views.setImageViewBitmap(R.id.doseChart, chartBitmap)
                 views.setViewVisibility(R.id.doseChart, View.VISIBLE)
@@ -197,7 +199,8 @@ object WidgetRenderer {
                     theme.backgroundColor,
                     chartWidth,
                     chartHeight,
-                    config.showBollingerBands
+                    config.showBollingerBands,
+                    config.transparentChartBg
                 )
                 views.setImageViewBitmap(R.id.countChart, chartBitmap)
                 views.setViewVisibility(R.id.countChart, View.VISIBLE)
@@ -297,7 +300,8 @@ object WidgetRenderer {
                     theme.backgroundColor,
                     (180 * density).toInt(),
                     (50 * density).toInt(),
-                    config.showBollingerBands
+                    config.showBollingerBands,
+                    config.transparentChartBg
                 )
                 doseChartView?.setImageBitmap(chartBitmap)
                 doseChartView?.visibility = View.VISIBLE
@@ -350,7 +354,8 @@ object WidgetRenderer {
                     theme.backgroundColor,
                     (180 * density).toInt(),
                     (50 * density).toInt(),
-                    config.showBollingerBands
+                    config.showBollingerBands,
+                    config.transparentChartBg
                 )
                 countChartView?.setImageBitmap(chartBitmap)
                 countChartView?.visibility = View.VISIBLE
@@ -373,14 +378,17 @@ object WidgetRenderer {
         bgColor: Int,
         width: Int,
         height: Int,
-        showBollinger: Boolean
+        showBollinger: Boolean,
+        transparentBg: Boolean = false
     ): Bitmap {
+        val effectiveBgColor = if (transparentBg) Color.TRANSPARENT else bgColor
         return when (type) {
-            ChartType.SPARKLINE -> createSparklineChart(width, height, values, lineColor, bgColor, showBollinger)
-            ChartType.LINE -> createLineChart(width, height, values, lineColor, bgColor, showBollinger)
-            ChartType.BAR -> createBarChart(width, height, values, lineColor, bgColor)
-            ChartType.CANDLE -> createCandlestickChart(width, height, values, bgColor)
-            ChartType.AREA -> createAreaChart(width, height, values, lineColor, bgColor)
+            ChartType.SPARKLINE -> createSparklineChart(width, height, values, lineColor, effectiveBgColor, showBollinger)
+            ChartType.LINE -> createLineChart(width, height, values, lineColor, effectiveBgColor, showBollinger)
+            ChartType.BAR -> createBarChart(width, height, values, lineColor, effectiveBgColor)
+            ChartType.CANDLE -> createCandlestickChart(width, height, values, effectiveBgColor)
+            ChartType.AREA -> createAreaChart(width, height, values, lineColor, effectiveBgColor)
+            ChartType.DELTA -> createDeltaChart(width, height, values, effectiveBgColor)
             ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
     }
@@ -857,6 +865,131 @@ object WidgetRenderer {
             style = Paint.Style.FILL
         }
         canvas.drawPath(bandPath, bandPaint)
+    }
+
+    /**
+     * Create a delta chart with z-score colored segments.
+     * Segments are colored green (rising above mean) or red (falling below mean),
+     * with intensity proportional to standard deviations from the mean.
+     */
+    private fun createDeltaChart(
+        width: Int, height: Int, values: List<Float>, bgColor: Int
+    ): Bitmap {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // Background
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = bgColor
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), 6f, 6f, bgPaint)
+
+        if (values.size < 3) return bitmap
+
+        // Calculate statistics
+        val mean = values.average().toFloat()
+        val variance = values.map { (it - mean) * (it - mean) }.average().toFloat()
+        val stdDev = kotlin.math.sqrt(variance).coerceAtLeast(0.0001f)
+
+        val minVal = values.minOrNull() ?: 0f
+        val maxVal = values.maxOrNull() ?: 1f
+        val range = max(maxVal - minVal, 0.0001f)
+
+        val padding = 4f
+        val chartWidth = width - padding * 2
+        val chartHeight = height - padding * 2
+
+        // Colors for delta chart
+        val greenColor = Color.rgb(105, 240, 174) // pro_green
+        val redColor = Color.rgb(255, 82, 82)     // pro_red
+        val whiteColor = Color.rgb(200, 200, 200)
+
+        // Calculate points
+        data class ChartPoint(val x: Float, val y: Float, val value: Float, val zScore: Float)
+        val points = values.mapIndexed { index, value ->
+            val x = padding + (index.toFloat() / (values.size - 1)) * chartWidth
+            val y = padding + chartHeight - ((value - minVal) / range) * chartHeight
+            val zScore = (value - mean) / stdDev
+            ChartPoint(x, y, value, zScore)
+        }
+
+        // Draw segments with z-score coloring
+        for (i in 0 until points.size - 1) {
+            val p1 = points[i]
+            val p2 = points[i + 1]
+
+            // Use the delta between points for coloring
+            val segmentZ = p2.zScore
+            val absZ = kotlin.math.abs(segmentZ)
+
+            // Calculate intensity: 0 at z<0.5, gradient 0.5-2, max at z>2
+            val intensity = when {
+                absZ < 0.5f -> 0f
+                absZ < 2f -> (absZ - 0.5f) / 1.5f
+                else -> 1f
+            }
+
+            // Determine color based on z-score direction
+            val segmentColor = if (segmentZ >= 0) {
+                blendColors(whiteColor, greenColor, intensity)
+            } else {
+                blendColors(whiteColor, redColor, intensity)
+            }
+
+            // Draw gradient fill under this segment
+            val fillPath = Path().apply {
+                moveTo(p1.x, padding + chartHeight)
+                lineTo(p1.x, p1.y)
+                lineTo(p2.x, p2.y)
+                lineTo(p2.x, padding + chartHeight)
+                close()
+            }
+
+            val fillAlpha = (40 + intensity * 160).toInt().coerceIn(40, 200)
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    0f, p1.y.coerceAtMost(p2.y), 0f, padding + chartHeight,
+                    (segmentColor and 0x00FFFFFF) or (fillAlpha shl 24),
+                    (segmentColor and 0x00FFFFFF) or 0x10000000,
+                    Shader.TileMode.CLAMP
+                )
+                style = Paint.Style.FILL
+            }
+            canvas.drawPath(fillPath, fillPaint)
+
+            // Draw line segment
+            val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = segmentColor
+                strokeWidth = 2f
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+            }
+            canvas.drawLine(p1.x, p1.y, p2.x, p2.y, linePaint)
+        }
+
+        // Draw mean line (dotted)
+        val meanY = padding + chartHeight - ((mean - minVal) / range) * chartHeight
+        val meanPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(128, 150, 150, 150)
+            strokeWidth = 1f
+            style = Paint.Style.STROKE
+            pathEffect = DashPathEffect(floatArrayOf(4f, 4f), 0f)
+        }
+        canvas.drawLine(padding, meanY, padding + chartWidth, meanY, meanPaint)
+
+        return bitmap
+    }
+
+    /**
+     * Blend two colors based on a ratio (0 = color1, 1 = color2)
+     */
+    private fun blendColors(color1: Int, color2: Int, ratio: Float): Int {
+        val inverseRatio = 1f - ratio
+        val r = (Color.red(color1) * inverseRatio + Color.red(color2) * ratio).toInt()
+        val g = (Color.green(color1) * inverseRatio + Color.green(color2) * ratio).toInt()
+        val b = (Color.blue(color1) * inverseRatio + Color.blue(color2) * ratio).toInt()
+        return Color.rgb(r, g, b)
     }
 
     // ========== DATA HELPERS ==========

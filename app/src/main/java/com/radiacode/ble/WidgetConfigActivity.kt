@@ -513,6 +513,7 @@ class WidgetConfigActivity : AppCompatActivity() {
             ChartType.BAR -> createBarChart(width, height, doseValues, doseColor, bgColor)
             ChartType.CANDLE -> createCandlestickChart(width, height, doseValues, bgColor)
             ChartType.AREA -> createAreaChart(width, height, doseValues, doseColor, bgColor)
+            ChartType.DELTA -> createSparklineChart(width, height, doseValues, doseColor, bgColor, false) // Fallback
             ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
         
@@ -522,6 +523,7 @@ class WidgetConfigActivity : AppCompatActivity() {
             ChartType.BAR -> createBarChart(width, height, cpsValues, cpsColor, bgColor)
             ChartType.CANDLE -> createCandlestickChart(width, height, cpsValues, bgColor)
             ChartType.AREA -> createAreaChart(width, height, cpsValues, cpsColor, bgColor)
+            ChartType.DELTA -> createSparklineChart(width, height, cpsValues, cpsColor, bgColor, false) // Fallback
             ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
         

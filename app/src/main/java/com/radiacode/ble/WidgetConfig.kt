@@ -28,11 +28,12 @@ data class WidgetConfig(
     val dynamicColorEnabled: Boolean = false,
     val backgroundOpacity: Int = 100,  // Background opacity: 0, 25, 50, 75, 100 percent
     val showBorder: Boolean = true,  // Show/hide widget border
+    val transparentChartBg: Boolean = false,  // Transparent chart background (blends with widget)
     val createdAtMs: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"transparentChartBg":$transparentChartBg,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -74,6 +75,7 @@ data class WidgetConfig(
                 val dynamicColorEnabled = json.substringAfter("\"dynamicColorEnabled\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: false
                 val backgroundOpacity = json.substringAfter("\"backgroundOpacity\":").substringBefore(",").substringBefore("}").toIntOrNull() ?: 100
                 val showBorder = json.substringAfter("\"showBorder\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: true
+                val transparentChartBg = json.substringAfter("\"transparentChartBg\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: false
                 val createdAtMs = json.substringAfter("\"createdAtMs\":").substringBefore("}").toLongOrNull() ?: System.currentTimeMillis()
                 
                 // Parse custom colors if present
@@ -106,6 +108,7 @@ data class WidgetConfig(
                     dynamicColorEnabled = dynamicColorEnabled,
                     backgroundOpacity = backgroundOpacity,
                     showBorder = showBorder,
+                    transparentChartBg = transparentChartBg,
                     createdAtMs = createdAtMs
                 )
             } catch (e: Exception) {
@@ -132,6 +135,7 @@ enum class ChartType {
     CANDLE,     // Candlestick OHLC chart
     SPARKLINE,  // Minimal sparkline (no axes)
     AREA,       // Filled area chart
+    DELTA,      // Z-score colored segments (green=up, red=down, intensity by deviation)
     NONE        // No chart, values only
 }
 

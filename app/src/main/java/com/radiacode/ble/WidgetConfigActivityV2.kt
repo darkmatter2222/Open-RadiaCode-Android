@@ -50,6 +50,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private lateinit var dynamicColorSwitch: SwitchMaterial
     private lateinit var bollingerSwitch: SwitchMaterial
     private lateinit var showBorderSwitch: SwitchMaterial
+    private lateinit var transparentChartSwitch: SwitchMaterial
     private lateinit var cancelButton: MaterialButton
     private lateinit var createButton: MaterialButton
 
@@ -71,6 +72,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private var showAnomaly = false
     private var dynamicColor = false
     private var bollingerBands = false
+    private var transparentChartBg = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,6 +130,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch)
         bollingerSwitch = findViewById(R.id.bollingerSwitch)
         showBorderSwitch = findViewById(R.id.showBorderSwitch)
+        transparentChartSwitch = findViewById(R.id.transparentChartSwitch)
         cancelButton = findViewById(R.id.cancelButton)
         createButton = findViewById(R.id.createButton)
     }
@@ -191,6 +194,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
                 R.id.doseChartSparkline -> ChartType.SPARKLINE
                 R.id.doseChartLine -> ChartType.LINE
                 R.id.doseChartBar -> ChartType.BAR
+                R.id.doseChartDelta -> ChartType.DELTA
                 else -> ChartType.SPARKLINE
             }
             updatePreview()
@@ -204,6 +208,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
                 R.id.countChartSparkline -> ChartType.SPARKLINE
                 R.id.countChartLine -> ChartType.LINE
                 R.id.countChartBar -> ChartType.BAR
+                R.id.countChartDelta -> ChartType.DELTA
                 else -> ChartType.SPARKLINE
             }
             updatePreview()
@@ -334,6 +339,11 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             showBorder = isChecked
             updatePreview()
         }
+
+        transparentChartSwitch.setOnCheckedChangeListener { _, isChecked ->
+            transparentChartBg = isChecked
+            updatePreview()
+        }
     }
 
     private fun setupButtons() {
@@ -385,11 +395,13 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         dynamicColor = existingConfig.dynamicColorEnabled
         bollingerBands = existingConfig.showBollingerBands
         showBorder = existingConfig.showBorder
+        transparentChartBg = existingConfig.transparentChartBg
         showTrendSwitch.isChecked = showTrend
         showAnomalySwitch.isChecked = showAnomaly
         dynamicColorSwitch.isChecked = dynamicColor
         bollingerSwitch.isChecked = bollingerBands
         showBorderSwitch.isChecked = showBorder
+        transparentChartSwitch.isChecked = transparentChartBg
 
         // Update button text for editing
         createButton.text = "Save Widget"
@@ -422,6 +434,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             ChartType.SPARKLINE -> findViewById<Chip>(R.id.doseChartSparkline).isChecked = true
             ChartType.LINE -> findViewById<Chip>(R.id.doseChartLine).isChecked = true
             ChartType.BAR -> findViewById<Chip>(R.id.doseChartBar).isChecked = true
+            ChartType.DELTA -> findViewById<Chip>(R.id.doseChartDelta).isChecked = true
             else -> findViewById<Chip>(R.id.doseChartSparkline).isChecked = true
         }
     }
@@ -432,6 +445,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             ChartType.SPARKLINE -> findViewById<Chip>(R.id.countChartSparkline).isChecked = true
             ChartType.LINE -> findViewById<Chip>(R.id.countChartLine).isChecked = true
             ChartType.BAR -> findViewById<Chip>(R.id.countChartBar).isChecked = true
+            ChartType.DELTA -> findViewById<Chip>(R.id.countChartDelta).isChecked = true
             else -> findViewById<Chip>(R.id.countChartSparkline).isChecked = true
         }
     }
@@ -478,7 +492,8 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             aggregationSeconds = 1,
             dynamicColorEnabled = dynamicColor,
             backgroundOpacity = backgroundOpacity,
-            showBorder = showBorder
+            showBorder = showBorder,
+            transparentChartBg = transparentChartBg
         )
     }
 
