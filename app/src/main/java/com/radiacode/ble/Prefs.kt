@@ -38,10 +38,21 @@ object Prefs {
     private const val KEY_SELECTED_DEVICE_ID = "selected_device_id"
     private const val KEY_DEVICE_READINGS_PREFIX = "device_readings_"
     private const val KEY_DEVICE_CHART_HISTORY_PREFIX = "device_chart_history_"
+    private const val KEY_DEVICE_METADATA_PREFIX = "device_metadata_"
     private const val MAX_DEVICES = 8
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
+    
+    /**
+     * Device metadata: signal strength (RSSI), temperature, and battery level.
+     */
+    data class DeviceMetadataInfo(
+        val signalStrength: Int?,   // RSSI in dBm (typically -100 to 0)
+        val temperature: Float?,    // Device temperature in Celsius
+        val batteryLevel: Int?,     // Battery percentage (0-100)
+        val timestampMs: Long?      // When this data was captured
+    )
 
     fun getPreferredAddress(context: Context): String? {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -882,5 +893,93 @@ object Prefs {
             .edit()
             .putString(KEY_DYNAMIC_COLOR_THRESHOLDS, thresholds.toJson())
             .apply()
+    }
+    
+    // ========== Device Metadata (Signal, Temperature, Battery) ==========
+    
+    /**
+     * Store device metadata (signal strength, temperature, battery) for a device.
+     */
+    fun setDeviceMetadata(
+        context: Context, 
+        deviceId: String, 
+        signalStrength: Int,
+        temperature: Float, 
+        batteryLevel: Int,
+        timestampMs: Long = System.currentTimeMillis()
+    ) {
+        updateDeviceMetadata(
+            context = context,
+            deviceId = deviceId,
+            signalStrength = signalStrength,
+            temperature = temperature,
+            batteryLevel = batteryLevel,
+            timestampMs = timestampMs
+        )
+    }
+
+    /**
+     * Update any subset of device metadata (signal strength, temperature, battery).
+     * Fields that are null are left unchanged.
+     */
+    fun updateDeviceMetadata(
+        context: Context,
+        deviceId: String,
+        signalStrength: Int? = null,
+        temperature: Float? = null,
+        batteryLevel: Int? = null,
+        timestampMs: Long = System.currentTimeMillis()
+    ) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        if (signalStrength != null) editor.putInt("${KEY_DEVICE_METADATA_PREFIX}rssi_$deviceId", signalStrength)
+        if (temperature != null) editor.putFloat("${KEY_DEVICE_METADATA_PREFIX}temp_$deviceId", temperature)
+        if (batteryLevel != null) editor.putInt("${KEY_DEVICE_METADATA_PREFIX}battery_$deviceId", batteryLevel)
+        editor.putLong("${KEY_DEVICE_METADATA_PREFIX}ts_$deviceId", timestampMs)
+        editor.apply()
+    }
+    
+    /**
+     * Get device metadata for a specific device.
+     */
+    fun getDeviceMetadata(context: Context, deviceId: String): DeviceMetadataInfo? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+        val rssiKey = "${KEY_DEVICE_METADATA_PREFIX}rssi_$deviceId"
+        val tempKey = "${KEY_DEVICE_METADATA_PREFIX}temp_$deviceId"
+        val battKey = "${KEY_DEVICE_METADATA_PREFIX}battery_$deviceId"
+        val tsKey = "${KEY_DEVICE_METADATA_PREFIX}ts_$deviceId"
+
+        val hasAny = prefs.contains(rssiKey) || prefs.contains(tempKey) || prefs.contains(battKey)
+        if (!hasAny) return null
+
+        val ts = prefs.getLong(tsKey, 0L)
+        return DeviceMetadataInfo(
+            signalStrength = if (prefs.contains(rssiKey)) prefs.getInt(rssiKey, -100) else null,
+            temperature = if (prefs.contains(tempKey)) prefs.getFloat(tempKey, 0f) else null,
+            batteryLevel = if (prefs.contains(battKey)) prefs.getInt(battKey, 0) else null,
+            timestampMs = if (ts > 0L) ts else null
+        )
+    }
+    
+    /**
+     * Update only the signal strength for a device (called frequently from BLE callbacks).
+     */
+    fun setDeviceSignalStrength(context: Context, deviceId: String, rssi: Int) {
+        updateDeviceMetadata(context = context, deviceId = deviceId, signalStrength = rssi)
+    }
+    
+    /**
+     * Get all device metadata for widgets.
+     */
+    fun getAllDeviceMetadata(context: Context): Map<String, DeviceMetadataInfo> {
+        val devices = getDevices(context)
+        val result = mutableMapOf<String, DeviceMetadataInfo>()
+        for (device in devices) {
+            getDeviceMetadata(context, device.id)?.let {
+                result[device.id] = it
+            }
+        }
+        return result
     }
 }

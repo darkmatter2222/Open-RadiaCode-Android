@@ -63,6 +63,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
 
+    // Dashboard - Device Metadata
+    private lateinit var dashboardMetadataRow: View
+    private lateinit var dashboardSignalStrength: TextView
+    private lateinit var dashboardTemperature: TextView
+    private lateinit var dashboardBattery: TextView
+
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
     private lateinit var cpsCard: MetricCardView
@@ -291,6 +297,11 @@ class MainActivity : AppCompatActivity() {
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
+
+        dashboardMetadataRow = findViewById(R.id.dashboardMetadataRow)
+        dashboardSignalStrength = findViewById(R.id.dashboardSignalStrength)
+        dashboardTemperature = findViewById(R.id.dashboardTemperature)
+        dashboardBattery = findViewById(R.id.dashboardBattery)
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -978,6 +989,47 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     allDevicesOverlay.visibility = View.GONE
                     panelDashboard.visibility = View.VISIBLE
+                }
+
+                // Dashboard metadata row (signal / temp / battery)
+                val effectiveDeviceId = when {
+                    selectedDeviceId != null -> selectedDeviceId
+                    devices.size == 1 -> devices.first().id
+                    else -> null
+                }
+
+                val meta = if (effectiveDeviceId != null) {
+                    Prefs.getDeviceMetadata(this@MainActivity, effectiveDeviceId)
+                } else {
+                    null
+                }
+
+                val hasAnyMeta = meta?.signalStrength != null || meta?.temperature != null || meta?.batteryLevel != null
+                if (hasAnyMeta) {
+                    dashboardMetadataRow.visibility = View.VISIBLE
+
+                    if (meta?.signalStrength != null) {
+                        dashboardSignalStrength.text = "RSSI ${meta.signalStrength} dBm"
+                        dashboardSignalStrength.visibility = View.VISIBLE
+                    } else {
+                        dashboardSignalStrength.visibility = View.GONE
+                    }
+
+                    if (meta?.temperature != null) {
+                        dashboardTemperature.text = "Temp ${"%.0f".format(meta.temperature)}°C"
+                        dashboardTemperature.visibility = View.VISIBLE
+                    } else {
+                        dashboardTemperature.visibility = View.GONE
+                    }
+
+                    if (meta?.batteryLevel != null) {
+                        dashboardBattery.text = "Battery ${meta.batteryLevel}%"
+                        dashboardBattery.visibility = View.VISIBLE
+                    } else {
+                        dashboardBattery.visibility = View.GONE
+                    }
+                } else {
+                    dashboardMetadataRow.visibility = View.GONE
                 }
                 
                 // Get reading ONLY for selected device (no mixing!)

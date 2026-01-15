@@ -47,7 +47,11 @@ object WidgetRenderer {
         val countHistory: List<Float> = emptyList(),
         val hasAnomaly: Boolean = false,
         val doseTrend: TrendDirection = TrendDirection.STABLE,
-        val countTrend: TrendDirection = TrendDirection.STABLE
+        val countTrend: TrendDirection = TrendDirection.STABLE,
+        // Device metadata
+        val signalStrength: Int? = null,    // RSSI in dBm (typically -100 to 0)
+        val temperature: Float? = null,      // Temperature in Celsius
+        val batteryLevel: Int? = null        // Battery percentage (0-100)
     )
 
     enum class TrendDirection(val symbol: String, val color: Int) {
@@ -112,6 +116,38 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.anomalyBadge, View.GONE)
         }
 
+        // === DEVICE METADATA ROW ===
+        val showAnyMetadata = config.showSignalStrength || config.showTemperature || config.showBattery
+        if (showAnyMetadata) {
+            views.setViewVisibility(R.id.metadataRow, View.VISIBLE)
+            
+            // Signal Strength
+            if (config.showSignalStrength && data.signalStrength != null) {
+                views.setTextViewText(R.id.signalStrength, "📶 ${data.signalStrength}")
+                views.setViewVisibility(R.id.signalStrength, View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.signalStrength, View.GONE)
+            }
+            
+            // Temperature
+            if (config.showTemperature && data.temperature != null) {
+                views.setTextViewText(R.id.temperature, "🌡️ ${"%.0f".format(data.temperature)}°C")
+                views.setViewVisibility(R.id.temperature, View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.temperature, View.GONE)
+            }
+            
+            // Battery Level
+            if (config.showBattery && data.batteryLevel != null) {
+                views.setTextViewText(R.id.battery, "🔋 ${data.batteryLevel}%")
+                views.setViewVisibility(R.id.battery, View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.battery, View.GONE)
+            }
+        } else {
+            views.setViewVisibility(R.id.metadataRow, View.GONE)
+        }
+
         // === DOSE SECTION ===
         if (config.showDose) {
             views.setViewVisibility(R.id.doseSection, View.VISIBLE)
@@ -152,7 +188,8 @@ object WidgetRenderer {
                     chartWidth,
                     chartHeight,
                     config.showBollingerBands,
-                    config.transparentChartBg
+                    config.transparentChartBg,
+                    config.showDirectionalDelta
                 )
                 views.setImageViewBitmap(R.id.doseChart, chartBitmap)
                 views.setViewVisibility(R.id.doseChart, View.VISIBLE)
@@ -204,7 +241,8 @@ object WidgetRenderer {
                     chartWidth,
                     chartHeight,
                     config.showBollingerBands,
-                    config.transparentChartBg
+                    config.transparentChartBg,
+                    config.showDirectionalDelta
                 )
                 views.setImageViewBitmap(R.id.countChart, chartBitmap)
                 views.setViewVisibility(R.id.countChart, View.VISIBLE)
@@ -268,6 +306,45 @@ object WidgetRenderer {
         rootView.findViewById<TextView>(R.id.anomalyBadge)?.visibility =
             if (config.showIntelligence && data.hasAnomaly) View.VISIBLE else View.GONE
 
+        // === DEVICE METADATA ROW ===
+        val showAnyMetadata = config.showSignalStrength || config.showTemperature || config.showBattery
+        val metadataRow = rootView.findViewById<LinearLayout>(R.id.metadataRow)
+        if (showAnyMetadata) {
+            metadataRow?.visibility = View.VISIBLE
+            
+            // Signal Strength
+            rootView.findViewById<TextView>(R.id.signalStrength)?.apply {
+                if (config.showSignalStrength && data.signalStrength != null) {
+                    text = "📶 ${data.signalStrength}"
+                    visibility = View.VISIBLE
+                } else {
+                    visibility = View.GONE
+                }
+            }
+            
+            // Temperature
+            rootView.findViewById<TextView>(R.id.temperature)?.apply {
+                if (config.showTemperature && data.temperature != null) {
+                    text = "🌡️ ${"%.0f".format(data.temperature)}°C"
+                    visibility = View.VISIBLE
+                } else {
+                    visibility = View.GONE
+                }
+            }
+            
+            // Battery Level
+            rootView.findViewById<TextView>(R.id.battery)?.apply {
+                if (config.showBattery && data.batteryLevel != null) {
+                    text = "🔋 ${data.batteryLevel}%"
+                    visibility = View.VISIBLE
+                } else {
+                    visibility = View.GONE
+                }
+            }
+        } else {
+            metadataRow?.visibility = View.GONE
+        }
+
         // === DOSE SECTION ===
         val doseSection = rootView.findViewById<LinearLayout>(R.id.doseSection)
         if (config.showDose) {
@@ -308,7 +385,8 @@ object WidgetRenderer {
                     (180 * density).toInt(),
                     (50 * density).toInt(),
                     config.showBollingerBands,
-                    config.transparentChartBg
+                    config.transparentChartBg,
+                    config.showDirectionalDelta
                 )
                 doseChartView?.setImageBitmap(chartBitmap)
                 doseChartView?.visibility = View.VISIBLE
@@ -362,7 +440,8 @@ object WidgetRenderer {
                     (180 * density).toInt(),
                     (50 * density).toInt(),
                     config.showBollingerBands,
-                    config.transparentChartBg
+                    config.transparentChartBg,
+                    config.showDirectionalDelta
                 )
                 countChartView?.setImageBitmap(chartBitmap)
                 countChartView?.visibility = View.VISIBLE
@@ -386,16 +465,17 @@ object WidgetRenderer {
         width: Int,
         height: Int,
         showBollinger: Boolean,
-        transparentBg: Boolean = false
+        transparentBg: Boolean = false,
+        showDirectionalDelta: Boolean = false
     ): Bitmap {
         val effectiveBgColor = if (transparentBg) Color.TRANSPARENT else bgColor
         return when (type) {
-            ChartType.SPARKLINE -> createSparklineChart(width, height, values, lineColor, effectiveBgColor, showBollinger)
-            ChartType.LINE -> createLineChart(width, height, values, lineColor, effectiveBgColor, showBollinger)
+            ChartType.SPARKLINE -> createSparklineChart(width, height, values, lineColor, effectiveBgColor, showBollinger, showDirectionalDelta)
+            ChartType.LINE -> createLineChart(width, height, values, lineColor, effectiveBgColor, showBollinger, showDirectionalDelta)
             ChartType.BAR -> createBarChart(width, height, values, lineColor, effectiveBgColor)
             ChartType.CANDLE -> createCandlestickChart(width, height, values, effectiveBgColor)
             ChartType.AREA -> createAreaChart(width, height, values, lineColor, effectiveBgColor)
-            ChartType.DELTA -> createDeltaChart(width, height, values, effectiveBgColor)
+            ChartType.DELTA -> createDeltaChart(width, height, values, effectiveBgColor, showDirectionalDelta)
             ChartType.NONE -> Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         }
     }
@@ -493,7 +573,8 @@ object WidgetRenderer {
 
     private fun createSparklineChart(
         width: Int, height: Int, values: List<Float>,
-        color: Int, bgColor: Int, showBollinger: Boolean
+        color: Int, bgColor: Int, showBollinger: Boolean,
+        showDirectionalDelta: Boolean = false
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -564,12 +645,18 @@ object WidgetRenderer {
         }
         canvas.drawPath(fillPath, fillPaint)
 
+        // Draw directional delta arrow at the end if enabled
+        if (showDirectionalDelta && values.size >= 3) {
+            drawDirectionalArrow(canvas, values, padding, chartWidth, chartHeight, minVal, range, width.toFloat())
+        }
+
         return bitmap
     }
 
     private fun createLineChart(
         width: Int, height: Int, values: List<Float>,
-        color: Int, bgColor: Int, showBollinger: Boolean
+        color: Int, bgColor: Int, showBollinger: Boolean,
+        showDirectionalDelta: Boolean = false
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -629,6 +716,23 @@ object WidgetRenderer {
         }
         canvas.drawPath(path, linePaint)
 
+        // Gradient fill under line (same as sparkline)
+        val fillPath = Path(path)
+        fillPath.lineTo(padding + chartWidth, padding + chartHeight)
+        fillPath.lineTo(padding, padding + chartHeight)
+        fillPath.close()
+
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f, padding, 0f, padding + chartHeight,
+                (color and 0x00FFFFFF) or 0x40000000,
+                (color and 0x00FFFFFF) or 0x08000000,
+                Shader.TileMode.CLAMP
+            )
+            style = Paint.Style.FILL
+        }
+        canvas.drawPath(fillPath, fillPaint)
+
         // Data points
         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             this.color = color
@@ -637,6 +741,11 @@ object WidgetRenderer {
         val lastX = padding + chartWidth
         val lastY = padding + chartHeight - ((values.last() - minVal) / range) * chartHeight
         canvas.drawCircle(lastX, lastY, 3f, dotPaint)
+
+        // Draw directional delta arrow at the end if enabled
+        if (showDirectionalDelta && values.size >= 3) {
+            drawDirectionalArrow(canvas, values, padding, chartWidth, chartHeight, minVal, range, width.toFloat())
+        }
 
         return bitmap
     }
@@ -880,7 +989,8 @@ object WidgetRenderer {
      * with intensity proportional to standard deviations from the mean.
      */
     private fun createDeltaChart(
-        width: Int, height: Int, values: List<Float>, bgColor: Int
+        width: Int, height: Int, values: List<Float>, bgColor: Int,
+        showDirectionalDelta: Boolean = false
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -985,7 +1095,105 @@ object WidgetRenderer {
         }
         canvas.drawLine(padding, meanY, padding + chartWidth, meanY, meanPaint)
 
+        // Draw directional delta arrow at the end if enabled
+        if (showDirectionalDelta && values.size >= 3) {
+            drawDirectionalArrow(canvas, values, padding, chartWidth, chartHeight, minVal, range, width.toFloat())
+        }
+
         return bitmap
+    }
+
+    /**
+     * Draw directional delta indicators (small triangles) at points of significant change.
+     * These triangles stick with the data points on the line, like in ProChartView.
+     * Green triangle pointing up for increases, red triangle pointing down for decreases.
+     */
+    private fun drawDirectionalArrow(
+        canvas: Canvas,
+        values: List<Float>,
+        padding: Float,
+        chartWidth: Float,
+        chartHeight: Float,
+        minVal: Float,
+        range: Float,
+        totalWidth: Float
+    ) {
+        if (values.size < 3) return
+
+        // Calculate mean and find spike indices (significant deltas)
+        val mean = values.average().toFloat()
+        val deltaThresholdPercent = 8f  // Same as ProChartView default
+        
+        // Find spike indices - points where delta exceeds threshold
+        val spikeData = mutableListOf<Triple<Int, Float, Boolean>>()  // index, y-position, isIncrease
+        
+        for (i in 1 until values.size) {
+            val prev = values[i - 1]
+            val curr = values[i]
+            
+            // Calculate percentage change
+            val deltaPercent = if (prev != 0f) kotlin.math.abs((curr - prev) / prev) * 100f else 0f
+            
+            if (deltaPercent >= deltaThresholdPercent) {
+                val x = padding + (i.toFloat() / (values.size - 1)) * chartWidth
+                val y = padding + chartHeight - ((curr - minVal) / range) * chartHeight
+                val isIncrease = curr > prev
+                spikeData.add(Triple(i, y, isIncrease))
+            }
+        }
+        
+        // Don't draw too many - limit to most significant ones if there are many
+        val spikesToDraw = if (spikeData.size > 5) {
+            // Keep first, last, and 3 evenly spaced middle ones
+            val step = (spikeData.size - 1) / 4
+            listOf(0, step, step * 2, step * 3, spikeData.size - 1).map { spikeData[it] }
+        } else {
+            spikeData
+        }
+        
+        // Draw spike indicators (triangles) at each spike point
+        val greenColor = Color.rgb(105, 240, 174) // pro_green
+        val redColor = Color.rgb(255, 82, 82)     // pro_red
+        
+        // Triangle size proportional to chart size but reasonable
+        val triangleSize = minOf(chartWidth / 20f, chartHeight / 6f).coerceIn(3f, 8f)
+        
+        for ((index, _, isIncrease) in spikesToDraw) {
+            val x = padding + (index.toFloat() / (values.size - 1)) * chartWidth
+            val y = padding + chartHeight - ((values[index] - minVal) / range) * chartHeight
+            
+            val triangleColor = if (isIncrease) greenColor else redColor
+            
+            // Draw small triangle at this point
+            val trianglePath = Path()
+            if (isIncrease) {
+                // Upward triangle (increase) - draw above the point
+                trianglePath.moveTo(x, y - triangleSize * 1.5f)  // tip
+                trianglePath.lineTo(x - triangleSize, y - triangleSize * 0.3f)
+                trianglePath.lineTo(x + triangleSize, y - triangleSize * 0.3f)
+            } else {
+                // Downward triangle (decrease) - draw below the point
+                trianglePath.moveTo(x, y + triangleSize * 1.5f)  // tip
+                trianglePath.lineTo(x - triangleSize, y + triangleSize * 0.3f)
+                trianglePath.lineTo(x + triangleSize, y + triangleSize * 0.3f)
+            }
+            trianglePath.close()
+            
+            // Glow effect
+            val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = triangleColor
+                alpha = 60
+                style = Paint.Style.FILL
+            }
+            canvas.drawPath(trianglePath, glowPaint)
+            
+            // Fill triangle
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = triangleColor
+                style = Paint.Style.FILL
+            }
+            canvas.drawPath(trianglePath, fillPaint)
+        }
     }
 
     /**
@@ -1046,6 +1254,12 @@ object WidgetRenderer {
             hasAnomaly = anomalyIndices.any { it >= readings.size - 5 }
         }
 
+        val metadata = if (deviceId != null) {
+            Prefs.getDeviceMetadata(context, deviceId)
+        } else {
+            null
+        }
+
         return WidgetData(
             doseValue = reading?.uSvPerHour,
             countValue = reading?.cps,
@@ -1056,7 +1270,10 @@ object WidgetRenderer {
             countHistory = readings.map { it.cps },
             hasAnomaly = hasAnomaly,
             doseTrend = doseTrend,
-            countTrend = countTrend
+            countTrend = countTrend,
+            signalStrength = metadata?.signalStrength,
+            temperature = metadata?.temperature,
+            batteryLevel = metadata?.batteryLevel
         )
     }
 

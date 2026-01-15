@@ -58,6 +58,10 @@ internal class RadiacodeBleClient(
     // Single in-flight request
     private var pending: PendingRequest? = null
 
+    // Single in-flight RSSI read
+    private var pendingRssi: CompletableFuture<Int>? = null
+    private var pendingRssiTimeout: ScheduledFuture<*>? = null
+
     // Sequenced writes (Android GATT requires waiting for onCharacteristicWrite)
     private var pendingWriteChunks: List<ByteArray>? = null
     private var pendingWriteIndex: Int = 0
@@ -86,6 +90,14 @@ internal class RadiacodeBleClient(
             pending?.future?.completeExceptionally(IllegalStateException("Disconnected"))
             pending = null
 
+            pendingRssi?.completeExceptionally(IllegalStateException("Disconnected"))
+            pendingRssi = null
+            try {
+                pendingRssiTimeout?.cancel(true)
+            } catch (_: Throwable) {
+            }
+            pendingRssiTimeout = null
+
             if (!readyFuture.isDone) {
                 readyFuture.completeExceptionally(IllegalStateException("Disconnected"))
             }
@@ -98,6 +110,48 @@ internal class RadiacodeBleClient(
         gatt = null
         writeChar = null
         notifyChar = null
+    }
+
+    @SuppressLint("MissingPermission")
+    fun readRemoteRssi(): CompletableFuture<Int> {
+        val g = gatt ?: return CompletableFuture.failedFuture(IllegalStateException("Not connected"))
+
+        val future = CompletableFuture<Int>()
+        synchronized(this) {
+            if (pendingRssi != null) {
+                return CompletableFuture.failedFuture(IllegalStateException("Only one in-flight RSSI read supported"))
+            }
+            pendingRssi = future
+            pendingRssiTimeout = timeoutScheduler.schedule(
+                {
+                    val shouldFail = synchronized(this) { pendingRssi === future }
+                    if (shouldFail) {
+                        synchronized(this) {
+                            pendingRssi = null
+                            pendingRssiTimeout = null
+                        }
+                        future.completeExceptionally(TimeoutException("Timeout waiting for RSSI"))
+                    }
+                },
+                5_000L,
+                TimeUnit.MILLISECONDS
+            )
+        }
+
+        val ok = g.readRemoteRssi()
+        if (!ok) {
+            synchronized(this) {
+                pendingRssi = null
+                try {
+                    pendingRssiTimeout?.cancel(true)
+                } catch (_: Throwable) {
+                }
+                pendingRssiTimeout = null
+            }
+            return CompletableFuture.failedFuture(IllegalStateException("readRemoteRssi failed"))
+        }
+
+        return future
     }
 
     fun initializeSession(): CompletableFuture<Unit> {
@@ -396,6 +450,25 @@ internal class RadiacodeBleClient(
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             onNotify(characteristic, value)
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, statusCode: Int) {
+            val f = synchronized(this@RadiacodeBleClient) {
+                val cur = pendingRssi
+                pendingRssi = null
+                try {
+                    pendingRssiTimeout?.cancel(true)
+                } catch (_: Throwable) {
+                }
+                pendingRssiTimeout = null
+                cur
+            } ?: return
+
+            if (statusCode != BluetoothGatt.GATT_SUCCESS) {
+                f.completeExceptionally(IllegalStateException("RSSI read failed: $statusCode"))
+            } else {
+                f.complete(rssi)
+            }
         }
     }
 

@@ -46,7 +46,11 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private lateinit var advancedContent: LinearLayout
     private lateinit var advancedExpandIcon: ImageView
     private lateinit var showTrendSwitch: SwitchMaterial
+    private lateinit var showDirectionalDeltaSwitch: SwitchMaterial
     private lateinit var showAnomalySwitch: SwitchMaterial
+    private lateinit var showSignalStrengthSwitch: SwitchMaterial
+    private lateinit var showTemperatureSwitch: SwitchMaterial
+    private lateinit var showBatterySwitch: SwitchMaterial
     private lateinit var dynamicColorSwitch: SwitchMaterial
     private lateinit var bollingerSwitch: SwitchMaterial
     private lateinit var showBorderSwitch: SwitchMaterial
@@ -65,12 +69,16 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private var doseChartType = ChartType.LINE
     private var countChartType = ChartType.LINE
     private var colorScheme = ColorScheme.DEFAULT
-    private var backgroundOpacity = 100
-    private var showBorder = true
+    private var backgroundOpacity = 0
+    private var showBorder = false
     private var timeWindowSeconds = 60
     private var showTrend = true
-    private var showAnomaly = false
-    private var dynamicColor = false
+    private var showDirectionalDelta = true
+    private var showAnomaly = true
+    private var showSignalStrength = false
+    private var showTemperature = false
+    private var showBattery = false
+    private var dynamicColor = true
     private var bollingerBands = false
     private var transparentChartBg = true
 
@@ -126,7 +134,11 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         advancedContent = findViewById(R.id.advancedContent)
         advancedExpandIcon = findViewById(R.id.advancedExpandIcon)
         showTrendSwitch = findViewById(R.id.showTrendSwitch)
+        showDirectionalDeltaSwitch = findViewById(R.id.showDirectionalDeltaSwitch)
         showAnomalySwitch = findViewById(R.id.showAnomalySwitch)
+        showSignalStrengthSwitch = findViewById(R.id.showSignalStrengthSwitch)
+        showTemperatureSwitch = findViewById(R.id.showTemperatureSwitch)
+        showBatterySwitch = findViewById(R.id.showBatterySwitch)
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch)
         bollingerSwitch = findViewById(R.id.bollingerSwitch)
         showBorderSwitch = findViewById(R.id.showBorderSwitch)
@@ -214,9 +226,9 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             updatePreview()
         }
 
-        // Set default selections
-        findViewById<Chip>(R.id.doseChartSparkline).isChecked = true
-        findViewById<Chip>(R.id.countChartSparkline).isChecked = true
+        // Set default selections based on default chart types (LINE)
+        updateDoseChartTypeSelection()
+        updateCountChartTypeSelection()
     }
 
     private fun setupColorThemeChips() {
@@ -320,8 +332,28 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             updatePreview()
         }
 
+        showDirectionalDeltaSwitch.setOnCheckedChangeListener { _, isChecked ->
+            showDirectionalDelta = isChecked
+            updatePreview()
+        }
+
         showAnomalySwitch.setOnCheckedChangeListener { _, isChecked ->
             showAnomaly = isChecked
+            updatePreview()
+        }
+
+        showSignalStrengthSwitch.setOnCheckedChangeListener { _, isChecked ->
+            showSignalStrength = isChecked
+            updatePreview()
+        }
+
+        showTemperatureSwitch.setOnCheckedChangeListener { _, isChecked ->
+            showTemperature = isChecked
+            updatePreview()
+        }
+
+        showBatterySwitch.setOnCheckedChangeListener { _, isChecked ->
+            showBattery = isChecked
             updatePreview()
         }
 
@@ -391,13 +423,21 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
 
         // Restore advanced options
         showTrend = existingConfig.showTrendArrows
+        showDirectionalDelta = existingConfig.showDirectionalDelta
         showAnomaly = existingConfig.showIntelligence
+        showSignalStrength = existingConfig.showSignalStrength
+        showTemperature = existingConfig.showTemperature
+        showBattery = existingConfig.showBattery
         dynamicColor = existingConfig.dynamicColorEnabled
         bollingerBands = existingConfig.showBollingerBands
         showBorder = existingConfig.showBorder
         transparentChartBg = existingConfig.transparentChartBg
         showTrendSwitch.isChecked = showTrend
+        showDirectionalDeltaSwitch.isChecked = showDirectionalDelta
         showAnomalySwitch.isChecked = showAnomaly
+        showSignalStrengthSwitch.isChecked = showSignalStrength
+        showTemperatureSwitch.isChecked = showTemperature
+        showBatterySwitch.isChecked = showBattery
         dynamicColorSwitch.isChecked = dynamicColor
         bollingerSwitch.isChecked = bollingerBands
         showBorderSwitch.isChecked = showBorder
@@ -491,7 +531,11 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             showSparkline = doseChartType != ChartType.NONE || countChartType != ChartType.NONE,
             showIntelligence = showAnomaly,  // Anomaly badge only
             showTrendArrows = showTrend,  // Trend arrows setting
+            showDirectionalDelta = showDirectionalDelta,  // Directional arrows on charts
             showBollingerBands = bollingerBands,
+            showSignalStrength = showSignalStrength,
+            showTemperature = showTemperature,
+            showBattery = showBattery,
             updateIntervalSeconds = 1,
             timeWindowSeconds = timeWindowSeconds,
             colorScheme = colorScheme,

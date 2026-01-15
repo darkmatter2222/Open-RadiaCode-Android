@@ -19,22 +19,26 @@ data class WidgetConfig(
     val showSparkline: Boolean = true,
     val showIntelligence: Boolean = true,  // Show anomaly badge
     val showTrendArrows: Boolean = true,  // Show trend arrows on values
+    val showDirectionalDelta: Boolean = true,  // Show directional arrows on chart lines
     val showBollingerBands: Boolean = false,  // Show Bollinger Bands on charts
+    val showSignalStrength: Boolean = false,  // Show signal strength (RSSI in dBm)
+    val showTemperature: Boolean = false,     // Show device temperature
+    val showBattery: Boolean = false,         // Show battery level percentage
     val updateIntervalSeconds: Int = 1,  // 1 = real-time, 5, 30, 60, 300
     val timeWindowSeconds: Int = 60,  // Chart time window
     val colorScheme: ColorScheme = ColorScheme.DEFAULT,
     val customColors: CustomColors? = null,
     val layoutTemplate: LayoutTemplate = LayoutTemplate.DUAL_SPARKLINE,
     val aggregationSeconds: Int = 1,  // For bar/candle charts: 1, 10, 60, 300, 900, 3600
-    val dynamicColorEnabled: Boolean = false,
-    val backgroundOpacity: Int = 100,  // Background opacity: 0, 25, 50, 75, 100 percent
-    val showBorder: Boolean = true,  // Show/hide widget border
+    val dynamicColorEnabled: Boolean = true,  // Dynamic color based on radiation level
+    val backgroundOpacity: Int = 0,  // Background opacity: 0, 25, 50, 75, 100 percent
+    val showBorder: Boolean = false,  // Show/hide widget border
     val transparentChartBg: Boolean = true,  // Transparent chart background (blends with widget)
     val createdAtMs: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showTrendArrows":$showTrendArrows,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"transparentChartBg":$transparentChartBg,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showTrendArrows":$showTrendArrows,"showDirectionalDelta":$showDirectionalDelta,"showBollingerBands":$showBollingerBands,"showSignalStrength":$showSignalStrength,"showTemperature":$showTemperature,"showBattery":$showBattery,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"transparentChartBg":$transparentChartBg,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -64,7 +68,11 @@ data class WidgetConfig(
                 val showSparkline = json.substringAfter("\"showSparkline\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showIntelligence = json.substringAfter("\"showIntelligence\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showTrendArrows = json.substringAfter("\"showTrendArrows\":").substringBefore(",").toBooleanStrictOrNull() ?: true
+                val showDirectionalDelta = json.substringAfter("\"showDirectionalDelta\":").substringBefore(",").toBooleanStrictOrNull() ?: true
                 val showBollingerBands = json.substringAfter("\"showBollingerBands\":").substringBefore(",").toBooleanStrictOrNull() ?: false
+                val showSignalStrength = json.substringAfter("\"showSignalStrength\":").substringBefore(",").toBooleanStrictOrNull() ?: false
+                val showTemperature = json.substringAfter("\"showTemperature\":").substringBefore(",").toBooleanStrictOrNull() ?: false
+                val showBattery = json.substringAfter("\"showBattery\":").substringBefore(",").toBooleanStrictOrNull() ?: false
                 val updateIntervalSeconds = json.substringAfter("\"updateIntervalSeconds\":").substringBefore(",").toIntOrNull() ?: 1
                 val timeWindowSeconds = json.substringAfter("\"timeWindowSeconds\":").substringBefore(",").toIntOrNull() ?: 60
                 val colorScheme = try {
@@ -101,7 +109,11 @@ data class WidgetConfig(
                     showSparkline = showSparkline,
                     showIntelligence = showIntelligence,
                     showTrendArrows = showTrendArrows,
+                    showDirectionalDelta = showDirectionalDelta,
                     showBollingerBands = showBollingerBands,
+                    showSignalStrength = showSignalStrength,
+                    showTemperature = showTemperature,
+                    showBattery = showBattery,
                     updateIntervalSeconds = updateIntervalSeconds,
                     timeWindowSeconds = timeWindowSeconds,
                     colorScheme = colorScheme,

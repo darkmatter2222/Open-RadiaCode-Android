@@ -559,6 +559,44 @@
 
                     </LinearLayout>
 
+                    <!-- Show Directional Delta on Charts -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Show Directional Delta"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="↑ ↓ arrows on chart lines showing direction"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp" />
+
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/showDirectionalDeltaSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+
+                    </LinearLayout>
+
                     <!-- Show Anomaly Badge -->
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -593,9 +631,123 @@
                             android:id="@+id/showAnomalySwitch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:checked="false" />
+                            android:checked="true" />
 
                     </LinearLayout>
+
+                        <!-- Show Signal Strength (RSSI) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Show Signal Strength"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="14sp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Display RSSI in dBm (e.g., -62)"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/showSignalStrengthSwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false" />
+
+                        </LinearLayout>
+
+                        <!-- Show Device Temperature -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Show Temperature"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="14sp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Device internal temperature (°C)"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/showTemperatureSwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false" />
+
+                        </LinearLayout>
+
+                        <!-- Show Battery Level -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Show Battery Level"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="14sp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Battery percentage (0–100%)"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/showBatterySwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="false" />
+
+                        </LinearLayout>
 
                     <!-- Dynamic Color by Value -->
                     <LinearLayout
@@ -631,7 +783,7 @@
                             android:id="@+id/dynamicColorSwitch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:checked="false" />
+                            android:checked="true" />
 
                     </LinearLayout>
 
@@ -706,7 +858,7 @@
                             android:id="@+id/showBorderSwitch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:checked="true" />
+                            android:checked="false" />
 
                     </LinearLayout>
 

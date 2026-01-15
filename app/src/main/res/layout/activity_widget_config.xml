@@ -90,6 +90,50 @@
                         android:textSize="11sp" />
                 </LinearLayout>
 
+                <!-- Device Metadata Row (shown above charts when enabled) -->
+                <LinearLayout
+                    android:id="@+id/previewMetadataRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="4dp"
+                    android:visibility="gone">
+
+                    <!-- Signal Strength -->
+                    <TextView
+                        android:id="@+id/previewSignalStrength"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📶 -65 dBm"
+                        android:textColor="#9E9EA8"
+                        android:textSize="10sp"
+                        android:layout_marginEnd="12dp"
+                        android:visibility="gone" />
+
+                    <!-- Temperature -->
+                    <TextView
+                        android:id="@+id/previewTemperature"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🌡️ 28.5°C"
+                        android:textColor="#9E9EA8"
+                        android:textSize="10sp"
+                        android:layout_marginEnd="12dp"
+                        android:visibility="gone" />
+
+                    <!-- Battery -->
+                    <TextView
+                        android:id="@+id/previewBattery"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔋 85%"
+                        android:textColor="#9E9EA8"
+                        android:textSize="10sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
                 <!-- Preview Values -->
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -562,7 +606,7 @@
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="16dp"
             android:scrollbars="none">
 
             <com.google.android.material.chip.ChipGroup
@@ -572,6 +616,149 @@
                 app:singleSelection="true"
                 app:selectionRequired="true" />
         </HorizontalScrollView>
+
+        <!-- ADVANCED OPTIONS - Device Metadata -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ADVANCED OPTIONS"
+            android:textColor="@color/pro_magenta"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="@color/pro_surface"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/pro_border"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Device Metadata (shown above charts)"
+                    android:textColor="@color/pro_text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Show Signal Strength -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📶 Signal Strength"
+                            android:textColor="@color/pro_text_primary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="BLE signal strength in dBm"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/showSignalStrengthSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <!-- Show Temperature -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌡️ Temperature"
+                            android:textColor="@color/pro_text_primary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Device temperature in Celsius"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/showTemperatureSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+
+                <!-- Show Battery Level -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔋 Battery Level"
+                            android:textColor="@color/pro_text_primary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Device battery percentage"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/showBatterySwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Action Buttons -->
         <LinearLayout

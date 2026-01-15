@@ -12,6 +12,24 @@ internal data class RealTimeData(
     val realTimeFlags: Int,
 )
 
+/**
+ * Device metadata from RareData record (eid=0, gid=3).
+ * Contains battery level and temperature.
+ */
+internal data class DeviceMetadata(
+    val timestamp: Instant,
+    val batteryLevel: Int,      // 0-100 percent
+    val temperature: Float,     // Celsius
+)
+
+/**
+ * Combined realtime data with device metadata.
+ */
+internal data class FullDeviceData(
+    val realTimeData: RealTimeData?,
+    val metadata: DeviceMetadata?
+)
+
 internal object RadiacodeDataBuf {
     /**
      * Port of cdump/radiacode decode_VS_DATA_BUF for the realtime record type (eid=0,gid=0).
@@ -19,12 +37,21 @@ internal object RadiacodeDataBuf {
      * Note: DATA_BUF timestamps are relative; for UI we mostly just show the latest values.
      */
     fun decodeLatestRealTime(dataBuf: ByteArray): RealTimeData? {
+        return decodeFullData(dataBuf).realTimeData
+    }
+    
+    /**
+     * Decode both RealTimeData and DeviceMetadata from DATA_BUF.
+     * Returns both pieces of data when available.
+     */
+    fun decodeFullData(dataBuf: ByteArray): FullDeviceData {
         val br = ByteReader(dataBuf)
 
         // python uses: base_time = datetime.now() + timedelta(seconds=128)
         val baseTime = Instant.now().plusSeconds(128)
 
-        var latest: RealTimeData? = null
+        var latestRealTime: RealTimeData? = null
+        var latestMetadata: DeviceMetadata? = null
 
         while (br.remaining >= 7) {
             // Ported record header: <BBBi> (seq,eid,gid,ts_offset)
@@ -47,7 +74,7 @@ internal object RadiacodeDataBuf {
                     val flags = br.readU16LE()
                     val rtFlags = br.readU8()
 
-                    latest = RealTimeData(
+                    latestRealTime = RealTimeData(
                         timestamp = recordTime,
                         countRate = countRate,
                         doseRate = doseRate,
@@ -71,9 +98,19 @@ internal object RadiacodeDataBuf {
                 }
 
                 eid == 0 && gid == 3 -> {
-                    // RareData: <IfHHH>
+                    // RareData: <IfHHH> - Contains battery level (I), temperature (f), and flags (HHH)
                     if (br.remaining < 14) break
-                    br.readBytes(14)
+                    val chargeLevel = br.readU32LE().toInt().coerceIn(0, 100)  // Battery percentage
+                    val temperature = br.readF32LE()  // Temperature in Celsius
+                    br.readU16LE()  // Reserved/flags
+                    br.readU16LE()  // Reserved/flags  
+                    br.readU16LE()  // Reserved/flags
+                    
+                    latestMetadata = DeviceMetadata(
+                        timestamp = recordTime,
+                        batteryLevel = chargeLevel,
+                        temperature = temperature
+                    )
                 }
 
                 eid == 0 && (gid == 4 || gid == 5) -> {
@@ -124,6 +161,6 @@ internal object RadiacodeDataBuf {
             }
         }
 
-        return latest
+        return FullDeviceData(latestRealTime, latestMetadata)
     }
 }

@@ -73,6 +73,50 @@
 
     </LinearLayout>
 
+    <!-- Device Metadata Row (shown when enabled, above charts) -->
+    <LinearLayout
+        android:id="@+id/metadataRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone">
+
+        <!-- Signal Strength -->
+        <TextView
+            android:id="@+id/signalStrength"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📶 -65"
+            android:textColor="#9E9EA8"
+            android:textSize="9sp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
+
+        <!-- Temperature -->
+        <TextView
+            android:id="@+id/temperature"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🌡️ 28°C"
+            android:textColor="#9E9EA8"
+            android:textSize="9sp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone" />
+
+        <!-- Battery -->
+        <TextView
+            android:id="@+id/battery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔋 85%"
+            android:textColor="#9E9EA8"
+            android:textSize="9sp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
     <!-- Content Area: Metrics display (flexible based on config) -->
     <LinearLayout
         android:id="@+id/contentArea"

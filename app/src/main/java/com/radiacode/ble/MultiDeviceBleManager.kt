@@ -286,7 +286,8 @@ class MultiDeviceBleManager(
                 
                 client.readDataBuf()
                     .thenAccept { buf ->
-                        val rt = RadiacodeDataBuf.decodeLatestRealTime(buf) ?: return@thenAccept
+                        val decoded = RadiacodeDataBuf.decodeFullData(buf)
+                        val rt = decoded.realTimeData ?: return@thenAccept
                         m.consecutivePollFailures = 0
                         m.lastSuccessfulPollMs = System.currentTimeMillis()
                         
@@ -301,6 +302,26 @@ class MultiDeviceBleManager(
                         // Also update global readings for compatibility
                         Prefs.setLastReading(context, uSvPerHour, rt.countRate, timestampMs)
                         Prefs.addRecentReading(context, reading)
+
+                        // Store device metadata (battery/temperature) when available
+                        decoded.metadata?.let { meta ->
+                            Prefs.updateDeviceMetadata(
+                                context = context,
+                                deviceId = deviceId,
+                                temperature = meta.temperature,
+                                batteryLevel = meta.batteryLevel,
+                                timestampMs = timestampMs
+                            )
+                        }
+
+                        // Refresh RSSI (signal strength) after a successful poll
+                        client.readRemoteRssi()
+                            .thenAccept { rssi ->
+                                Prefs.setDeviceSignalStrength(context, deviceId, rssi)
+                            }
+                            .exceptionally {
+                                null
+                            }
                         
                         // Update device state
                         m.state = m.state.copy(
