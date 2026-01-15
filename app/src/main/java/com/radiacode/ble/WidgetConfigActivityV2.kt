@@ -40,6 +40,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private lateinit var doseChartTypeChips: ChipGroup
     private lateinit var countChartTypeChips: ChipGroup
     private lateinit var colorThemeChips: ChipGroup
+    private lateinit var opacityChips: ChipGroup
     private lateinit var timeWindowChips: ChipGroup
     private lateinit var advancedHeader: LinearLayout
     private lateinit var advancedContent: LinearLayout
@@ -48,6 +49,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private lateinit var showAnomalySwitch: SwitchMaterial
     private lateinit var dynamicColorSwitch: SwitchMaterial
     private lateinit var bollingerSwitch: SwitchMaterial
+    private lateinit var showBorderSwitch: SwitchMaterial
     private lateinit var cancelButton: MaterialButton
     private lateinit var createButton: MaterialButton
 
@@ -62,6 +64,8 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
     private var doseChartType = ChartType.SPARKLINE
     private var countChartType = ChartType.SPARKLINE
     private var colorScheme = ColorScheme.DEFAULT
+    private var backgroundOpacity = 100
+    private var showBorder = true
     private var timeWindowSeconds = 60
     private var showTrend = false
     private var showAnomaly = false
@@ -92,6 +96,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         setupDataSourceSwitches()
         setupChartTypeChips()
         setupColorThemeChips()
+        setupOpacityChips()
         setupTimeWindowChips()
         setupAdvancedSection()
         setupButtons()
@@ -113,6 +118,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         doseChartTypeChips = findViewById(R.id.doseChartTypeChips)
         countChartTypeChips = findViewById(R.id.countChartTypeChips)
         colorThemeChips = findViewById(R.id.colorThemeChips)
+        opacityChips = findViewById(R.id.opacityChips)
         timeWindowChips = findViewById(R.id.timeWindowChips)
         advancedHeader = findViewById(R.id.advancedHeader)
         advancedContent = findViewById(R.id.advancedContent)
@@ -121,6 +127,7 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         showAnomalySwitch = findViewById(R.id.showAnomalySwitch)
         dynamicColorSwitch = findViewById(R.id.dynamicColorSwitch)
         bollingerSwitch = findViewById(R.id.bollingerSwitch)
+        showBorderSwitch = findViewById(R.id.showBorderSwitch)
         cancelButton = findViewById(R.id.cancelButton)
         createButton = findViewById(R.id.createButton)
     }
@@ -244,6 +251,33 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         }
     }
 
+    private fun setupOpacityChips() {
+        opacityChips.removeAllViews()
+
+        val opacities = listOf(
+            0 to "0%",
+            25 to "25%",
+            50 to "50%",
+            75 to "75%",
+            100 to "100%"
+        )
+
+        opacities.forEach { (opacity, label) ->
+            val chip = Chip(this).apply {
+                text = label
+                isCheckable = true
+                isChecked = opacity == backgroundOpacity
+                tag = opacity
+                setOnClickListener {
+                    backgroundOpacity = opacity
+                    updateOpacitySelection()
+                    updatePreview()
+                }
+            }
+            opacityChips.addView(chip)
+        }
+    }
+
     private fun setupTimeWindowChips() {
         val windows = listOf(
             30 to "30s",
@@ -295,6 +329,11 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             bollingerBands = isChecked
             updatePreview()
         }
+
+        showBorderSwitch.setOnCheckedChangeListener { _, isChecked ->
+            showBorder = isChecked
+            updatePreview()
+        }
     }
 
     private fun setupButtons() {
@@ -332,6 +371,10 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         colorScheme = existingConfig.colorScheme
         updateColorThemeSelection()
 
+        // Restore background opacity
+        backgroundOpacity = existingConfig.backgroundOpacity
+        updateOpacitySelection()
+
         // Restore time window
         timeWindowSeconds = existingConfig.timeWindowSeconds
         updateTimeWindowSelection()
@@ -341,10 +384,12 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         showAnomaly = existingConfig.showIntelligence
         dynamicColor = existingConfig.dynamicColorEnabled
         bollingerBands = existingConfig.showBollingerBands
+        showBorder = existingConfig.showBorder
         showTrendSwitch.isChecked = showTrend
         showAnomalySwitch.isChecked = showAnomaly
         dynamicColorSwitch.isChecked = dynamicColor
         bollingerSwitch.isChecked = bollingerBands
+        showBorderSwitch.isChecked = showBorder
 
         // Update button text for editing
         createButton.text = "Save Widget"
@@ -354,6 +399,13 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
         for (i in 0 until colorThemeChips.childCount) {
             val chip = colorThemeChips.getChildAt(i) as? Chip ?: continue
             chip.isChecked = chip.tag == colorScheme
+        }
+    }
+
+    private fun updateOpacitySelection() {
+        for (i in 0 until opacityChips.childCount) {
+            val chip = opacityChips.getChildAt(i) as? Chip ?: continue
+            chip.isChecked = chip.tag == backgroundOpacity
         }
     }
 
@@ -424,7 +476,9 @@ class WidgetConfigActivityV2 : AppCompatActivity() {
             customColors = null,
             layoutTemplate = LayoutTemplate.DUAL_SPARKLINE, // Ignored in V2
             aggregationSeconds = 1,
-            dynamicColorEnabled = dynamicColor
+            dynamicColorEnabled = dynamicColor,
+            backgroundOpacity = backgroundOpacity,
+            showBorder = showBorder
         )
     }
 

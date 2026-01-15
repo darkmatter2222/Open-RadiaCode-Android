@@ -73,6 +73,13 @@ object WidgetRenderer {
         val theme = getThemeColors(config.colorScheme)
         val doseUnit = Prefs.getDoseUnit(context)
         val countUnit = Prefs.getCountUnit(context)
+        
+        // Apply background based on opacity AND border settings
+        val bgDrawable = getBackgroundDrawable(config.backgroundOpacity, config.showBorder)
+        views.setInt(R.id.widgetRoot, "setBackgroundResource", bgDrawable)
+        
+        // Get display density for proper chart rendering
+        val density = context.resources.displayMetrics.density
 
         // === HEADER ===
         // Status indicator (using ImageView + setImageViewResource for RemoteViews compatibility)
@@ -128,9 +135,10 @@ object WidgetRenderer {
             }
 
             // Chart - use independent doseChartType
+            // Use density-aware dimensions for sharp rendering
             if (config.doseChartType != ChartType.NONE && data.doseHistory.size >= 3) {
-                val chartWidth = (widgetWidth * 0.4f).toInt().coerceIn(80, 400)
-                val chartHeight = (widgetHeight * 0.25f).toInt().coerceIn(30, 100)
+                val chartWidth = ((widgetWidth * 0.4f) * density).toInt().coerceIn(160, 800)
+                val chartHeight = ((widgetHeight * 0.25f) * density).toInt().coerceIn(60, 200)
                 val chartBitmap = generateChartBitmap(
                     config.doseChartType,
                     data.doseHistory,
@@ -178,9 +186,10 @@ object WidgetRenderer {
             }
 
             // Chart - use independent countChartType
+            // Use density-aware dimensions for sharp rendering
             if (config.countChartType != ChartType.NONE && data.countHistory.size >= 3) {
-                val chartWidth = (widgetWidth * 0.4f).toInt().coerceIn(80, 400)
-                val chartHeight = (widgetHeight * 0.25f).toInt().coerceIn(30, 100)
+                val chartWidth = ((widgetWidth * 0.4f) * density).toInt().coerceIn(160, 800)
+                val chartHeight = ((widgetHeight * 0.25f) * density).toInt().coerceIn(60, 200)
                 val chartBitmap = generateChartBitmap(
                     config.countChartType,
                     data.countHistory,
@@ -217,6 +226,13 @@ object WidgetRenderer {
         val theme = getThemeColors(config.colorScheme)
         val doseUnit = Prefs.getDoseUnit(context)
         val countUnit = Prefs.getCountUnit(context)
+        val density = context.resources.displayMetrics.density
+        
+        // Apply background based on opacity AND border settings
+        val bgDrawable = getBackgroundDrawable(config.backgroundOpacity, config.showBorder)
+        rootView.setBackgroundResource(bgDrawable)
+        // Enable clipToOutline for proper corner rendering
+        rootView.clipToOutline = true
 
         // === HEADER ===
         // Status indicator (now ImageView for consistency with widget)
@@ -271,6 +287,7 @@ object WidgetRenderer {
             }
 
             // Chart - use independent doseChartType
+            // Use density-aware dimensions for sharp rendering
             val doseChartView = rootView.findViewById<ImageView>(R.id.doseChart)
             if (config.doseChartType != ChartType.NONE && data.doseHistory.size >= 3) {
                 val chartBitmap = generateChartBitmap(
@@ -278,7 +295,8 @@ object WidgetRenderer {
                     data.doseHistory,
                     doseColor,
                     theme.backgroundColor,
-                    180, 50,
+                    (180 * density).toInt(),
+                    (50 * density).toInt(),
                     config.showBollingerBands
                 )
                 doseChartView?.setImageBitmap(chartBitmap)
@@ -322,6 +340,7 @@ object WidgetRenderer {
             }
 
             // Chart - use independent countChartType
+            // Use density-aware dimensions for sharp rendering
             val countChartView = rootView.findViewById<ImageView>(R.id.countChart)
             if (config.countChartType != ChartType.NONE && data.countHistory.size >= 3) {
                 val chartBitmap = generateChartBitmap(
@@ -329,7 +348,8 @@ object WidgetRenderer {
                     data.countHistory,
                     countColor,
                     theme.backgroundColor,
-                    180, 50,
+                    (180 * density).toInt(),
+                    (50 * density).toInt(),
                     config.showBollingerBands
                 )
                 countChartView?.setImageBitmap(chartBitmap)
@@ -421,6 +441,29 @@ object WidgetRenderer {
             ColorScheme.PURPLE -> ThemeColors(0xFFB388FF.toInt(), 0xFFCE93D8.toInt(), 0xFF1A0D2A.toInt(), 0xFFFFFFFF.toInt())
             ColorScheme.GRAYSCALE -> ThemeColors(0xFFBDBDBD.toInt(), 0xFF9E9E9E.toInt(), 0xFF1A1A1A.toInt(), 0xFFFFFFFF.toInt())
             ColorScheme.CUSTOM -> ThemeColors(0xFF00E5FF.toInt(), 0xFFE040FB.toInt(), 0xFF1A1A1E.toInt(), 0xFFFFFFFF.toInt())
+        }
+    }
+
+    /**
+     * Get the appropriate background drawable based on opacity and border settings.
+     */
+    private fun getBackgroundDrawable(opacity: Int, showBorder: Boolean): Int {
+        return if (showBorder) {
+            when (opacity) {
+                0 -> R.drawable.widget_background_0
+                25 -> R.drawable.widget_background_25
+                50 -> R.drawable.widget_background_50
+                75 -> R.drawable.widget_background_75
+                else -> R.drawable.widget_background  // 100%
+            }
+        } else {
+            when (opacity) {
+                0 -> R.drawable.widget_background_0_noborder
+                25 -> R.drawable.widget_background_25_noborder
+                50 -> R.drawable.widget_background_50_noborder
+                75 -> R.drawable.widget_background_75_noborder
+                else -> R.drawable.widget_background_noborder  // 100%
+            }
         }
     }
 

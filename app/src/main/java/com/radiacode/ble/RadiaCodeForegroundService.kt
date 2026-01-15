@@ -242,7 +242,8 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
         
-        // Update all widget types
+        // Update all widget types (V2 unified + legacy for any remaining)
+        UnifiedWidgetProvider.updateAll(this)
         RadiaCodeWidgetProvider.updateAll(this)
         SimpleWidgetProvider.updateAll(this)
         ChartWidgetProvider.updateAll(this)

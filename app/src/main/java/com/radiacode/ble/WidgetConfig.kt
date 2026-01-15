@@ -26,11 +26,13 @@ data class WidgetConfig(
     val layoutTemplate: LayoutTemplate = LayoutTemplate.DUAL_SPARKLINE,
     val aggregationSeconds: Int = 1,  // For bar/candle charts: 1, 10, 60, 300, 900, 3600
     val dynamicColorEnabled: Boolean = false,
+    val backgroundOpacity: Int = 100,  // Background opacity: 0, 25, 50, 75, 100 percent
+    val showBorder: Boolean = true,  // Show/hide widget border
     val createdAtMs: Long = System.currentTimeMillis()
 ) {
     fun toJson(): String {
         val customColorsJson = customColors?.toJson() ?: "null"
-        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"createdAtMs":$createdAtMs}"""
+        return """{"widgetId":$widgetId,"deviceId":${if (deviceId != null) "\"$deviceId\"" else "null"},"chartType":"${chartType.name}","doseChartType":"${doseChartType.name}","countChartType":"${countChartType.name}","showDose":$showDose,"showCps":$showCps,"showTime":$showTime,"showStatus":$showStatus,"showSparkline":$showSparkline,"showIntelligence":$showIntelligence,"showBollingerBands":$showBollingerBands,"updateIntervalSeconds":$updateIntervalSeconds,"timeWindowSeconds":$timeWindowSeconds,"colorScheme":"${colorScheme.name}","customColors":$customColorsJson,"layoutTemplate":"${layoutTemplate.name}","aggregationSeconds":$aggregationSeconds,"dynamicColorEnabled":$dynamicColorEnabled,"backgroundOpacity":$backgroundOpacity,"showBorder":$showBorder,"createdAtMs":$createdAtMs}"""
     }
 
     companion object {
@@ -70,6 +72,8 @@ data class WidgetConfig(
                 } catch (_: Exception) { LayoutTemplate.DUAL_SPARKLINE }
                 val aggregationSeconds = json.substringAfter("\"aggregationSeconds\":").substringBefore(",").toIntOrNull() ?: 1
                 val dynamicColorEnabled = json.substringAfter("\"dynamicColorEnabled\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: false
+                val backgroundOpacity = json.substringAfter("\"backgroundOpacity\":").substringBefore(",").substringBefore("}").toIntOrNull() ?: 100
+                val showBorder = json.substringAfter("\"showBorder\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: true
                 val createdAtMs = json.substringAfter("\"createdAtMs\":").substringBefore("}").toLongOrNull() ?: System.currentTimeMillis()
                 
                 // Parse custom colors if present
@@ -100,6 +104,8 @@ data class WidgetConfig(
                     layoutTemplate = layoutTemplate,
                     aggregationSeconds = aggregationSeconds,
                     dynamicColorEnabled = dynamicColorEnabled,
+                    backgroundOpacity = backgroundOpacity,
+                    showBorder = showBorder,
                     createdAtMs = createdAtMs
                 )
             } catch (e: Exception) {
