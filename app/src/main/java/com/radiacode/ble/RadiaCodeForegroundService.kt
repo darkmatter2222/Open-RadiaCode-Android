@@ -36,6 +36,7 @@ class RadiaCodeForegroundService : Service() {
         private const val ACTION_STOP = "com.radiacode.ble.action.STOP"
         private const val ACTION_RECONNECT = "com.radiacode.ble.action.RECONNECT"
         private const val ACTION_RELOAD_DEVICES = "com.radiacode.ble.action.RELOAD_DEVICES"
+        private const val ACTION_REFRESH_NOTIFICATION = "com.radiacode.ble.action.REFRESH_NOTIFICATION"
 
         const val ACTION_READING = "com.radiacode.ble.action.READING"
         const val ACTION_DEVICE_STATE_CHANGED = "com.radiacode.ble.action.DEVICE_STATE"
@@ -70,6 +71,15 @@ class RadiaCodeForegroundService : Service() {
         fun reloadDevices(context: Context) {
             val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_RELOAD_DEVICES)
             context.startService(intent)
+        }
+        
+        fun refreshNotification(context: Context) {
+            val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_REFRESH_NOTIFICATION)
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {
+                // Service might not be running
+            }
         }
     }
 
@@ -133,6 +143,10 @@ class RadiaCodeForegroundService : Service() {
             }
             ACTION_RELOAD_DEVICES -> {
                 deviceManager?.reloadDevices()
+                updateNotificationFromState()
+                return START_STICKY
+            }
+            ACTION_REFRESH_NOTIFICATION -> {
                 updateNotificationFromState()
                 return START_STICKY
             }
@@ -256,6 +270,9 @@ class RadiaCodeForegroundService : Service() {
         val connectedCount = manager.getConnectedCount()
         val totalCount = manager.getTotalCount()
         
+        // Get notification style preference
+        val style = Prefs.getNotificationStyle(this)
+        
         if (totalCount == 0) {
             notifyUpdate("Open RadiaCode", "No devices configured")
             return
@@ -265,35 +282,155 @@ class RadiaCodeForegroundService : Service() {
         val states = manager.getAllDeviceStates()
         val connectedStates = states.filter { it.connectionState == DeviceConnectionState.CONNECTED }
         
+        // Handle disconnected/connecting states based on preference
         if (connectedStates.isEmpty()) {
             val connectingCount = states.count { 
                 it.connectionState == DeviceConnectionState.CONNECTING || 
                 it.connectionState == DeviceConnectionState.RECONNECTING 
             }
-            if (connectingCount > 0) {
-                notifyUpdate("Open RadiaCode", "Connecting to $connectingCount device(s)…")
-            } else {
-                notifyUpdate("Open RadiaCode", "All devices disconnected")
+            
+            when (style) {
+                Prefs.NotificationStyle.OFF -> {
+                    notifyUpdate("Open RadiaCode", "Service running")
+                }
+                Prefs.NotificationStyle.STATUS_ONLY,
+                Prefs.NotificationStyle.READINGS,
+                Prefs.NotificationStyle.DETAILED -> {
+                    if (connectingCount > 0) {
+                        notifyUpdate("Open RadiaCode", "Connecting to $connectingCount device(s)…")
+                    } else {
+                        notifyUpdate("Open RadiaCode", "All devices disconnected")
+                    }
+                }
             }
             return
         }
         
-        // Show readings from connected devices
-        val readingTexts = connectedStates.mapNotNull { state ->
-            state.lastReading?.let { reading ->
-                val name = state.config.shortDisplayName
-                "$name: ${"%.3f".format(reading.uSvPerHour)} μSv/h"
+        // Build notification based on style
+        when (style) {
+            Prefs.NotificationStyle.OFF -> {
+                notifyUpdate("Open RadiaCode", "Service running")
+            }
+            
+            Prefs.NotificationStyle.STATUS_ONLY -> {
+                val text = if (connectedCount == 1) {
+                    "${connectedStates.first().config.shortDisplayName} connected"
+                } else {
+                    "$connectedCount devices connected"
+                }
+                notifyUpdate("Open RadiaCode", text)
+            }
+            
+            Prefs.NotificationStyle.READINGS -> {
+                // Show readings from connected devices
+                val readingTexts = connectedStates.mapNotNull { state ->
+                    state.lastReading?.let { reading ->
+                        val name = state.config.shortDisplayName
+                        "$name: ${"%.3f".format(reading.uSvPerHour)} μSv/h"
+                    }
+                }
+                
+                val title = if (connectedCount == 1) "Open RadiaCode" else "Open RadiaCode ($connectedCount connected)"
+                val text = if (readingTexts.size <= 2) {
+                    readingTexts.joinToString(" • ")
+                } else {
+                    "${readingTexts.take(2).joinToString(" • ")} +${readingTexts.size - 2} more"
+                }
+                
+                notifyUpdate(title, text.ifEmpty { "$connectedCount device(s) connected" })
+            }
+            
+            Prefs.NotificationStyle.DETAILED -> {
+                buildDetailedNotification(connectedCount, connectedStates)
+            }
+        }
+    }
+    
+    private fun buildDetailedNotification(
+        connectedCount: Int,
+        connectedStates: List<DeviceState>
+    ) {
+        val showReadings = Prefs.isNotificationShowReadings(this)
+        val showDeviceCount = Prefs.isNotificationShowDeviceCount(this)
+        val showConnectionStatus = Prefs.isNotificationShowConnectionStatus(this)
+        val showAlerts = Prefs.isNotificationShowAlerts(this)
+        val showAnomalies = Prefs.isNotificationShowAnomalies(this)
+        
+        // Build title
+        val title = if (showDeviceCount && connectedCount > 1) {
+            "Open RadiaCode ($connectedCount connected)"
+        } else {
+            "Open RadiaCode"
+        }
+        
+        // Build content parts
+        val parts = mutableListOf<String>()
+        
+        // Connection status
+        if (showConnectionStatus) {
+            val statusText = if (connectedCount == 1) {
+                "${connectedStates.first().config.shortDisplayName} connected"
+            } else {
+                "$connectedCount devices connected"
+            }
+            // Only add if we're not already showing it in readings
+            if (!showReadings) {
+                parts.add(statusText)
             }
         }
         
-        val title = if (connectedCount == 1) "Open RadiaCode" else "Open RadiaCode ($connectedCount connected)"
-        val text = if (readingTexts.size <= 2) {
-            readingTexts.joinToString(" • ")
-        } else {
-            "${readingTexts.take(2).joinToString(" • ")} +${readingTexts.size - 2} more"
+        // Readings
+        if (showReadings) {
+            val readingTexts = connectedStates.mapNotNull { state ->
+                state.lastReading?.let { reading ->
+                    val name = state.config.shortDisplayName
+                    "$name: ${"%.3f".format(reading.uSvPerHour)} μSv/h"
+                }
+            }
+            if (readingTexts.isNotEmpty()) {
+                val readingText = if (readingTexts.size <= 2) {
+                    readingTexts.joinToString(" • ")
+                } else {
+                    "${readingTexts.take(2).joinToString(" • ")} +${readingTexts.size - 2} more"
+                }
+                parts.add(readingText)
+            }
         }
         
-        notifyUpdate(title, text.ifEmpty { "$connectedCount device(s) connected" })
+        // Alert status
+        if (showAlerts) {
+            val alerts = Prefs.getSmartAlerts(this)
+            val enabledAlerts = alerts.count { it.enabled }
+            if (enabledAlerts > 0) {
+                // Check if any alerts are currently triggered
+                val triggeredCount = alertEvaluator.getActiveAlertCount()
+                if (triggeredCount > 0) {
+                    parts.add("⚠️ $triggeredCount alert(s) active")
+                }
+            }
+        }
+        
+        // Anomaly detection
+        if (showAnomalies) {
+            // Check if any recent anomalies detected
+            val hasAnomaly = connectedStates.any { state ->
+                state.lastReading?.let { reading ->
+                    // Simple anomaly check: reading significantly above normal background
+                    reading.uSvPerHour > 0.5  // Threshold for "anomaly" - could be made configurable
+                } ?: false
+            }
+            if (hasAnomaly) {
+                parts.add("🔬 Elevated readings detected")
+            }
+        }
+        
+        val text = if (parts.isEmpty()) {
+            "All systems normal"
+        } else {
+            parts.joinToString(" | ")
+        }
+        
+        notifyUpdate(title, text)
     }
 
     private fun ensureChannel() {

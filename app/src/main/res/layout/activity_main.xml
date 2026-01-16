@@ -620,10 +620,117 @@
                     android:padding="16dp"
                     android:visibility="gone">
 
+                    <!-- ===== APPLICATION SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Application -->
+                        <LinearLayout
+                            android:id="@+id/sectionAppHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="APPLICATION"
+                                android:textColor="@color/pro_green"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAppArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionAppContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Notification Settings -->
+                            <LinearLayout
+                                android:id="@+id/rowNotificationSettings"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Notification Settings"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Configure status bar notification content"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueNotificationStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Readings"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
                     <!-- ===== CHART SETTINGS SECTION ===== -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
                         android:background="@drawable/card_background"
                         android:orientation="vertical"
                         android:padding="4dp">

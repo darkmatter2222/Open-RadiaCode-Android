@@ -30,6 +30,14 @@ object Prefs {
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
     
+    // Notification Settings keys
+    private const val KEY_NOTIFICATION_STYLE = "notification_style"
+    private const val KEY_NOTIFICATION_SHOW_READINGS = "notification_show_readings"
+    private const val KEY_NOTIFICATION_SHOW_DEVICE_COUNT = "notification_show_device_count"
+    private const val KEY_NOTIFICATION_SHOW_CONNECTION_STATUS = "notification_show_connection_status"
+    private const val KEY_NOTIFICATION_SHOW_ALERTS = "notification_show_alerts"
+    private const val KEY_NOTIFICATION_SHOW_ANOMALIES = "notification_show_anomalies"
+    
     // Smart Alert keys
     private const val KEY_ALERTS_JSON = "alerts_json"
     
@@ -43,6 +51,16 @@ object Prefs {
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
+    
+    /**
+     * Notification style - controls what appears in the persistent notification
+     */
+    enum class NotificationStyle {
+        OFF,                    // Minimal notification (required for foreground service, but minimal content)
+        STATUS_ONLY,            // Connection status only (e.g., "Connected" or "Disconnected")
+        READINGS,               // Show current readings (default)
+        DETAILED                // Show readings + device count + additional info
+    }
     
     /**
      * Device metadata: signal strength (RSSI), temperature, and battery level.
@@ -250,6 +268,104 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SHOW_TREND_ARROWS, enabled)
+            .apply()
+    }
+    
+    // ========== Notification Settings ==========
+    
+    /**
+     * Get the notification style preference
+     * @return The selected notification style, defaults to READINGS
+     */
+    fun getNotificationStyle(context: Context): NotificationStyle {
+        val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_NOTIFICATION_STYLE, NotificationStyle.READINGS.name)
+        return try {
+            NotificationStyle.valueOf(name ?: NotificationStyle.READINGS.name)
+        } catch (_: Exception) {
+            NotificationStyle.READINGS
+        }
+    }
+    
+    fun setNotificationStyle(context: Context, style: NotificationStyle) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_NOTIFICATION_STYLE, style.name)
+            .apply()
+    }
+    
+    /**
+     * Whether to show current readings in the notification (when style is DETAILED)
+     */
+    fun isNotificationShowReadings(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SHOW_READINGS, true)
+    }
+    
+    fun setNotificationShowReadings(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SHOW_READINGS, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show connected device count in the notification
+     */
+    fun isNotificationShowDeviceCount(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SHOW_DEVICE_COUNT, true)
+    }
+    
+    fun setNotificationShowDeviceCount(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SHOW_DEVICE_COUNT, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show connection status changes (Connected/Disconnected/Reconnecting)
+     */
+    fun isNotificationShowConnectionStatus(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SHOW_CONNECTION_STATUS, true)
+    }
+    
+    fun setNotificationShowConnectionStatus(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SHOW_CONNECTION_STATUS, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show active alert status in the notification
+     */
+    fun isNotificationShowAlerts(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SHOW_ALERTS, false)  // Default OFF - alerts have their own notifications
+    }
+    
+    fun setNotificationShowAlerts(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SHOW_ALERTS, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show anomaly detection status in the notification
+     */
+    fun isNotificationShowAnomalies(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SHOW_ANOMALIES, false)  // Default OFF
+    }
+    
+    fun setNotificationShowAnomalies(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SHOW_ANOMALIES, enabled)
             .apply()
     }
     

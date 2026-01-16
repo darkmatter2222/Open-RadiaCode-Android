@@ -84,6 +84,11 @@
             android:exported="false"
             android:label="Widget Crafter" />
 
+        <activity
+            android:name=".NotificationSettingsActivity"
+            android:exported="false"
+            android:label="Notification Settings" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

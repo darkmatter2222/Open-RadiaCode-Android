@@ -183,4 +183,12 @@ class AlertEvaluator(private val context: Context) {
     fun reset() {
         alertStartTimes.clear()
     }
+    
+    /**
+     * Get count of alerts that are currently in "triggered" state (condition met, duration tracking).
+     * This is useful for showing alert status in notifications.
+     */
+    fun getActiveAlertCount(): Int {
+        return alertStartTimes.size
+    }
 }

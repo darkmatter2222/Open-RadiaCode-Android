@@ -130,8 +130,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valuePause: TextView
     private lateinit var valueSmartAlerts: TextView
     private lateinit var valueTrendArrows: TextView
+    private lateinit var valueNotificationStyle: TextView
     
     // Settings sections (expandable)
+    private lateinit var sectionAppHeader: View
+    private lateinit var sectionAppContent: View
+    private lateinit var sectionAppArrow: android.widget.ImageView
     private lateinit var sectionChartHeader: View
     private lateinit var sectionChartContent: View
     private lateinit var sectionChartArrow: android.widget.ImageView
@@ -144,6 +148,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionAdvancedHeader: View
     private lateinit var sectionAdvancedContent: View
     private lateinit var sectionAdvancedArrow: android.widget.ImageView
+    
+    // Application settings rows
+    private lateinit var rowNotificationSettings: View
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -350,8 +357,12 @@ class MainActivity : AppCompatActivity() {
         valuePause = findViewById(R.id.valuePause)
         valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
         valueTrendArrows = findViewById(R.id.valueTrendArrows)
+        valueNotificationStyle = findViewById(R.id.valueNotificationStyle)
         
         // Expandable section headers and content
+        sectionAppHeader = findViewById(R.id.sectionAppHeader)
+        sectionAppContent = findViewById(R.id.sectionAppContent)
+        sectionAppArrow = findViewById(R.id.sectionAppArrow)
         sectionChartHeader = findViewById(R.id.sectionChartHeader)
         sectionChartContent = findViewById(R.id.sectionChartContent)
         sectionChartArrow = findViewById(R.id.sectionChartArrow)
@@ -364,6 +375,9 @@ class MainActivity : AppCompatActivity() {
         sectionAdvancedHeader = findViewById(R.id.sectionAdvancedHeader)
         sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
         sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
+        
+        // Application settings rows
+        rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -431,10 +445,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupSettingsPanel() {
         // Setup expandable sections
+        setupExpandableSection(sectionAppHeader, sectionAppContent, sectionAppArrow, expanded = true)
         setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
         setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
         setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
+        
+        // Application settings
+        rowNotificationSettings.setOnClickListener {
+            startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
         
         rowWindow.setOnClickListener {
             val next = when (Prefs.getWindowSeconds(this, 60)) {
@@ -1448,6 +1468,15 @@ class MainActivity : AppCompatActivity() {
         valueSmartAlerts.text = if (enabledCount == 0) "None" else "$enabledCount active"
         valueSmartAlerts.setTextColor(ContextCompat.getColor(this,
             if (enabledCount > 0) R.color.pro_amber else R.color.pro_text_muted))
+        
+        // Notification style
+        val notifStyle = Prefs.getNotificationStyle(this)
+        valueNotificationStyle.text = when (notifStyle) {
+            Prefs.NotificationStyle.OFF -> "Minimal"
+            Prefs.NotificationStyle.STATUS_ONLY -> "Status"
+            Prefs.NotificationStyle.READINGS -> "Readings"
+            Prefs.NotificationStyle.DETAILED -> "Detailed"
+        }
     }
 
     private enum class Panel { Dashboard, Device, Settings, Logs }
