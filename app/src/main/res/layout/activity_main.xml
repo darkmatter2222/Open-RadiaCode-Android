@@ -120,6 +120,7 @@
                         android:padding="12dp"
                         android:visibility="gone">
 
+                        <!-- Header Row with Title, Info Button, and Alert Badge -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -136,6 +137,18 @@
                                 android:textStyle="bold"
                                 android:letterSpacing="0.1" />
                             
+                            <!-- Info Button -->
+                            <ImageView
+                                android:id="@+id/intelligenceInfoButton"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="8dp"
+                                android:src="@android:drawable/ic_dialog_info"
+                                android:tint="@color/pro_text_muted"
+                                android:contentDescription="Help"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:padding="2dp" />
+                            
                             <!-- Alert badge count -->
                             <TextView
                                 android:id="@+id/intelligenceAlertBadge"
@@ -151,6 +164,40 @@
                                 android:visibility="gone" />
                         </LinearLayout>
 
+                        <!-- Stability and Data Quality Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <!-- Stability Indicator -->
+                            <TextView
+                                android:id="@+id/stabilityIndicator"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● STABLE"
+                                android:textColor="@color/pro_green"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                            
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="12dp"
+                                android:layout_marginHorizontal="10dp"
+                                android:background="@color/pro_border" />
+                            
+                            <!-- Data Quality -->
+                            <TextView
+                                android:id="@+id/dataQualityLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Good (50 samples)"
+                                android:textColor="@color/pro_text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
                         <!-- Summary text -->
                         <TextView
                             android:id="@+id/intelligenceSummary"
@@ -162,13 +209,14 @@
                             android:textSize="13sp"
                             android:lineSpacingExtra="4dp" />
 
-                        <!-- Trend indicator row -->
+                        <!-- Main Metrics Row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
+                            android:layout_marginTop="10dp"
                             android:orientation="horizontal">
                             
+                            <!-- Dose Trend Column -->
                             <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
@@ -193,6 +241,7 @@
                                     android:textStyle="bold" />
                             </LinearLayout>
                             
+                            <!-- Prediction Column -->
                             <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
@@ -214,8 +263,18 @@
                                     android:text="—"
                                     android:textColor="@color/pro_text_primary"
                                     android:textSize="14sp" />
+                                
+                                <!-- Confidence indicator -->
+                                <TextView
+                                    android:id="@+id/predictionConfidenceLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="—"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
                             </LinearLayout>
                             
+                            <!-- Anomalies Column -->
                             <LinearLayout
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
@@ -238,7 +297,221 @@
                                     android:textColor="@color/pro_green"
                                     android:textSize="14sp"
                                     android:textStyle="bold" />
+                                
+                                <!-- Active/Recent distinction -->
+                                <TextView
+                                    android:id="@+id/anomalyDetailLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="none"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
                             </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Expandable Details Section -->
+                        <LinearLayout
+                            android:id="@+id/intelligenceExpandedSection"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+                            
+                            <!-- Divider -->
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="@color/pro_border" />
+                            
+                            <!-- Statistics Grid -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:orientation="horizontal">
+                                
+                                <!-- Min/Max Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Range"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsRangeLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Std Dev Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Std Dev (σ)"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsStdDevLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- CV% Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="CV%"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsCvLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </LinearLayout>
+                            
+                            <!-- Second Stats Row -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:orientation="horizontal">
+                                
+                                <!-- Background Level Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Est. Background"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsBackgroundLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Current vs Background Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="vs Background"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsVsBackgroundLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Current Z-Score Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Current Z"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsZScoreLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Expand/Collapse Indicator -->
+                        <LinearLayout
+                            android:id="@+id/intelligenceExpandButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:orientation="horizontal"
+                            android:padding="4dp"
+                            android:background="?attr/selectableItemBackground">
+                            
+                            <TextView
+                                android:id="@+id/intelligenceExpandText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Show Details"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp" />
+                            
+                            <ImageView
+                                android:id="@+id/intelligenceExpandArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="4dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                android:tint="@color/pro_text_muted"
+                                android:contentDescription="Expand" />
                         </LinearLayout>
 
                     </LinearLayout>

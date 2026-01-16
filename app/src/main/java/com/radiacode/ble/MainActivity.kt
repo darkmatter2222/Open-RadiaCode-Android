@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -132,6 +133,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var doseTrendLabel: TextView
     private lateinit var predictedDoseLabel: TextView
     private lateinit var anomalyCountLabel: TextView
+    private lateinit var intelligenceInfoButton: ImageView
+    private lateinit var stabilityIndicator: TextView
+    private lateinit var dataQualityLabel: TextView
+    private lateinit var predictionConfidenceLabel: TextView
+    private lateinit var anomalyDetailLabel: TextView
+    private lateinit var intelligenceExpandedSection: LinearLayout
+    private lateinit var intelligenceExpandButton: LinearLayout
+    private lateinit var intelligenceExpandText: TextView
+    private lateinit var intelligenceExpandArrow: ImageView
+    private lateinit var statsRangeLabel: TextView
+    private lateinit var statsStdDevLabel: TextView
+    private lateinit var statsCvLabel: TextView
+    private lateinit var statsBackgroundLabel: TextView
+    private lateinit var statsVsBackgroundLabel: TextView
+    private lateinit var statsZScoreLabel: TextView
+    private var intelligenceExpanded = false
 
     // Device panel
     private lateinit var connectionDot: View
@@ -412,6 +429,25 @@ class MainActivity : AppCompatActivity() {
         doseTrendLabel = findViewById(R.id.doseTrendLabel)
         predictedDoseLabel = findViewById(R.id.predictedDoseLabel)
         anomalyCountLabel = findViewById(R.id.anomalyCountLabel)
+        intelligenceInfoButton = findViewById(R.id.intelligenceInfoButton)
+        stabilityIndicator = findViewById(R.id.stabilityIndicator)
+        dataQualityLabel = findViewById(R.id.dataQualityLabel)
+        predictionConfidenceLabel = findViewById(R.id.predictionConfidenceLabel)
+        anomalyDetailLabel = findViewById(R.id.anomalyDetailLabel)
+        intelligenceExpandedSection = findViewById(R.id.intelligenceExpandedSection)
+        intelligenceExpandButton = findViewById(R.id.intelligenceExpandButton)
+        intelligenceExpandText = findViewById(R.id.intelligenceExpandText)
+        intelligenceExpandArrow = findViewById(R.id.intelligenceExpandArrow)
+        statsRangeLabel = findViewById(R.id.statsRangeLabel)
+        statsStdDevLabel = findViewById(R.id.statsStdDevLabel)
+        statsCvLabel = findViewById(R.id.statsCvLabel)
+        statsBackgroundLabel = findViewById(R.id.statsBackgroundLabel)
+        statsVsBackgroundLabel = findViewById(R.id.statsVsBackgroundLabel)
+        statsZScoreLabel = findViewById(R.id.statsZScoreLabel)
+        
+        // Intelligence card interactions
+        intelligenceInfoButton.setOnClickListener { showIntelligenceHelpDialog() }
+        intelligenceExpandButton.setOnClickListener { toggleIntelligenceExpanded() }
 
         connectionDot = findViewById(R.id.connectionDot)
         connectionStatus = findViewById(R.id.connectionStatus)
@@ -1805,6 +1841,25 @@ class MainActivity : AppCompatActivity() {
             intelligenceCard.visibility = View.VISIBLE
             intelligenceSummary.text = report.summary
             
+            // Update stability indicator
+            val (stabilityText, stabilityColor) = when (report.stability) {
+                StabilityLevel.STABLE -> "● STABLE" to getColor(R.color.pro_green)
+                StabilityLevel.VARIABLE -> "◐ VARIABLE" to getColor(R.color.pro_amber)
+                StabilityLevel.ERRATIC -> "○ ERRATIC" to getColor(R.color.pro_red)
+            }
+            stabilityIndicator.text = stabilityText
+            stabilityIndicator.setTextColor(stabilityColor)
+            
+            // Update data quality label
+            val qualityText = when (report.dataQuality) {
+                DataQuality.EXCELLENT -> "Excellent (${report.sampleCount})"
+                DataQuality.GOOD -> "Good (${report.sampleCount})"
+                DataQuality.FAIR -> "Fair (${report.sampleCount})"
+                DataQuality.LIMITED -> "Limited (${report.sampleCount})"
+                DataQuality.INSUFFICIENT -> "Collecting..."
+            }
+            dataQualityLabel.text = qualityText
+            
             // Update alert badge
             val alertCount = report.alerts.size
             if (alertCount > 0) {
@@ -1818,41 +1873,153 @@ class MainActivity : AppCompatActivity() {
                 intelligenceAlertBadge.visibility = View.GONE
             }
             
-            // Update trend label
-            val dosePrediction = report.predictions.firstOrNull { it.type == PredictionType.NEXT_DOSE }
-            if (dosePrediction != null) {
-                val trendDirection = when {
-                    dosePrediction.predictedValue > (lastShownReading?.uSvPerHour ?: 0f) * 1.05f -> "↑ Rising"
-                    dosePrediction.predictedValue < (lastShownReading?.uSvPerHour ?: 0f) * 0.95f -> "↓ Falling"
-                    else -> "→ Stable"
+            // Update trend label using trend description
+            val trendDesc = report.doseTrendDescription
+            if (trendDesc != null) {
+                val trendDirection = when (trendDesc.direction) {
+                    TrendDirection.INCREASING -> "↑ Rising"
+                    TrendDirection.DECREASING -> "↓ Falling"
+                    TrendDirection.STABLE -> "→ Stable"
                 }
-                val trendColor = when {
-                    trendDirection.contains("Rising") -> getColor(R.color.pro_amber)
-                    trendDirection.contains("Falling") -> getColor(R.color.pro_cyan)
-                    else -> getColor(R.color.pro_green)
+                val trendColor = when (trendDesc.direction) {
+                    TrendDirection.INCREASING -> getColor(R.color.pro_amber)
+                    TrendDirection.DECREASING -> getColor(R.color.pro_cyan)
+                    TrendDirection.STABLE -> getColor(R.color.pro_green)
                 }
                 doseTrendLabel.text = trendDirection
                 doseTrendLabel.setTextColor(trendColor)
-                
-                // Predicted value
+            }
+            
+            // Update prediction with confidence
+            val dosePrediction = report.predictions.firstOrNull { it.type == PredictionType.NEXT_DOSE }
+            if (dosePrediction != null) {
                 val doseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
                 val predictedStr = when (doseUnit) {
                     Prefs.DoseUnit.USV_H -> String.format("%.3f μSv/h", dosePrediction.predictedValue)
                     Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", dosePrediction.predictedValue * 1000)
                 }
                 predictedDoseLabel.text = predictedStr
+                
+                // Confidence indicator
+                val confText = String.format("%.0f%% conf", dosePrediction.confidence)
+                val confColor = when (dosePrediction.confidenceLevel) {
+                    ConfidenceLevel.HIGH -> getColor(R.color.pro_green)
+                    ConfidenceLevel.MEDIUM -> getColor(R.color.pro_amber)
+                    ConfidenceLevel.LOW -> getColor(R.color.pro_text_muted)
+                }
+                predictionConfidenceLabel.text = confText
+                predictionConfidenceLabel.setTextColor(confColor)
             }
             
-            // Update anomaly count
-            val anomalyCount = report.anomalies.size
-            anomalyCountLabel.text = anomalyCount.toString()
-            val anomalyColor = when {
-                anomalyCount == 0 -> getColor(R.color.pro_green)
-                anomalyCount <= 2 -> getColor(R.color.pro_amber)
-                else -> getColor(R.color.pro_red)
+            // Update anomaly count with active/recent distinction
+            val activeCount = report.activeAnomalyCount
+            val recentCount = report.recentAnomalyCount
+            
+            if (activeCount > 0) {
+                anomalyCountLabel.text = activeCount.toString()
+                anomalyCountLabel.setTextColor(getColor(R.color.pro_red))
+                anomalyDetailLabel.text = "$activeCount active"
+                anomalyDetailLabel.setTextColor(getColor(R.color.pro_red))
+            } else if (recentCount > 0) {
+                anomalyCountLabel.text = recentCount.toString()
+                anomalyCountLabel.setTextColor(getColor(R.color.pro_amber))
+                anomalyDetailLabel.text = "$recentCount recent"
+                anomalyDetailLabel.setTextColor(getColor(R.color.pro_text_muted))
+            } else {
+                anomalyCountLabel.text = "0"
+                anomalyCountLabel.setTextColor(getColor(R.color.pro_green))
+                anomalyDetailLabel.text = "none"
+                anomalyDetailLabel.setTextColor(getColor(R.color.pro_text_muted))
             }
-            anomalyCountLabel.setTextColor(anomalyColor)
+            
+            // Update expanded stats section (if expanded)
+            if (intelligenceExpanded) {
+                updateIntelligenceExpandedStats(report)
+            }
         }
+    }
+    
+    private fun updateIntelligenceExpandedStats(report: IntelligenceReport) {
+        val doseStats = report.doseStatistics ?: return
+        val doseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        
+        // Range (min - max)
+        val rangeStr = when (doseUnit) {
+            Prefs.DoseUnit.USV_H -> String.format("%.3f - %.3f", doseStats.min, doseStats.max)
+            Prefs.DoseUnit.NSV_H -> String.format("%.0f - %.0f", doseStats.min * 1000, doseStats.max * 1000)
+        }
+        statsRangeLabel.text = rangeStr
+        
+        // Std Dev
+        val stdDevStr = when (doseUnit) {
+            Prefs.DoseUnit.USV_H -> String.format("±%.4f", doseStats.stdDev)
+            Prefs.DoseUnit.NSV_H -> String.format("±%.1f", doseStats.stdDev * 1000)
+        }
+        statsStdDevLabel.text = stdDevStr
+        
+        // CV%
+        statsCvLabel.text = String.format("%.1f%%", doseStats.coefficientOfVariation)
+        val cvColor = when {
+            doseStats.coefficientOfVariation < 15 -> getColor(R.color.pro_green)
+            doseStats.coefficientOfVariation < 35 -> getColor(R.color.pro_amber)
+            else -> getColor(R.color.pro_red)
+        }
+        statsCvLabel.setTextColor(cvColor)
+        
+        // Estimated background
+        val bgStr = when (doseUnit) {
+            Prefs.DoseUnit.USV_H -> String.format("%.3f μSv/h", report.estimatedBackground)
+            Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", report.estimatedBackground * 1000)
+        }
+        statsBackgroundLabel.text = bgStr
+        
+        // Current vs background
+        val vsStr = String.format("%.0f%%", report.currentVsBackground)
+        statsVsBackgroundLabel.text = vsStr
+        val vsColor = when {
+            report.currentVsBackground > 150 -> getColor(R.color.pro_red)
+            report.currentVsBackground > 120 -> getColor(R.color.pro_amber)
+            else -> getColor(R.color.pro_green)
+        }
+        statsVsBackgroundLabel.setTextColor(vsColor)
+        
+        // Current Z-score
+        val zStr = String.format("%.2f σ", report.currentZScore)
+        statsZScoreLabel.text = zStr
+        val zColor = when {
+            kotlin.math.abs(report.currentZScore) > 3 -> getColor(R.color.pro_red)
+            kotlin.math.abs(report.currentZScore) > 2 -> getColor(R.color.pro_amber)
+            else -> getColor(R.color.pro_green)
+        }
+        statsZScoreLabel.setTextColor(zColor)
+    }
+    
+    private fun toggleIntelligenceExpanded() {
+        intelligenceExpanded = !intelligenceExpanded
+        
+        if (intelligenceExpanded) {
+            intelligenceExpandedSection.visibility = View.VISIBLE
+            intelligenceExpandText.text = "Hide Details"
+            intelligenceExpandArrow.rotation = 180f
+            
+            // Update stats now
+            val currentDeviceId = Prefs.getSelectedDeviceId(this)
+            val report = IntelligenceEngine.analyzeReadings(this, currentDeviceId)
+            updateIntelligenceExpandedStats(report)
+        } else {
+            intelligenceExpandedSection.visibility = View.GONE
+            intelligenceExpandText.text = "Show Details"
+            intelligenceExpandArrow.rotation = 0f
+        }
+    }
+    
+    private fun showIntelligenceHelpDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_intelligence_help, null)
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setView(dialogView)
+            .setPositiveButton("Got it", null)
+            .show()
     }
 
     private fun updateChartTitles() {
