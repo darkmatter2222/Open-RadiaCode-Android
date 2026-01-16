@@ -20,13 +20,15 @@ import kotlin.math.min
 class MultiDeviceBleManager(
     private val context: Context,
     private val onDeviceStateChanged: (DeviceState) -> Unit,
-    private val onDeviceReading: (String, Float, Float, Long) -> Unit  // deviceId, uSvH, cps, timestampMs
+    private val onDeviceReading: (String, Float, Float, Long) -> Unit,  // deviceId, uSvH, cps, timestampMs
+    private val onSpectrumReading: ((String, SpectrumData) -> Unit)? = null  // deviceId, spectrum
 ) {
     companion object {
         private const val TAG = "RadiaCode"
         private const val DEFAULT_POLL_MS = 1000L
         private const val RECONNECT_BASE_DELAY_MS = 2_000L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
+        private const val SPECTRUM_POLL_INTERVAL = 3  // Read spectrum every N poll cycles
     }
     
     // Per-device state
@@ -39,7 +41,9 @@ class MultiDeviceBleManager(
         var consecutivePollFailures: Int = 0,
         var lastSuccessfulPollMs: Long = 0L,
         @Volatile var intentionalClose: Boolean = false,
-        var state: DeviceState = DeviceState(config)
+        var state: DeviceState = DeviceState(config),
+        var pollCycleCount: Int = 0,  // Track poll cycles for spectrum reading
+        var cachedCalibration: Triple<Float, Float, Float>? = null  // a0, a1, a2
     )
     
     private val devices = ConcurrentHashMap<String, ManagedDevice>()
@@ -284,6 +288,19 @@ class MultiDeviceBleManager(
                 val m = devices[deviceId] ?: return@schedule
                 val client = m.client ?: return@schedule
                 
+                // Increment poll cycle counter
+                m.pollCycleCount++
+                
+                // Check if we should read spectrum this cycle
+                val realtimeEnabled = Prefs.isIsotopeRealtimeEnabled(context)
+                val hasCallback = onSpectrumReading != null
+                val isSpectrumCycle = m.pollCycleCount % SPECTRUM_POLL_INTERVAL == 0
+                val shouldReadSpectrum = hasCallback && realtimeEnabled && isSpectrumCycle
+                
+                if (m.pollCycleCount % 10 == 0) {
+                    Log.d(TAG, "Poll cycle ${m.pollCycleCount} for $deviceId: realtimeEnabled=$realtimeEnabled hasCallback=$hasCallback isSpectrumCycle=$isSpectrumCycle")
+                }
+                
                 client.readDataBuf()
                     .thenAccept { buf ->
                         val decoded = RadiacodeDataBuf.decodeFullData(buf)
@@ -339,6 +356,13 @@ class MultiDeviceBleManager(
                         
                         // Callback
                         onDeviceReading(deviceId, uSvPerHour, rt.countRate, timestampMs)
+                        
+                        // Trigger spectrum read on a separate thread to avoid deadlock
+                        if (shouldReadSpectrum) {
+                            executor.execute { 
+                                readAndBroadcastSpectrum(deviceId, client, m) 
+                            }
+                        }
                     }
                     .exceptionally { t ->
                         m.consecutivePollFailures += 1
@@ -363,6 +387,55 @@ class MultiDeviceBleManager(
             delayMs,
             TimeUnit.MILLISECONDS
         )
+    }
+    
+    /**
+     * Read spectrum data and send to callback.
+     * Uses DIFFERENTIAL spectrum for real-time mode (shows recent counts, not accumulated).
+     * Caches calibration to avoid reading it every time.
+     */
+    private fun readAndBroadcastSpectrum(deviceId: String, client: RadiacodeBleClient, managed: ManagedDevice) {
+        Log.d(TAG, "Starting differential spectrum read for $deviceId")
+        
+        // Use async chaining to avoid deadlocks
+        // First read calibration if not cached
+        val calibFuture = if (managed.cachedCalibration == null) {
+            client.readEnergyCalibration()
+                .thenApply { calib ->
+                    if (calib != null) {
+                        managed.cachedCalibration = Triple(calib.a0, calib.a1, calib.a2)
+                        Log.d(TAG, "Cached calibration for $deviceId: a0=${calib.a0} a1=${calib.a1} a2=${calib.a2}")
+                    }
+                    managed.cachedCalibration
+                }
+        } else {
+            java.util.concurrent.CompletableFuture.completedFuture(managed.cachedCalibration)
+        }
+        
+        // Then read DIFFERENTIAL spectrum (recent counts, not accumulated)
+        // This is critical for real-time isotope identification
+        calibFuture
+            .thenCompose { calib ->
+                client.readDifferentialSpectrum().thenApply { spectrum -> Pair(calib, spectrum) }
+            }
+            .thenAccept { (calib, spectrum) ->
+                if (spectrum != null) {
+                    val fullSpectrum = if (calib != null) {
+                        spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
+                    } else {
+                        spectrum
+                    }
+                    
+                    Log.d(TAG, "Differential spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
+                    onSpectrumReading?.invoke(deviceId, fullSpectrum)
+                } else {
+                    Log.w(TAG, "Differential spectrum was null for $deviceId")
+                }
+            }
+            .exceptionally { t ->
+                Log.w(TAG, "Spectrum read failed for $deviceId", t)
+                null
+            }
     }
     
     private fun scheduleReconnect(deviceId: String, reason: String) {

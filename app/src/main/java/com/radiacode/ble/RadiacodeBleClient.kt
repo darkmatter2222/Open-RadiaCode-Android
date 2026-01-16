@@ -272,7 +272,23 @@ internal class RadiacodeBleClient(
                 val countsBytes = flen - 16  // 4 (duration) + 12 (calibration)
                 val counts = parseSpectrumCounts(bb, countsBytes)
                 
-                Log.d(TAG, "readSpectrum: duration=${durationSeconds}s a0=$a0 a1=$a1 a2=$a2 channels=${counts.size}")
+                // Log some sample data for debugging
+                val totalCounts = counts.sumOf { it.toLong() }
+                val maxCount = counts.maxOrNull() ?: 0
+                val nonZeroChannels = counts.count { it > 0 }
+                Log.d(TAG, "readSpectrum: duration=${durationSeconds}s a0=$a0 a1=$a1 a2=$a2")
+                Log.d(TAG, "readSpectrum: channels=${counts.size} totalCounts=$totalCounts maxCount=$maxCount nonZeroChannels=$nonZeroChannels")
+                
+                // Log a few channel samples around common peaks
+                if (counts.size >= 1024) {
+                    // Cs-137 at ~662 keV (around channel 280 typically)
+                    // K-40 at ~1461 keV (around channel 620 typically)
+                    val sample = listOf(0, 50, 100, 200, 280, 400, 500, 620, 800, 1000).map { ch ->
+                        if (ch < counts.size) "$ch:${counts[ch]}" else "$ch:N/A"
+                    }.joinToString(", ")
+                    Log.d(TAG, "readSpectrum: sampleChannels=[$sample]")
+                }
+                
                 SpectrumData(
                     durationSeconds = durationSeconds,
                     a0 = a0,
@@ -321,18 +337,156 @@ internal class RadiacodeBleClient(
     }
     
     /**
+     * Reads the differential (recent) gamma spectrum.
+     * This is ideal for real-time isotope identification as it shows RECENT counts,
+     * not the total accumulated since device boot.
+     */
+    fun readDifferentialSpectrum(): CompletableFuture<SpectrumData> {
+        Log.d(TAG, "readDifferentialSpectrum: RD_VIRT_STRING VS_SPEC_DIFF")
+        val payload = RadiacodeProtocol.packU32LE(RadiacodeProtocol.VS_SPEC_DIFF.toLong())
+        return execute(RadiacodeProtocol.COMMAND_RD_VIRT_STRING, payload)
+            .thenApply { resp ->
+                if (resp.size < 8) throw IllegalStateException("RD_VIRT_STRING response too short")
+                val bb = ByteBuffer.wrap(resp).order(ByteOrder.LITTLE_ENDIAN)
+                val retcode = bb.int
+                val flen = bb.int
+                if (retcode != 1) throw IllegalStateException("RD_VIRT_STRING (SPEC_DIFF) failed ret=$retcode")
+                if (flen < 16) throw IllegalStateException("Differential spectrum data too short flen=$flen")
+                
+                // Format: <Ifff> duration_seconds, a0, a1, a2 (calibration), then counts
+                val durationSeconds = bb.int
+                val a0 = bb.float  // keV offset
+                val a1 = bb.float  // keV/channel (linear)
+                val a2 = bb.float  // keV/channel² (quadratic)
+                
+                // Parse counts - remaining bytes are the spectrum data
+                val countsBytes = flen - 16
+                val counts = parseSpectrumCounts(bb, countsBytes)
+                
+                // Log for debugging
+                val totalCounts = counts.sumOf { it.toLong() }
+                val maxCount = counts.maxOrNull() ?: 0
+                val nonZeroChannels = counts.count { it > 0 }
+                Log.d(TAG, "readDifferentialSpectrum: duration=${durationSeconds}s totalCounts=$totalCounts maxCount=$maxCount nonZero=$nonZeroChannels")
+                
+                SpectrumData(
+                    durationSeconds = durationSeconds,
+                    a0 = a0,
+                    a1 = a1,
+                    a2 = a2,
+                    counts = counts,
+                    timestampMs = System.currentTimeMillis()
+                )
+            }
+            .whenComplete { _, t ->
+                if (t != null) {
+                    Log.e(TAG, "readDifferentialSpectrum failed", t)
+                }
+            }
+    }
+    
+    /**
      * Parse spectrum counts from the response buffer.
-     * RadiaCode can use simple U32 array or run-length encoded format.
-     * We attempt simple parsing first; 1024 channels * 4 bytes = 4096 bytes expected.
+     * RadiaCode uses RLE compressed format (Version 1) by default.
+     * Format: repeated [U16 header] + [variable-length values]
+     *   - Header: count (bits 4-15), vlen (bits 0-3)
+     *   - vlen determines how each value is encoded (delta from previous)
      */
     private fun parseSpectrumCounts(bb: ByteBuffer, bytesRemaining: Int): IntArray {
-        // Simple format: array of U32 counts
-        val numChannels = bytesRemaining / 4
-        val counts = IntArray(numChannels)
-        for (i in 0 until numChannels) {
-            counts[i] = bb.int
+        // Check if we have simple format (exactly 4096 bytes = 1024 * 4 for U32 array)
+        // or RLE compressed format (typically much smaller)
+        if (bytesRemaining == 1024 * 4) {
+            // Simple Version 0 format: array of U32 counts
+            Log.d(TAG, "parseSpectrumCounts: Using Version 0 (simple U32 array)")
+            val counts = IntArray(1024)
+            for (i in 0 until 1024) {
+                counts[i] = bb.int
+            }
+            return counts
         }
-        return counts
+        
+        // Version 1: RLE compressed with delta encoding
+        Log.d(TAG, "parseSpectrumCounts: Using Version 1 (RLE compressed), bytesRemaining=$bytesRemaining")
+        return parseSpectrumCountsRLE(bb, bytesRemaining)
+    }
+    
+    /**
+     * Parse RLE-compressed spectrum counts (Version 1 format).
+     * Based on cdump/radiacode Python library: decode_counts_v1
+     * 
+     * Format:
+     *   - Read U16: count = (u16 >> 4) & 0x0FFF, vlen = u16 & 0x0F
+     *   - For each of `count` iterations, read value based on vlen:
+     *     - vlen=0: value is 0
+     *     - vlen=1: read U8 as absolute value
+     *     - vlen=2: read signed byte (i8), add to last value (delta)
+     *     - vlen=3: read signed short (i16), add to last value (delta)
+     *     - vlen=4: read 3 bytes (BBb format), add to last value (delta)
+     *     - vlen=5: read signed int (i32), add to last value (delta)
+     */
+    private fun parseSpectrumCountsRLE(bb: ByteBuffer, bytesRemaining: Int): IntArray {
+        val result = mutableListOf<Int>()
+        var lastValue = 0
+        val startPos = bb.position()
+        val endPos = startPos + bytesRemaining
+        
+        while (bb.position() < endPos && (endPos - bb.position()) >= 2) {
+            val u16 = bb.short.toInt() and 0xFFFF  // Read as unsigned
+            val count = (u16 shr 4) and 0x0FFF
+            val vlen = u16 and 0x0F
+            
+            for (i in 0 until count) {
+                val value: Int = when (vlen) {
+                    0 -> 0  // Zero value
+                    1 -> {
+                        // U8: absolute value
+                        if (bb.position() >= endPos) break
+                        bb.get().toInt() and 0xFF
+                    }
+                    2 -> {
+                        // Signed byte delta
+                        if (bb.position() >= endPos) break
+                        lastValue + bb.get().toInt()  // signed byte
+                    }
+                    3 -> {
+                        // Signed short delta
+                        if (bb.position() + 1 >= endPos) break
+                        lastValue + bb.short.toInt()  // signed short
+                    }
+                    4 -> {
+                        // 3-byte signed delta (BBb format: a, b, c)
+                        if (bb.position() + 2 >= endPos) break
+                        val a = bb.get().toInt() and 0xFF
+                        val b = bb.get().toInt() and 0xFF
+                        val c = bb.get().toInt()  // signed byte
+                        val delta = (c shl 16) or (b shl 8) or a
+                        lastValue + delta
+                    }
+                    5 -> {
+                        // Signed int delta
+                        if (bb.position() + 3 >= endPos) break
+                        lastValue + bb.int
+                    }
+                    else -> {
+                        Log.e(TAG, "parseSpectrumCountsRLE: Unsupported vlen=$vlen")
+                        throw IllegalStateException("Unsupported vlen=$vlen in RLE spectrum format")
+                    }
+                }
+                lastValue = value
+                result.add(value)
+            }
+        }
+        
+        Log.d(TAG, "parseSpectrumCountsRLE: Decoded ${result.size} channels")
+        
+        // RadiaCode spectra are typically 1024 channels
+        // If we got a different count, pad or truncate
+        return if (result.size >= 1024) {
+            result.take(1024).toIntArray()
+        } else {
+            Log.w(TAG, "parseSpectrumCountsRLE: Only got ${result.size} channels, padding to 1024")
+            IntArray(1024) { if (it < result.size) result[it] else 0 }
+        }
     }
 
     private fun execute(command: Int, args: ByteArray): CompletableFuture<ByteArray> {

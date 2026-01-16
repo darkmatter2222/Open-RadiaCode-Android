@@ -80,54 +80,13 @@
                     android:orientation="vertical"
                     android:padding="12dp">
 
-                    <!-- Device Selector (hidden if only 1 device) -->
+                    <!-- Device Selector (hidden if only 1 device) - includes integrated metadata -->
                     <com.radiacode.ble.ui.DeviceSelectorView
                         android:id="@+id/deviceSelector"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="12dp"
                         android:visibility="gone" />
-
-                    <!-- Device Metadata (Signal / Temperature / Battery) -->
-                    <LinearLayout
-                        android:id="@+id/dashboardMetadataRow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:background="@drawable/card_background"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="10dp"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:id="@+id/dashboardSignalStrength"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginEnd="12dp"
-                            android:text="RSSI —"
-                            android:textColor="@color/pro_text_secondary"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/dashboardTemperature"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginEnd="12dp"
-                            android:text="Temp —"
-                            android:textColor="@color/pro_text_secondary"
-                            android:textSize="12sp" />
-
-                        <TextView
-                            android:id="@+id/dashboardBattery"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Battery —"
-                            android:textColor="@color/pro_text_secondary"
-                            android:textSize="12sp" />
-
-                    </LinearLayout>
 
                     <!-- Metric Cards Row -->
                     <LinearLayout
@@ -443,16 +402,44 @@
                                 android:textStyle="bold"
                                 android:letterSpacing="0.1" />
                             
+                            <!-- Accumulation Mode Toggle (FULL / INT) -->
+                            <TextView
+                                android:id="@+id/isotopeAccumulationModeToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="4dp"
+                                android:text="FULL"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:background="@drawable/chip_outline_background" />
+                            
                             <!-- Display Mode Toggle (Probability / Fraction) -->
                             <TextView
                                 android:id="@+id/isotopeDisplayModeToggle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginEnd="8dp"
-                                android:paddingHorizontal="8dp"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
                                 android:paddingVertical="4dp"
                                 android:text="PROB"
                                 android:textColor="@color/pro_cyan"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:background="@drawable/chip_outline_background" />
+                            
+                            <!-- Hide Background Toggle -->
+                            <TextView
+                                android:id="@+id/isotopeHideBackgroundToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="4dp"
+                                android:text="BKG"
+                                android:textColor="@color/pro_text_muted"
                                 android:textSize="10sp"
                                 android:textStyle="bold"
                                 android:background="@drawable/chip_outline_background" />

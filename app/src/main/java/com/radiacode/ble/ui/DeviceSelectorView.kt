@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
@@ -25,6 +26,8 @@ import com.radiacode.ble.R
  * Options:
  *   - "All Devices" (aggregate view)
  *   - Individual device names
+ * 
+ * Also displays integrated device metadata (signal, temp, battery).
  */
 class DeviceSelectorView @JvmOverloads constructor(
     context: Context,
@@ -43,6 +46,19 @@ class DeviceSelectorView @JvmOverloads constructor(
     private val spinner: Spinner
     private val statusDot: View
     private val settingsButton: ImageButton
+    
+    // Device stats row
+    private val deviceStatsRow: View
+    private val signalChip: View
+    private val signalIcon: ImageView
+    private val signalValue: TextView
+    private val tempChip: View
+    private val tempIcon: ImageView
+    private val tempValue: TextView
+    private val batteryChip: View
+    private val batteryIcon: ImageView
+    private val batteryValue: TextView
+    
     private var deviceSelectedListener: OnDeviceSelectedListener? = null
     private var settingsClickListener: OnSettingsClickListener? = null
 
@@ -52,11 +68,23 @@ class DeviceSelectorView @JvmOverloads constructor(
 
     init {
         LayoutInflater.from(context).inflate(R.layout.view_device_selector, this, true)
-        orientation = HORIZONTAL
+        orientation = VERTICAL
         
         spinner = findViewById(R.id.deviceSpinner)
         statusDot = findViewById(R.id.deviceStatusDot)
         settingsButton = findViewById(R.id.chartSettingsButton)
+        
+        // Stats row elements
+        deviceStatsRow = findViewById(R.id.deviceStatsRow)
+        signalChip = findViewById(R.id.signalChip)
+        signalIcon = findViewById(R.id.signalIcon)
+        signalValue = findViewById(R.id.signalValue)
+        tempChip = findViewById(R.id.tempChip)
+        tempIcon = findViewById(R.id.tempIcon)
+        tempValue = findViewById(R.id.tempValue)
+        batteryChip = findViewById(R.id.batteryChip)
+        batteryIcon = findViewById(R.id.batteryIcon)
+        batteryValue = findViewById(R.id.batteryValue)
         
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -106,9 +134,21 @@ class DeviceSelectorView @JvmOverloads constructor(
         suppressCallback = false
         
         updateStatusDot(selectedId)
+        updateSelectorVisibility()
+    }
+    
+    private var hasMetadata = false
+    
+    private fun updateSelectorVisibility() {
+        // Show selector row if: multiple devices OR we have metadata to display
+        // The spinner itself is hidden for single device, but stats row shows
+        val showSelector = devices.size > 1 || hasMetadata
+        visibility = if (showSelector) VISIBLE else GONE
         
-        // Hide if only one device
-        visibility = if (devices.size <= 1) GONE else VISIBLE
+        // Hide the top row (label, spinner, dot, settings) in single-device mode
+        // but keep the stats row visible
+        val topRow = findViewById<View>(R.id.deviceSpinner)?.parent as? View
+        // Actually, let's keep the entire selector visible - single device still shows name
     }
     
     /**
@@ -120,6 +160,72 @@ class DeviceSelectorView @JvmOverloads constructor(
         
         val selectedId = Prefs.getSelectedDeviceId(context)
         updateStatusDot(selectedId)
+    }
+    
+    /**
+     * Update device metadata display (signal, temperature, battery).
+     * @param signalStrength RSSI in dBm (null to hide)
+     * @param temperature Temperature in Celsius (null to hide)
+     * @param batteryLevel Battery percentage 0-100 (null to hide)
+     */
+    fun updateDeviceMetadata(signalStrength: Int?, temperature: Float?, batteryLevel: Int?) {
+        val hasAnyData = signalStrength != null || temperature != null || batteryLevel != null
+        hasMetadata = hasAnyData
+        
+        deviceStatsRow.visibility = if (hasAnyData) View.VISIBLE else View.GONE
+        
+        // Update visibility of the whole component
+        updateSelectorVisibility()
+        
+        // Signal strength chip
+        if (signalStrength != null) {
+            signalChip.visibility = View.VISIBLE
+            signalValue.text = signalStrength.toString()
+            // Color code based on signal strength
+            val signalColor = when {
+                signalStrength >= -60 -> Color.parseColor("#69F0AE")  // Excellent - green
+                signalStrength >= -70 -> Color.parseColor("#00E5FF")  // Good - cyan
+                signalStrength >= -80 -> Color.parseColor("#FFD740")  // Fair - amber
+                else -> Color.parseColor("#FF5252")  // Poor - red
+            }
+            signalIcon.setColorFilter(signalColor)
+            signalValue.setTextColor(signalColor)
+        } else {
+            signalChip.visibility = View.GONE
+        }
+        
+        // Temperature chip
+        if (temperature != null) {
+            tempChip.visibility = View.VISIBLE
+            tempValue.text = "%.0f".format(temperature)
+            // Color code based on temperature
+            val tempColor = when {
+                temperature < 10 -> Color.parseColor("#00E5FF")  // Cold - cyan
+                temperature <= 35 -> Color.parseColor("#69F0AE")  // Normal - green
+                temperature <= 45 -> Color.parseColor("#FFD740")  // Warm - amber
+                else -> Color.parseColor("#FF5252")  // Hot - red
+            }
+            tempIcon.setColorFilter(tempColor)
+            tempValue.setTextColor(tempColor)
+        } else {
+            tempChip.visibility = View.GONE
+        }
+        
+        // Battery chip
+        if (batteryLevel != null) {
+            batteryChip.visibility = View.VISIBLE
+            batteryValue.text = batteryLevel.toString()
+            // Color code based on battery level
+            val batteryColor = when {
+                batteryLevel >= 50 -> Color.parseColor("#69F0AE")  // Good - green
+                batteryLevel >= 20 -> Color.parseColor("#FFD740")  // Low - amber
+                else -> Color.parseColor("#FF5252")  // Critical - red
+            }
+            batteryIcon.setColorFilter(batteryColor)
+            batteryValue.setTextColor(batteryColor)
+        } else {
+            batteryChip.visibility = View.GONE
+        }
     }
     
     private fun updateStatusDot(selectedId: String?) {

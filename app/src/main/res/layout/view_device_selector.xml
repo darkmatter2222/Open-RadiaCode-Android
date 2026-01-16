@@ -3,50 +3,189 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:background="@drawable/widget_card_background"
     android:paddingHorizontal="16dp"
-    android:paddingVertical="8dp"
-    android:background="@drawable/widget_card_background">
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
 
-    <TextView
-        android:id="@+id/deviceSelectorLabel"
-        android:layout_width="wrap_content"
+    <!-- Top row: Label + Spinner + Status + Settings -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Viewing:"
-        android:textColor="#9E9EA8"
-        android:textSize="12sp"
-        android:textAllCaps="true"
-        android:letterSpacing="0.08" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <Spinner
-        android:id="@+id/deviceSpinner"
-        android:layout_width="0dp"
-        android:layout_height="48dp"
-        android:layout_weight="1"
-        android:layout_marginStart="12dp"
-        android:background="@drawable/spinner_background"
-        android:popupBackground="#1A1A1E"
-        android:dropDownVerticalOffset="4dp" />
+        <TextView
+            android:id="@+id/deviceSelectorLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VIEWING:"
+            android:textColor="#6E6E78"
+            android:textSize="10sp"
+            android:textAllCaps="true"
+            android:letterSpacing="0.1" />
 
-    <View
-        android:id="@+id/deviceStatusDot"
-        android:layout_width="8dp"
-        android:layout_height="8dp"
-        android:layout_marginStart="8dp"
-        android:background="@drawable/status_dot" />
+        <Spinner
+            android:id="@+id/deviceSpinner"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/spinner_background"
+            android:popupBackground="#1A1A1E"
+            android:dropDownVerticalOffset="4dp" />
 
-    <!-- Settings icon for time/units modal -->
-    <ImageButton
-        android:id="@+id/chartSettingsButton"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_marginStart="8dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Chart settings"
-        android:padding="6dp"
-        android:scaleType="centerInside"
-        android:src="@drawable/ic_settings_sliders"
-        app:tint="@color/pro_text_muted" />
+        <View
+            android:id="@+id/deviceStatusDot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/status_dot" />
+
+        <!-- Settings icon for time/units modal -->
+        <ImageButton
+            android:id="@+id/chartSettingsButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Chart settings"
+            android:padding="4dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_settings_sliders"
+            app:tint="@color/pro_text_muted" />
+    </LinearLayout>
+
+    <!-- Bottom row: Device Stats - Signal / Temp / Battery -->
+    <LinearLayout
+        android:id="@+id/deviceStatsRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp"
+        android:visibility="gone">
+
+        <!-- Signal Strength Chip -->
+        <LinearLayout
+            android:id="@+id/signalChip"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/stat_chip_background"
+            android:paddingHorizontal="8dp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/signalIcon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_signal"
+                app:tint="@color/pro_text_muted" />
+
+            <TextView
+                android:id="@+id/signalValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="-57"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="1dp"
+                android:text="dBm"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <!-- Temperature Chip -->
+        <LinearLayout
+            android:id="@+id/tempChip"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/stat_chip_background"
+            android:paddingHorizontal="8dp"
+            android:layout_marginEnd="8dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/tempIcon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_thermometer"
+                app:tint="@color/pro_text_muted" />
+
+            <TextView
+                android:id="@+id/tempValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="25"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="1dp"
+                android:text="°C"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <!-- Battery Chip -->
+        <LinearLayout
+            android:id="@+id/batteryChip"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/stat_chip_background"
+            android:paddingHorizontal="8dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/batteryIcon"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_battery"
+                app:tint="@color/pro_text_muted" />
+
+            <TextView
+                android:id="@+id/batteryValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:text="65"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="1dp"
+                android:text="%"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="9sp" />
+        </LinearLayout>
+
+        <!-- Spacer to push content left -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
 
 </LinearLayout>

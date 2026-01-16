@@ -83,6 +83,10 @@ class IsotopeDetector(
         val results = mutableListOf<Prediction>()
         val evidenceMap = mutableMapOf<String, Float>()
         
+        android.util.Log.d(TAG, "Analyzing spectrum: ${spectrum.numChannels} channels, " +
+            "totalCounts=${spectrum.totalCounts}, duration=${spectrum.durationSeconds}s, " +
+            "a0=${spectrum.a0} a1=${spectrum.a1} a2=${spectrum.a2}")
+        
         // Calculate evidence for each enabled isotope
         for (isotopeId in enabledIsotopes) {
             val isotope = IsotopeLibrary.get(isotopeId) ?: continue
@@ -92,6 +96,8 @@ class IsotopeDetector(
         
         // Normalize evidence to get fractions
         val totalEvidence = evidenceMap.values.sum() + 0.001f // Avoid division by zero
+        
+        android.util.Log.d(TAG, "Total evidence: $totalEvidence, top evidences: ${evidenceMap.entries.sortedByDescending { it.value }.take(3)}")
         
         // Unknown/Background fraction
         val knownFraction = evidenceMap.values.sum() / max(totalEvidence * 1.25f, 1f)
@@ -154,6 +160,8 @@ class IsotopeDetector(
         var totalEvidence = 0f
         var weightSum = 0f
         
+        val primaryLine = isotope.gammaLines.firstOrNull { it.isPrimary } ?: isotope.gammaLines.firstOrNull()
+        
         for (line in isotope.gammaLines) {
             val peakEnergyKeV = line.energyKeV
             val weight = line.intensity * (if (line.isPrimary) 2f else 1f)
@@ -190,6 +198,13 @@ class IsotopeDetector(
             // Evidence: normalized net counts
             val totalCounts = spectrum.totalCounts.toFloat() + 1f
             val lineEvidence = netCounts / totalCounts
+            
+            // Debug logging for primary line only (to reduce spam)
+            if (line == primaryLine) {
+                android.util.Log.d(TAG, "${isotope.id}: peak@${peakEnergyKeV}keV " +
+                    "peakCounts=$peakCounts bgEstimate=${estimatedBackground.toInt()} " +
+                    "netCounts=${netCounts.toInt()} evidence=$lineEvidence")
+            }
             
             totalEvidence += lineEvidence * weight
             weightSum += weight

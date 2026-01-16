@@ -18,6 +18,8 @@ internal object RadiacodeProtocol {
     const val VS_DATA_BUF = 0x0100
     const val VS_SPECTRUM = 0x0200        // Current spectrum data (1024 channels)
     const val VS_ENERGY_CALIB = 0x0202    // Energy calibration coefficients
+    const val VS_SPEC_ACCUM = 0x0205      // Accumulated spectrum
+    const val VS_SPEC_DIFF = 0x0206       // Differential spectrum (recent counts)
     const val VSFR_DEVICE_TIME = 0x0504
 
     fun buildRequest(command: Int, seq: Int, args: ByteArray): ByteArray {

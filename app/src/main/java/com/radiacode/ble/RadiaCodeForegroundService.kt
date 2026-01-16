@@ -51,6 +51,7 @@ class RadiaCodeForegroundService : Service() {
         const val EXTRA_CALIB_A0 = "calib_a0"
         const val EXTRA_CALIB_A1 = "calib_a1"
         const val EXTRA_CALIB_A2 = "calib_a2"
+        const val EXTRA_IS_REALTIME = "is_realtime"  // true for differential spectrum, false for scan
 
         private const val EXTRA_ADDRESS = "address"
 
@@ -139,7 +140,8 @@ class RadiaCodeForegroundService : Service() {
         deviceManager = MultiDeviceBleManager(
             context = applicationContext,
             onDeviceStateChanged = { state -> handleDeviceStateChanged(state) },
-            onDeviceReading = { deviceId, uSvH, cps, ts -> handleDeviceReading(deviceId, uSvH, cps, ts) }
+            onDeviceReading = { deviceId, uSvH, cps, ts -> handleDeviceReading(deviceId, uSvH, cps, ts) },
+            onSpectrumReading = { deviceId, spectrum -> handleSpectrumReading(deviceId, spectrum) }
         )
         
         try {
@@ -259,6 +261,10 @@ class RadiaCodeForegroundService : Service() {
         val manager = deviceManager ?: return
         val client = manager.getClient(requestedDeviceId)
         
+        // Determine actual device ID
+        val deviceId = requestedDeviceId ?: manager.getAllDeviceStates()
+            .firstOrNull { it.connectionState == DeviceConnectionState.CONNECTED }?.config?.id
+        
         if (client == null) {
             Log.w(TAG, "handleSpectrumRequest: No connected device")
             return
@@ -281,18 +287,44 @@ class RadiaCodeForegroundService : Service() {
                 
                 Log.d(TAG, "Spectrum read: ${fullData.numChannels} channels, duration=${fullData.durationSeconds}s")
                 
-                // Broadcast spectrum data
+                // Broadcast spectrum data with device ID - this is a SCAN (accumulated), not realtime
                 val i = Intent(ACTION_SPECTRUM_DATA)
                     .setPackage(packageName)
                     .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
+                    .putExtra(EXTRA_DEVICE_ID, deviceId)
                     .putExtra(EXTRA_SPECTRUM_COUNTS, fullData.counts)
                     .putExtra(EXTRA_CALIB_A0, fullData.a0)
                     .putExtra(EXTRA_CALIB_A1, fullData.a1)
                     .putExtra(EXTRA_CALIB_A2, fullData.a2)
+                    .putExtra(EXTRA_IS_REALTIME, false)  // This is a scan, not realtime
                 sendBroadcast(i)
             }
         } catch (t: Throwable) {
             Log.e(TAG, "handleSpectrumRequest failed", t)
+        }
+    }
+    
+    /**
+     * Handle spectrum reading from the multi-device manager (real-time mode).
+     * This uses DIFFERENTIAL spectrum - recent counts only.
+     */
+    private fun handleSpectrumReading(deviceId: String, spectrum: SpectrumData) {
+        Log.d(TAG, "Realtime spectrum from $deviceId: ${spectrum.numChannels} channels, totalCounts=${spectrum.totalCounts}")
+        
+        // Broadcast spectrum data with device ID - this is REALTIME (differential)
+        try {
+            val i = Intent(ACTION_SPECTRUM_DATA)
+                .setPackage(packageName)
+                .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
+                .putExtra(EXTRA_DEVICE_ID, deviceId)
+                .putExtra(EXTRA_SPECTRUM_COUNTS, spectrum.counts)
+                .putExtra(EXTRA_CALIB_A0, spectrum.a0)
+                .putExtra(EXTRA_CALIB_A1, spectrum.a1)
+                .putExtra(EXTRA_CALIB_A2, spectrum.a2)
+                .putExtra(EXTRA_IS_REALTIME, true)  // This is realtime differential, not a scan
+            sendBroadcast(i)
+        } catch (t: Throwable) {
+            Log.e(TAG, "handleSpectrumReading broadcast failed", t)
         }
     }
     

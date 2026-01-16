@@ -1107,6 +1107,8 @@ object Prefs {
     private const val KEY_ISOTOPE_CHART_MODE = "isotope_chart_mode"
     private const val KEY_ISOTOPE_DISPLAY_MODE = "isotope_display_mode"
     private const val KEY_ISOTOPE_SHOW_DAUGHTERS = "isotope_show_daughters"
+    private const val KEY_ISOTOPE_ACCUMULATION_MODE = "isotope_accumulation_mode"
+    private const val KEY_ISOTOPE_HIDE_BACKGROUND = "isotope_hide_background"
     
     /**
      * Chart display mode for isotope panel.
@@ -1123,6 +1125,16 @@ object Prefs {
     enum class IsotopeDisplayMode {
         PROBABILITY,    // 0-100% probability (default)
         FRACTION        // Fractional contribution
+    }
+    
+    /**
+     * How to accumulate spectrum data for isotope analysis.
+     * INTERVAL: Only use recent data within the chart time window (30s, 1m, 5m, etc.)
+     * FULL_DURATION: Accumulate ALL data since streaming started (better statistics)
+     */
+    enum class IsotopeAccumulationMode {
+        INTERVAL,       // Use chart time window (default)
+        FULL_DURATION   // Accumulate all data since start
     }
     
     /**
@@ -1236,6 +1248,47 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ISOTOPE_SHOW_DAUGHTERS, show)
+            .apply()
+    }
+    
+    /**
+     * Get isotope spectrum accumulation mode (interval vs full duration).
+     */
+    fun getIsotopeAccumulationMode(context: Context): IsotopeAccumulationMode {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val name = prefs.getString(KEY_ISOTOPE_ACCUMULATION_MODE, null)
+        return try {
+            if (name != null) IsotopeAccumulationMode.valueOf(name) else IsotopeAccumulationMode.FULL_DURATION
+        } catch (_: Exception) {
+            IsotopeAccumulationMode.FULL_DURATION
+        }
+    }
+    
+    /**
+     * Set isotope spectrum accumulation mode.
+     */
+    fun setIsotopeAccumulationMode(context: Context, mode: IsotopeAccumulationMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ISOTOPE_ACCUMULATION_MODE, mode.name)
+            .apply()
+    }
+    
+    /**
+     * Get whether to hide Background/Unknown from isotope charts.
+     */
+    fun isIsotopeHideBackground(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, true)  // Default to hiding background
+    }
+    
+    /**
+     * Set whether to hide Background/Unknown from isotope charts.
+     */
+    fun setIsotopeHideBackground(context: Context, hide: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, hide)
             .apply()
     }
 }

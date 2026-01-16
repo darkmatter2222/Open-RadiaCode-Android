@@ -91,6 +91,37 @@ data class SpectrumData(
         result = 31 * result + timestampMs.hashCode()
         return result
     }
+    
+    /**
+     * Add counts from another spectrum to this one.
+     * Used for accumulating differential spectra over time.
+     */
+    operator fun plus(other: SpectrumData): SpectrumData {
+        val newCounts = IntArray(counts.size) { i ->
+            counts[i] + (other.counts.getOrNull(i) ?: 0)
+        }
+        return copy(
+            durationSeconds = durationSeconds + other.durationSeconds,
+            counts = newCounts,
+            timestampMs = System.currentTimeMillis()
+        )
+    }
+    
+    companion object {
+        /**
+         * Create an empty spectrum with the given calibration.
+         */
+        fun empty(a0: Float, a1: Float, a2: Float, numChannels: Int = 1024): SpectrumData {
+            return SpectrumData(
+                durationSeconds = 0,
+                a0 = a0,
+                a1 = a1,
+                a2 = a2,
+                counts = IntArray(numChannels),
+                timestampMs = System.currentTimeMillis()
+            )
+        }
+    }
 }
 
 /**

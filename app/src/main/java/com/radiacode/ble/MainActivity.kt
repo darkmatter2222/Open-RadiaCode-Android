@@ -69,12 +69,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
 
-    // Dashboard - Device Metadata
-    private lateinit var dashboardMetadataRow: View
-    private lateinit var dashboardSignalStrength: TextView
-    private lateinit var dashboardTemperature: TextView
-    private lateinit var dashboardBattery: TextView
-
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
     private lateinit var cpsCard: MetricCardView
@@ -99,7 +93,9 @@ class MainActivity : AppCompatActivity() {
     // Isotope detection panel
     private lateinit var isotopePanel: LinearLayout
     private lateinit var isotopeChartTitle: TextView
+    private lateinit var isotopeAccumulationModeToggle: TextView
     private lateinit var isotopeDisplayModeToggle: TextView
+    private lateinit var isotopeHideBackgroundToggle: TextView
     private lateinit var isotopeChartTypeBtn: android.widget.ImageButton
     private lateinit var isotopeSettingsBtn: android.widget.ImageButton
     private lateinit var isotopeScanBtn: MaterialButton
@@ -117,9 +113,15 @@ class MainActivity : AppCompatActivity() {
     
     // Isotope detection state
     private var isotopeDetector: IsotopeDetector? = null
-    private val isotopePredictionHistory = IsotopePredictionHistory(300)
+    private val isotopePredictionHistories = mutableMapOf<String, IsotopePredictionHistory>()  // per-device history
     private var isIsotopeRealtimeActive = false
     private var lastSpectrumData: SpectrumData? = null
+    private var lastSpectrumDeviceId: String? = null
+    
+    // Spectrum accumulation for real-time mode (since differential spectrum has few counts)
+    private val accumulatedSpectra = mutableMapOf<String, SpectrumData>()
+    // In FULL_DURATION mode, we never reset; in INTERVAL mode, we use the chart time window
+    private val spectrumAccumulationStart = mutableMapOf<String, Long>()
 
     private lateinit var sessionInfo: TextView
     
@@ -238,9 +240,11 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action != RadiaCodeForegroundService.ACTION_SPECTRUM_DATA) return
             val counts = intent.getIntArrayExtra(RadiaCodeForegroundService.EXTRA_SPECTRUM_COUNTS) ?: return
+            val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
             val a0 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A0, 0f)
             val a1 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A1, 3.0f)
             val a2 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A2, 0f)
+            val isRealtime = intent.getBooleanExtra(RadiaCodeForegroundService.EXTRA_IS_REALTIME, false)
             
             val spectrum = SpectrumData(
                 durationSeconds = 0,  // Not tracked in broadcast
@@ -250,7 +254,17 @@ class MainActivity : AppCompatActivity() {
                 a2 = a2,
                 timestampMs = System.currentTimeMillis()
             )
-            onSpectrumDataReceived(spectrum)
+            
+            // Only update lastSpectrumData for scans (for the SCAN button)
+            if (!isRealtime) {
+                lastSpectrumData = spectrum
+                lastSpectrumDeviceId = deviceId
+            }
+            
+            // Only feed realtime data to the realtime handler
+            if (isRealtime) {
+                onRealtimeSpectrumReceived(spectrum, deviceId)
+            }
         }
     }
 
@@ -350,11 +364,6 @@ class MainActivity : AppCompatActivity() {
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
 
-        dashboardMetadataRow = findViewById(R.id.dashboardMetadataRow)
-        dashboardSignalStrength = findViewById(R.id.dashboardSignalStrength)
-        dashboardTemperature = findViewById(R.id.dashboardTemperature)
-        dashboardBattery = findViewById(R.id.dashboardBattery)
-
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
 
@@ -376,7 +385,9 @@ class MainActivity : AppCompatActivity() {
         // Isotope detection panel
         isotopePanel = findViewById(R.id.isotopePanel)
         isotopeChartTitle = findViewById(R.id.isotopeChartTitle)
+        isotopeAccumulationModeToggle = findViewById(R.id.isotopeAccumulationModeToggle)
         isotopeDisplayModeToggle = findViewById(R.id.isotopeDisplayModeToggle)
+        isotopeHideBackgroundToggle = findViewById(R.id.isotopeHideBackgroundToggle)
         isotopeChartTypeBtn = findViewById(R.id.isotopeChartTypeBtn)
         isotopeSettingsBtn = findViewById(R.id.isotopeSettingsBtn)
         isotopeScanBtn = findViewById(R.id.isotopeScanBtn)
@@ -746,6 +757,12 @@ class MainActivity : AppCompatActivity() {
         val displayMode = Prefs.getIsotopeDisplayMode(this)
         updateIsotopeDisplayModeToggle(displayMode)
         
+        val accumulationMode = Prefs.getIsotopeAccumulationMode(this)
+        updateIsotopeAccumulationModeToggle(accumulationMode)
+        
+        val hideBackground = Prefs.isIsotopeHideBackground(this)
+        updateIsotopeHideBackgroundToggle(hideBackground)
+        
         val chartMode = Prefs.getIsotopeChartMode(this)
         updateIsotopeChartMode(chartMode)
         
@@ -755,6 +772,9 @@ class MainActivity : AppCompatActivity() {
         isotopeRealtimeSwitch.setOnCheckedChangeListener { _, isChecked ->
             Prefs.setIsotopeRealtimeEnabled(this, isChecked)
             isIsotopeRealtimeActive = isChecked
+            // Clear accumulated spectra when starting/stopping real-time mode
+            accumulatedSpectra.clear()
+            spectrumAccumulationStart.clear()
             updateIsotopePanelState()
         }
         
@@ -766,6 +786,27 @@ class MainActivity : AppCompatActivity() {
             }
             Prefs.setIsotopeDisplayMode(this, next)
             updateIsotopeDisplayModeToggle(next)
+            refreshIsotopeCharts()
+        }
+        
+        isotopeAccumulationModeToggle.setOnClickListener {
+            val current = Prefs.getIsotopeAccumulationMode(this)
+            val next = when (current) {
+                Prefs.IsotopeAccumulationMode.FULL_DURATION -> Prefs.IsotopeAccumulationMode.INTERVAL
+                Prefs.IsotopeAccumulationMode.INTERVAL -> Prefs.IsotopeAccumulationMode.FULL_DURATION
+            }
+            Prefs.setIsotopeAccumulationMode(this, next)
+            updateIsotopeAccumulationModeToggle(next)
+            // Clear accumulated spectra when changing mode
+            accumulatedSpectra.clear()
+            spectrumAccumulationStart.clear()
+        }
+        
+        isotopeHideBackgroundToggle.setOnClickListener {
+            val current = Prefs.isIsotopeHideBackground(this)
+            val next = !current
+            Prefs.setIsotopeHideBackground(this, next)
+            updateIsotopeHideBackgroundToggle(next)
             refreshIsotopeCharts()
         }
         
@@ -785,6 +826,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun updateIsotopeAccumulationModeToggle(mode: Prefs.IsotopeAccumulationMode) {
+        isotopeAccumulationModeToggle.text = when (mode) {
+            Prefs.IsotopeAccumulationMode.FULL_DURATION -> "FULL"
+            Prefs.IsotopeAccumulationMode.INTERVAL -> "INT"
+        }
+        isotopeAccumulationModeToggle.setTextColor(
+            ContextCompat.getColor(this, when (mode) {
+                Prefs.IsotopeAccumulationMode.FULL_DURATION -> R.color.pro_magenta
+                Prefs.IsotopeAccumulationMode.INTERVAL -> R.color.pro_cyan
+            })
+        )
+    }
+    
+    private fun updateIsotopeHideBackgroundToggle(hide: Boolean) {
+        isotopeHideBackgroundToggle.text = if (hide) "BKG" else "BKG"
+        isotopeHideBackgroundToggle.setTextColor(
+            ContextCompat.getColor(this, if (hide) R.color.pro_text_muted else R.color.pro_green)
+        )
+        // Show strikethrough when hidden
+        isotopeHideBackgroundToggle.paintFlags = if (hide) {
+            isotopeHideBackgroundToggle.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+        } else {
+            isotopeHideBackgroundToggle.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
+        }
+    }
+    
     private fun updateIsotopeChartMode(mode: Prefs.IsotopeChartMode) {
         isotopeMultiLineChart.visibility = View.GONE
         isotopeStackedChart.visibility = View.GONE
@@ -799,13 +866,14 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun updateIsotopePanelState() {
+        val history = getCurrentIsotopeHistory()
         if (isIsotopeRealtimeActive) {
             isotopeStatusLabel.text = "Streaming"
             isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_green))
             val mode = Prefs.getIsotopeChartMode(this)
             updateIsotopeChartMode(mode)
         } else {
-            if (isotopePredictionHistory.isEmpty) {
+            if (history.isEmpty) {
                 isotopeStatusLabel.text = "Idle"
                 isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_text_muted))
                 isotopeScanResultContainer.visibility = View.VISIBLE
@@ -915,19 +983,42 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun refreshIsotopeCharts() {
-        if (isotopePredictionHistory.isEmpty) return
+        val isotopeHistory = getCurrentIsotopeHistory()
+        if (isotopeHistory.isEmpty) return
         
-        val history = isotopePredictionHistory.getAll()
-        val topIds = isotopePredictionHistory.getCurrentTop(5).map { it.isotopeId }
+        val hideBackground = Prefs.isIsotopeHideBackground(this)
         val displayMode = Prefs.getIsotopeDisplayMode(this)
         val showProbability = displayMode == Prefs.IsotopeDisplayMode.PROBABILITY
+        
+        // Get top isotopes, excluding "Unknown" if hide background is enabled
+        val topPredictions = isotopeHistory.getCurrentTop(if (hideBackground) 6 else 5)
+            .filter { if (hideBackground) it.isotopeId != "Unknown" else true }
+            .take(5)
+        val topIds = topPredictions.map { it.isotopeId }
+        
+        // Filter history entries to exclude Unknown when hide background is enabled
+        val history = if (hideBackground) {
+            isotopeHistory.getAll().map { result ->
+                val filteredPredictions = result.predictions.filter { it.isotopeId != "Unknown" }
+                val filteredTopFive = result.topFive.filter { it.isotopeId != "Unknown" }
+                IsotopeDetector.AnalysisResult(
+                    predictions = filteredPredictions,
+                    topFive = filteredTopFive,
+                    timestampMs = result.timestampMs,
+                    totalCounts = result.totalCounts,
+                    durationSeconds = result.durationSeconds
+                )
+            }
+        } else {
+            isotopeHistory.getAll()
+        }
         
         isotopeMultiLineChart.setData(history, topIds, showProbability)
         isotopeStackedChart.setData(history, topIds)
         isotopeBarChart.setData(history, showProbability)
         
-        // Update top result
-        val top = isotopePredictionHistory.getCurrentTop(1).firstOrNull()
+        // Update top result (respect hide background here too)
+        val top = topPredictions.firstOrNull()
         if (top != null) {
             val value = if (showProbability) {
                 "${(top.probability * 100).toInt()}%"
@@ -939,19 +1030,94 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
-     * Called when new spectrum data is received (from service).
-     * This will be called frequently when real-time mode is active.
+     * Get or create the isotope prediction history for a device.
      */
-    fun onSpectrumDataReceived(spectrum: SpectrumData) {
-        lastSpectrumData = spectrum
-        
+    private fun getIsotopeHistory(deviceId: String?): IsotopePredictionHistory {
+        val key = deviceId ?: "global"
+        return isotopePredictionHistories.getOrPut(key) { IsotopePredictionHistory(300) }
+    }
+    
+    /**
+     * Get the current selected device's isotope history.
+     */
+    private fun getCurrentIsotopeHistory(): IsotopePredictionHistory {
+        val selectedId = Prefs.getSelectedDeviceId(this)
+        return getIsotopeHistory(selectedId)
+    }
+    
+    /**
+     * Called when new DIFFERENTIAL spectrum data is received (real-time mode).
+     * This will be called frequently when real-time mode is active.
+     * Since differential spectrum has few counts per read, we accumulate
+     * over a time window to get meaningful data for isotope identification.
+     * 
+     * Accumulation modes:
+     * - FULL_DURATION: Never reset, accumulate ALL counts since streaming started
+     * - INTERVAL: Use the chart time window setting for accumulation window
+     */
+    private fun onRealtimeSpectrumReceived(spectrum: SpectrumData, deviceId: String? = null) {
         if (!isIsotopeRealtimeActive) return
         
+        val effectiveDeviceId = deviceId ?: "unknown"
         val detector = isotopeDetector ?: return
-        val result = detector.analyze(spectrum)
         
-        isotopePredictionHistory.add(result)
-        refreshIsotopeCharts()
+        // Accumulate differential spectrum
+        val now = System.currentTimeMillis()
+        val startTime = spectrumAccumulationStart[effectiveDeviceId] ?: now
+        val existingSpectrum = accumulatedSpectra[effectiveDeviceId]
+        
+        val accumulationMode = Prefs.getIsotopeAccumulationMode(this)
+        
+        when (accumulationMode) {
+            Prefs.IsotopeAccumulationMode.FULL_DURATION -> {
+                // Never reset - just keep accumulating
+                if (existingSpectrum != null) {
+                    accumulatedSpectra[effectiveDeviceId] = existingSpectrum + spectrum
+                } else {
+                    accumulatedSpectra[effectiveDeviceId] = spectrum
+                    spectrumAccumulationStart[effectiveDeviceId] = now
+                }
+            }
+            Prefs.IsotopeAccumulationMode.INTERVAL -> {
+                // Use chart time window for accumulation interval
+                val windowMs = Prefs.getWindowSeconds(this, 60) * 1000L
+                
+                if (now - startTime > windowMs) {
+                    // Window expired - reset accumulation
+                    accumulatedSpectra[effectiveDeviceId] = spectrum
+                    spectrumAccumulationStart[effectiveDeviceId] = now
+                    android.util.Log.d("MainActivity", "Reset spectrum accumulation (INTERVAL mode, window=${windowMs}ms)")
+                } else if (existingSpectrum != null) {
+                    accumulatedSpectra[effectiveDeviceId] = existingSpectrum + spectrum
+                } else {
+                    accumulatedSpectra[effectiveDeviceId] = spectrum
+                    spectrumAccumulationStart[effectiveDeviceId] = now
+                }
+            }
+        }
+        
+        val accumulatedSpectrum = accumulatedSpectra[effectiveDeviceId] ?: spectrum
+        val elapsedSec = (now - (spectrumAccumulationStart[effectiveDeviceId] ?: now)) / 1000
+        android.util.Log.d("MainActivity", "Accumulated spectrum ($accumulationMode mode, ${elapsedSec}s): " +
+            "totalCounts=${accumulatedSpectrum.totalCounts}")
+        
+        // Only analyze if we have enough counts (at least 50 for meaningful analysis)
+        if (accumulatedSpectrum.totalCounts < 50) {
+            android.util.Log.d("MainActivity", "Skipping analysis - only ${accumulatedSpectrum.totalCounts} counts accumulated")
+            return
+        }
+        
+        val result = detector.analyze(accumulatedSpectrum)
+        
+        // Add to the correct device's history
+        val history = getIsotopeHistory(deviceId)
+        history.add(result)
+        
+        // Only refresh charts if this is the currently selected device
+        val selectedId = Prefs.getSelectedDeviceId(this)
+        if (deviceId == selectedId || (selectedId == null && deviceId != null)) {
+            refreshIsotopeCharts()
+        }
     }
 
     /**
@@ -1088,6 +1254,10 @@ class MainActivity : AppCompatActivity() {
                         sampleCount++
                     }
                 }
+                
+                // Refresh isotope charts for the new device
+                refreshIsotopeCharts()
+                updateIsotopePanelState()
                 
                 dialog.dismiss()
             }
@@ -1328,7 +1498,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                // Dashboard metadata row (signal / temp / battery)
+                // Dashboard metadata row (signal / temp / battery) - now integrated into deviceSelector
                 val effectiveDeviceId = when {
                     selectedDeviceId != null -> selectedDeviceId
                     devices.size == 1 -> devices.first().id
@@ -1341,33 +1511,12 @@ class MainActivity : AppCompatActivity() {
                     null
                 }
 
-                val hasAnyMeta = meta?.signalStrength != null || meta?.temperature != null || meta?.batteryLevel != null
-                if (hasAnyMeta) {
-                    dashboardMetadataRow.visibility = View.VISIBLE
-
-                    if (meta?.signalStrength != null) {
-                        dashboardSignalStrength.text = "RSSI ${meta.signalStrength} dBm"
-                        dashboardSignalStrength.visibility = View.VISIBLE
-                    } else {
-                        dashboardSignalStrength.visibility = View.GONE
-                    }
-
-                    if (meta?.temperature != null) {
-                        dashboardTemperature.text = "Temp ${"%.0f".format(meta.temperature)}°C"
-                        dashboardTemperature.visibility = View.VISIBLE
-                    } else {
-                        dashboardTemperature.visibility = View.GONE
-                    }
-
-                    if (meta?.batteryLevel != null) {
-                        dashboardBattery.text = "Battery ${meta.batteryLevel}%"
-                        dashboardBattery.visibility = View.VISIBLE
-                    } else {
-                        dashboardBattery.visibility = View.GONE
-                    }
-                } else {
-                    dashboardMetadataRow.visibility = View.GONE
-                }
+                // Update the integrated device metadata display in the selector
+                deviceSelector.updateDeviceMetadata(
+                    signalStrength = meta?.signalStrength,
+                    temperature = meta?.temperature,
+                    batteryLevel = meta?.batteryLevel
+                )
                 
                 // Get reading ONLY for selected device (no mixing!)
                 val last = if (selectedDeviceId != null) {
