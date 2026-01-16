@@ -35,6 +35,7 @@ import com.radiacode.ble.ui.StatRowView
 import com.radiacode.ble.ui.IsotopeChartView
 import com.radiacode.ble.ui.StackedAreaChartView
 import com.radiacode.ble.ui.IsotopeBarChartView
+import com.radiacode.ble.ui.DraggableDashboardManager
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -69,6 +70,9 @@ class MainActivity : AppCompatActivity() {
     // Dashboard - Device Selector
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
+
+    // Dashboard - Drag-and-drop manager
+    private lateinit var draggableDashboardManager: DraggableDashboardManager
 
     // Dashboard - Metric cards row (for reordering)
     private lateinit var metricCardsRow: LinearLayout
@@ -322,13 +326,6 @@ class MainActivity : AppCompatActivity() {
         updateStatus(true, "Connecting")
     }
 
-    private val dashboardConfigLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            // Reapply dashboard layout when returning from config activity
-            applyDashboardLayout()
-        }
-    }
-
     private val requiredPermissions: Array<String>
         get() {
             val perms = ArrayList<String>(3)
@@ -532,9 +529,6 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_dashboard -> setPanel(Panel.Dashboard)
                 R.id.nav_device -> setPanel(Panel.Device)
-                R.id.nav_customize_dashboard -> {
-                    dashboardConfigLauncher.launch(Intent(this, DashboardConfigActivity::class.java))
-                }
                 R.id.nav_widget_crafter -> {
                     startActivity(Intent(this, WidgetCrafterActivity::class.java))
                 }
@@ -873,8 +867,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Applies the saved dashboard layout order.
-     * Reorders the children of panelDashboard based on user preferences.
+     * Applies the saved dashboard layout order and initializes the drag-and-drop manager.
+     * Call this after all dashboard views are bound.
      */
     private fun applyDashboardLayout() {
         val layout = Prefs.getDashboardLayout(this)
@@ -892,20 +886,6 @@ class MainActivity : AppCompatActivity() {
         
         // Get the first index after deviceSelector (index 0)
         val startIndex = 1
-        
-        // Remove all dashboard content views (keep deviceSelector)
-        val viewsToReorder = mutableListOf<View>()
-        for (item in layout.items) {
-            val view = viewMap[item.id]
-            if (view != null && view != metricCardsRow) {
-                viewsToReorder.add(view)
-            } else if (item.id == DashboardCardType.DOSE_CARD.id || item.id == DashboardCardType.CPS_CARD.id) {
-                // Metric cards row - add it once
-                if (!viewsToReorder.contains(metricCardsRow)) {
-                    viewsToReorder.add(metricCardsRow)
-                }
-            }
-        }
         
         // Deduplicate and track order
         val orderedViews = layout.items.mapNotNull { item ->
@@ -932,7 +912,62 @@ class MainActivity : AppCompatActivity() {
             insertIndex++
         }
         
+        // Initialize the drag-and-drop manager
+        draggableDashboardManager = DraggableDashboardManager(
+            context = this,
+            dashboardPanel = parent,
+            onLayoutChanged = { 
+                android.util.Log.d("RadiaCode", "Dashboard layout changed via drag")
+            }
+        )
+        
+        // Register cards with the manager
+        draggableDashboardManager.registerCards(
+            metricCardsRow = metricCardsRow,
+            intelligenceCard = intelligenceCard as View,
+            doseChartPanel = doseChartPanel,
+            cpsChartPanel = cpsChartPanel,
+            isotopePanel = isotopePanel
+        )
+        
+        // Setup long-press to enter edit mode
+        setupDashboardEditMode()
+        
         android.util.Log.d("RadiaCode", "Dashboard layout applied: ${layout.items.map { it.id }}")
+    }
+    
+    /**
+     * Setup long-press gesture to enter dashboard edit mode.
+     */
+    private fun setupDashboardEditMode() {
+        // Long press on any dashboard card enters edit mode
+        val cards = listOf(metricCardsRow, intelligenceCard, doseChartPanel, cpsChartPanel, isotopePanel)
+        
+        for (card in cards) {
+            card.setOnLongClickListener { 
+                if (!draggableDashboardManager.isEditMode) {
+                    draggableDashboardManager.enterEditMode()
+                    showEditModeToast()
+                }
+                true
+            }
+        }
+        
+        // Tapping outside cards or scrolling exits edit mode
+        val contentScroll = findViewById<View>(R.id.contentScroll)
+        contentScroll.setOnClickListener {
+            if (draggableDashboardManager.isEditMode) {
+                draggableDashboardManager.exitEditMode()
+            }
+        }
+    }
+    
+    private fun showEditModeToast() {
+        android.widget.Toast.makeText(
+            this,
+            "Drag cards to reorder • Tap elsewhere to exit",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
     
     private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
@@ -1485,10 +1520,16 @@ class MainActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START)
-        } else {
-            super.onBackPressed()
+        when {
+            drawerLayout.isDrawerOpen(GravityCompat.START) -> {
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+            ::draggableDashboardManager.isInitialized && draggableDashboardManager.isEditMode -> {
+                draggableDashboardManager.exitEditMode()
+            }
+            else -> {
+                super.onBackPressed()
+            }
         }
     }
 
