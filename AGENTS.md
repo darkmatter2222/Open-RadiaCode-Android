@@ -26,13 +26,15 @@ After completing a todo list:
 1. Create a new branch with a descriptive name: `git checkout -b feature/short-description`
 2. Stage all changes: `git add -A`
 3. Commit with a meaningful message: `git commit -m "feat: description of changes"`
-4. Switch back to main: `git checkout main`
-5. Merge the feature branch: `git merge feature/short-description`
-6. Push both branches to origin:
-   - `git push origin feature/short-description`
-   - `git push origin main`
+4. **Always push the feature branch to origin:** `git push origin feature/short-description`
 
-This ensures all changes are tracked with proper branch history on GitHub.
+**Merging to main is ONLY done when instructed by the user.** When the user requests a merge:
+
+5. Switch back to main: `git checkout main`
+6. Merge the feature branch: `git merge feature/short-description`
+7. Push main to origin: `git push origin main`
+
+**Key principle:** We always commit and push to origin on a feature branch after completing work. The branch is always available on GitHub. Merging onto main requires explicit user instruction.
 
 ## Prerequisites
 
