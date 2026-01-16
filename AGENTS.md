@@ -57,14 +57,16 @@ From repo root:
 # Build debug APK
 ./gradlew assembleDebug
 
-# Install to connected device
+# Install to connected device (do this EVERY build)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # IMPORTANT: Copy APK to Installer folder (do this EVERY build)
 Copy-Item app/build/outputs/apk/debug/app-debug.apk -Destination Installer/OpenRadiaCode-v0.XX.apk
 ```
 
-**ALWAYS** copy the APK to the `Installer/` folder after each successful build with the version number in the filename.
+**ALWAYS** after a successful build:
+1. Install the APK to the connected phone via `adb install -r`
+2. Copy the APK to the `Installer/` folder with the version number in the filename
 
 ## Installer Folder
 
