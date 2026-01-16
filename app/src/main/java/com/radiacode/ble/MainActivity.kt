@@ -101,13 +101,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var predictedDoseLabel: TextView
     private lateinit var anomalyCountLabel: TextView
 
-    // Dashboard - Time window chips
-    private lateinit var timeWindowChips: ChipGroup
-    
-    // Dashboard - Unit chips
-    private lateinit var doseUnitChips: ChipGroup
-    private lateinit var countUnitChips: ChipGroup
-
     // Device panel
     private lateinit var connectionDot: View
     private lateinit var connectionStatus: TextView
@@ -265,8 +258,6 @@ class MainActivity : AppCompatActivity() {
         setupLogsPanel()
         setupMetricCards()
         setupCharts()
-        setupTimeWindowChips()
-        setupUnitChips()
         setupToolbarDeviceSelector()
 
         refreshSettingsRows()
@@ -331,10 +322,6 @@ class MainActivity : AppCompatActivity() {
         doseTrendLabel = findViewById(R.id.doseTrendLabel)
         predictedDoseLabel = findViewById(R.id.predictedDoseLabel)
         anomalyCountLabel = findViewById(R.id.anomalyCountLabel)
-
-        timeWindowChips = findViewById(R.id.timeWindowChips)
-        doseUnitChips = findViewById(R.id.doseUnitChips)
-        countUnitChips = findViewById(R.id.countUnitChips)
 
         connectionDot = findViewById(R.id.connectionDot)
         connectionStatus = findViewById(R.id.connectionStatus)
@@ -645,59 +632,73 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun setupTimeWindowChips() {
-        val chipToSeconds = mapOf(
-            R.id.chip30s to 30,
-            R.id.chip1m to 60,
-            R.id.chip5m to 300,
-            R.id.chip15m to 900,
-            R.id.chip1h to 3600
-        )
-
+    /**
+     * Show the chart settings dialog (time window + units).
+     */
+    private fun showChartSettingsDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_chart_settings, null)
+        
+        // Time Window chips
+        val timeWindowChips = dialogView.findViewById<ChipGroup>(R.id.dialogTimeWindowChips)
         val currentWindow = Prefs.getWindowSeconds(this, 60)
         when (currentWindow) {
-            30 -> findViewById<Chip>(R.id.chip30s).isChecked = true
-            60 -> findViewById<Chip>(R.id.chip1m).isChecked = true
-            300 -> findViewById<Chip>(R.id.chip5m).isChecked = true
-            900 -> findViewById<Chip>(R.id.chip15m).isChecked = true
-            3600 -> findViewById<Chip>(R.id.chip1h).isChecked = true
-            else -> findViewById<Chip>(R.id.chip1m).isChecked = true
+            30 -> dialogView.findViewById<Chip>(R.id.dialogChip30s).isChecked = true
+            60 -> dialogView.findViewById<Chip>(R.id.dialogChip1m).isChecked = true
+            300 -> dialogView.findViewById<Chip>(R.id.dialogChip5m).isChecked = true
+            900 -> dialogView.findViewById<Chip>(R.id.dialogChip15m).isChecked = true
+            3600 -> dialogView.findViewById<Chip>(R.id.dialogChip1h).isChecked = true
+            else -> dialogView.findViewById<Chip>(R.id.dialogChip1m).isChecked = true
         }
-
+        
+        // Dose Unit chips
+        val doseUnitChips = dialogView.findViewById<ChipGroup>(R.id.dialogDoseUnitChips)
+        val currentDoseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+        when (currentDoseUnit) {
+            Prefs.DoseUnit.USV_H -> dialogView.findViewById<Chip>(R.id.dialogChipUsvH).isChecked = true
+            Prefs.DoseUnit.NSV_H -> dialogView.findViewById<Chip>(R.id.dialogChipNsvH).isChecked = true
+        }
+        
+        // Count Unit chips
+        val countUnitChips = dialogView.findViewById<ChipGroup>(R.id.dialogCountUnitChips)
+        val currentCountUnit = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+        when (currentCountUnit) {
+            Prefs.CountUnit.CPS -> dialogView.findViewById<Chip>(R.id.dialogChipCps).isChecked = true
+            Prefs.CountUnit.CPM -> dialogView.findViewById<Chip>(R.id.dialogChipCpm).isChecked = true
+        }
+        
+        // Build and show dialog
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Chart Settings")
+            .setView(dialogView)
+            .setPositiveButton("Done", null)
+            .create()
+        
+        // Set up listeners
+        val chipToSeconds = mapOf(
+            R.id.dialogChip30s to 30,
+            R.id.dialogChip1m to 60,
+            R.id.dialogChip5m to 300,
+            R.id.dialogChip15m to 900,
+            R.id.dialogChip1h to 3600
+        )
+        
         timeWindowChips.setOnCheckedStateChangeListener { _, checkedIds ->
             if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
             val chipId = checkedIds.first()
             val seconds = chipToSeconds[chipId] ?: 60
-            
             Prefs.setWindowSeconds(this, seconds)
             refreshSettingsRows()
             updateChartTitles()
             lastReadingTimestampMs = 0L
-            
             doseChart.resetZoom()
             cpsChart.resetZoom()
         }
-    }
-
-    private fun setupUnitChips() {
-        val currentDoseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val currentCountUnit = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
         
-        when (currentDoseUnit) {
-            Prefs.DoseUnit.USV_H -> findViewById<Chip>(R.id.chipUsvH).isChecked = true
-            Prefs.DoseUnit.NSV_H -> findViewById<Chip>(R.id.chipNsvH).isChecked = true
-        }
-        
-        when (currentCountUnit) {
-            Prefs.CountUnit.CPS -> findViewById<Chip>(R.id.chipCps).isChecked = true
-            Prefs.CountUnit.CPM -> findViewById<Chip>(R.id.chipCpm).isChecked = true
-        }
-
         doseUnitChips.setOnCheckedStateChangeListener { _, checkedIds ->
             if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
             val chipId = checkedIds.first()
             val unit = when (chipId) {
-                R.id.chipNsvH -> Prefs.DoseUnit.NSV_H
+                R.id.dialogChipNsvH -> Prefs.DoseUnit.NSV_H
                 else -> Prefs.DoseUnit.USV_H
             }
             Prefs.setDoseUnit(this, unit)
@@ -710,7 +711,7 @@ class MainActivity : AppCompatActivity() {
             if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
             val chipId = checkedIds.first()
             val unit = when (chipId) {
-                R.id.chipCpm -> Prefs.CountUnit.CPM
+                R.id.dialogChipCpm -> Prefs.CountUnit.CPM
                 else -> Prefs.CountUnit.CPS
             }
             Prefs.setCountUnit(this, unit)
@@ -718,6 +719,8 @@ class MainActivity : AppCompatActivity() {
             updateChartTitles()
             lastReadingTimestampMs = 0L
         }
+        
+        dialog.show()
     }
 
     /**
@@ -965,6 +968,13 @@ class MainActivity : AppCompatActivity() {
                         sampleCount++
                     }
                 }
+            }
+        })
+        
+        // Setup settings button callback
+        deviceSelector.setOnSettingsClickListener(object : com.radiacode.ble.ui.DeviceSelectorView.OnSettingsClickListener {
+            override fun onSettingsClick() {
+                showChartSettingsDialog()
             }
         })
         

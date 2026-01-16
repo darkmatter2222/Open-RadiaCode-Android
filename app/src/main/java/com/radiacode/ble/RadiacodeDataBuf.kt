@@ -98,13 +98,25 @@ internal object RadiacodeDataBuf {
                 }
 
                 eid == 0 && gid == 3 -> {
-                    // RareData: <IfHHH> - Contains battery level (I), temperature (f), and flags (HHH)
+                    // RareData: <IfHHH> - Contains duration, dose, temperature, charge_level, flags
+                    // Format from cdump/radiacode Python library:
+                    //   duration (U32): dose accumulation duration in seconds
+                    //   dose (F32): accumulated radiation dose  
+                    //   temperature (U16): encoded as (temp_C * 100 + 2000), so decode: (raw - 2000) / 100
+                    //   charge_level (U16): encoded as percent * 100 (0-10000 -> 0-100%)
+                    //   flags (U16): status flags
                     if (br.remaining < 14) break
-                    val chargeLevel = br.readU32LE().toInt().coerceIn(0, 100)  // Battery percentage
-                    val temperature = br.readF32LE()  // Temperature in Celsius
-                    br.readU16LE()  // Reserved/flags
-                    br.readU16LE()  // Reserved/flags  
-                    br.readU16LE()  // Reserved/flags
+                    br.readU32LE()  // duration (unused - dose accumulation time in seconds)
+                    br.readF32LE()  // dose (unused - accumulated dose)
+                    val temperatureRaw = br.readU16LE()
+                    val chargeLevelRaw = br.readU16LE()
+                    br.readU16LE()  // flags (unused)
+                    
+                    // Decode temperature: stored as (temp_C * 100 + 2000)
+                    val temperature = (temperatureRaw - 2000) / 100.0f
+                    
+                    // Decode charge level: stored as percent * 100 (0-10000)
+                    val chargeLevel = (chargeLevelRaw / 100).coerceIn(0, 100)
                     
                     latestMetadata = DeviceMetadata(
                         timestamp = recordTime,

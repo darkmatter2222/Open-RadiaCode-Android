@@ -290,13 +290,28 @@ Begin polling and updating widgets
 
 ## Protocol Notes
 
-This app implements the RadiaCode BLE protocol:
+This app implements the RadiaCode BLE protocol. For comprehensive documentation see:
+
+📖 **[RADIACODE_PROTOCOL.md](RADIACODE_PROTOCOL.md)** - Complete protocol reference including:
+- All commands (COMMAND enum)
+- Virtual Strings (VS) - DATA_BUF, SPECTRUM, etc.
+- Virtual Special Function Registers (VSFR) - device settings
+- DATA_BUF record types with byte-level formats
+- Battery/temperature decoding formulas
+- Alarm system configuration
+- Spectrum data formats
+
+### Quick Reference
 
 - **Service UUID**: `e63215e5-7003-49d8-96b0-b024798fb901`
 - **Write Characteristic**: `e63215e6-7003-49d8-96b0-b024798fb901` (18-byte chunks)
 - **Notify Characteristic**: `e63215e7-7003-49d8-96b0-b024798fb901` (length-prefixed responses)
 
-It polls `VS.DATA_BUF (0x100)` via `COMMAND.RD_VIRT_STRING (0x0826)` and decodes the newest `RealTimeData`.
+**Primary data polling**: `VS.DATA_BUF (0x100)` via `COMMAND.RD_VIRT_STRING (0x0826)`
+
+**Key record types**:
+- `GRP_RealTimeData` (eid=0, gid=0): Live dose rate and count rate
+- `GRP_RareData` (eid=0, gid=3): Battery level and temperature
 
 ## Troubleshooting
 

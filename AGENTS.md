@@ -255,6 +255,23 @@ All data goes through `Prefs` class:
 1. **README.md** - Feature lists, usage instructions, architecture
 2. **docs/UI.md** - UI/UX specifications when changing interface
 3. **AGENTS.md** - Build/deploy considerations, design system
+4. **RADIACODE_PROTOCOL.md** - BLE/USB protocol when changing device communication
+
+## RadiaCode Protocol Reference
+
+📖 See **[RADIACODE_PROTOCOL.md](RADIACODE_PROTOCOL.md)** for the complete device communication protocol:
+
+- **Commands**: All COMMAND enum values for sending requests
+- **Virtual Strings (VS)**: DATA_BUF, SPECTRUM, CONFIGURATION, etc.
+- **VSFRs**: Device settings registers (brightness, language, alarms)
+- **DATA_BUF Records**: Byte-level format for each record type
+- **Battery/Temperature**: Encoded in GRP_RareData (eid=0, gid=3)
+  - Temperature: `(raw_u16 - 2000) / 100.0` → Celsius
+  - Battery: `raw_u16 / 100` → 0-100%
+- **Events**: Power, alarms, charging, temperature warnings
+- **Spectrum**: Energy calibration and count data formats
+
+This documentation was derived from the [cdump/radiacode](https://github.com/cdump/radiacode) Python library.
 
 ## UI Specification
 

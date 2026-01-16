@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
@@ -34,10 +35,16 @@ class DeviceSelectorView @JvmOverloads constructor(
     interface OnDeviceSelectedListener {
         fun onDeviceSelected(deviceId: String?)  // null = "All Devices"
     }
+    
+    interface OnSettingsClickListener {
+        fun onSettingsClick()
+    }
 
     private val spinner: Spinner
     private val statusDot: View
-    private var listener: OnDeviceSelectedListener? = null
+    private val settingsButton: ImageButton
+    private var deviceSelectedListener: OnDeviceSelectedListener? = null
+    private var settingsClickListener: OnSettingsClickListener? = null
 
     private var devices: List<DeviceConfig> = emptyList()
     private var deviceStates: Map<String, DeviceState> = emptyMap()
@@ -49,6 +56,7 @@ class DeviceSelectorView @JvmOverloads constructor(
         
         spinner = findViewById(R.id.deviceSpinner)
         statusDot = findViewById(R.id.deviceStatusDot)
+        settingsButton = findViewById(R.id.chartSettingsButton)
         
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -56,16 +64,24 @@ class DeviceSelectorView @JvmOverloads constructor(
                 
                 val selectedId = if (position == 0) null else devices.getOrNull(position - 1)?.id
                 Prefs.setSelectedDeviceId(context, selectedId)
-                listener?.onDeviceSelected(selectedId)
+                deviceSelectedListener?.onDeviceSelected(selectedId)
                 updateStatusDot(selectedId)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        
+        settingsButton.setOnClickListener {
+            settingsClickListener?.onSettingsClick()
+        }
     }
 
     fun setOnDeviceSelectedListener(l: OnDeviceSelectedListener?) {
-        listener = l
+        deviceSelectedListener = l
+    }
+    
+    fun setOnSettingsClickListener(l: OnSettingsClickListener?) {
+        settingsClickListener = l
     }
 
     /**
