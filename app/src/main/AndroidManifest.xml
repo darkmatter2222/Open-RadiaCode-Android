@@ -94,6 +94,11 @@
             android:exported="false"
             android:label="Notification Settings" />
 
+        <activity
+            android:name=".DashboardConfigActivity"
+            android:exported="false"
+            android:label="Customize Dashboard" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

@@ -30,6 +30,10 @@ object Prefs {
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
     
+    // Dashboard layout keys
+    private const val KEY_DASHBOARD_LAYOUT_JSON = "dashboard_layout_json"
+    private const val KEY_DASHBOARD_EDIT_MODE = "dashboard_edit_mode"
+    
     // Notification Settings keys
     private const val KEY_NOTIFICATION_STYLE = "notification_style"
     private const val KEY_NOTIFICATION_SHOW_READINGS = "notification_show_readings"
@@ -1289,6 +1293,60 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, hide)
+            .apply()
+    }
+    
+    // ==================== DASHBOARD LAYOUT ====================
+    
+    /**
+     * Get the user's customized dashboard layout.
+     * Returns null if no custom layout is set (use default).
+     */
+    fun getDashboardLayout(context: Context): DashboardLayout {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_DASHBOARD_LAYOUT_JSON, null)
+        return if (json != null) {
+            DashboardLayout.fromJson(json) ?: DashboardLayout.createDefault()
+        } else {
+            DashboardLayout.createDefault()
+        }
+    }
+    
+    /**
+     * Save the user's customized dashboard layout.
+     */
+    fun setDashboardLayout(context: Context, layout: DashboardLayout) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DASHBOARD_LAYOUT_JSON, layout.toJson())
+            .apply()
+    }
+    
+    /**
+     * Reset dashboard layout to default.
+     */
+    fun resetDashboardLayout(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_DASHBOARD_LAYOUT_JSON)
+            .apply()
+    }
+    
+    /**
+     * Get whether dashboard is in edit mode.
+     */
+    fun isDashboardEditMode(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DASHBOARD_EDIT_MODE, false)
+    }
+    
+    /**
+     * Set dashboard edit mode.
+     */
+    fun setDashboardEditMode(context: Context, editMode: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DASHBOARD_EDIT_MODE, editMode)
             .apply()
     }
 }

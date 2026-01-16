@@ -70,6 +70,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
 
+    // Dashboard - Metric cards row (for reordering)
+    private lateinit var metricCardsRow: LinearLayout
+
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
     private lateinit var cpsCard: MetricCardView
@@ -319,6 +322,13 @@ class MainActivity : AppCompatActivity() {
         updateStatus(true, "Connecting")
     }
 
+    private val dashboardConfigLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // Reapply dashboard layout when returning from config activity
+            applyDashboardLayout()
+        }
+    }
+
     private val requiredPermissions: Array<String>
         get() {
             val perms = ArrayList<String>(3)
@@ -350,6 +360,7 @@ class MainActivity : AppCompatActivity() {
         setupCharts()
         setupIsotopePanel()
         setupToolbarDeviceSelector()
+        applyDashboardLayout()
 
         refreshSettingsRows()
         updateChartTitles()
@@ -380,6 +391,9 @@ class MainActivity : AppCompatActivity() {
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
+
+        // Metric cards row (for dashboard reordering)
+        metricCardsRow = findViewById(R.id.metricCardsRow)
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -518,6 +532,9 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_dashboard -> setPanel(Panel.Dashboard)
                 R.id.nav_device -> setPanel(Panel.Device)
+                R.id.nav_customize_dashboard -> {
+                    dashboardConfigLauncher.launch(Intent(this, DashboardConfigActivity::class.java))
+                }
                 R.id.nav_widget_crafter -> {
                     startActivity(Intent(this, WidgetCrafterActivity::class.java))
                 }
@@ -853,6 +870,69 @@ class MainActivity : AppCompatActivity() {
         }
         
         updateIsotopePanelState()
+    }
+
+    /**
+     * Applies the saved dashboard layout order.
+     * Reorders the children of panelDashboard based on user preferences.
+     */
+    private fun applyDashboardLayout() {
+        val layout = Prefs.getDashboardLayout(this)
+        val parent = panelDashboard as? LinearLayout ?: return
+        
+        // Map card types to their views
+        val viewMap = mapOf(
+            DashboardCardType.DOSE_CARD.id to metricCardsRow,
+            DashboardCardType.CPS_CARD.id to null, // Part of metricCardsRow
+            DashboardCardType.INTELLIGENCE.id to intelligenceCard,
+            DashboardCardType.DOSE_CHART.id to doseChartPanel,
+            DashboardCardType.CPS_CHART.id to cpsChartPanel,
+            DashboardCardType.ISOTOPE.id to isotopePanel
+        )
+        
+        // Get the first index after deviceSelector (index 0)
+        val startIndex = 1
+        
+        // Remove all dashboard content views (keep deviceSelector)
+        val viewsToReorder = mutableListOf<View>()
+        for (item in layout.items) {
+            val view = viewMap[item.id]
+            if (view != null && view != metricCardsRow) {
+                viewsToReorder.add(view)
+            } else if (item.id == DashboardCardType.DOSE_CARD.id || item.id == DashboardCardType.CPS_CARD.id) {
+                // Metric cards row - add it once
+                if (!viewsToReorder.contains(metricCardsRow)) {
+                    viewsToReorder.add(metricCardsRow)
+                }
+            }
+        }
+        
+        // Deduplicate and track order
+        val orderedViews = layout.items.mapNotNull { item ->
+            when (item.id) {
+                DashboardCardType.DOSE_CARD.id -> metricCardsRow
+                DashboardCardType.CPS_CARD.id -> null // Handled by DOSE_CARD
+                DashboardCardType.INTELLIGENCE.id -> intelligenceCard
+                DashboardCardType.DOSE_CHART.id -> doseChartPanel
+                DashboardCardType.CPS_CHART.id -> cpsChartPanel
+                DashboardCardType.ISOTOPE.id -> isotopePanel
+                else -> null
+            }
+        }.distinct()
+        
+        // Remove views from parent (except deviceSelector at index 0)
+        orderedViews.forEach { view ->
+            parent.removeView(view)
+        }
+        
+        // Re-add views in the order specified
+        var insertIndex = startIndex
+        for (view in orderedViews) {
+            parent.addView(view, insertIndex)
+            insertIndex++
+        }
+        
+        android.util.Log.d("RadiaCode", "Dashboard layout applied: ${layout.items.map { it.id }}")
     }
     
     private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
