@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var panelDevice: View
     private lateinit var panelSettings: View
     private lateinit var panelLogs: View
+    private var currentPanel: Panel = Panel.Dashboard
 
     // Toolbar status
     private lateinit var statusDot: View
@@ -817,16 +818,16 @@ class MainActivity : AppCompatActivity() {
         if (selectedDeviceId == null) {
             // All devices mode - no chart data, show overlay
             android.util.Log.d("RadiaCode", "All devices mode - no chart data to load")
-            if (devices.size > 1) {
+            if (devices.size > 1 && currentPanel == Panel.Dashboard) {
                 allDevicesOverlay.visibility = View.VISIBLE
-                panelDashboard.visibility = View.INVISIBLE
             }
             return
         }
         
         // Single device mode - hide overlay
-        allDevicesOverlay.visibility = View.GONE
-        panelDashboard.visibility = View.VISIBLE
+        if (currentPanel == Panel.Dashboard) {
+            allDevicesOverlay.visibility = View.GONE
+        }
         
         // Load history for selected device only
         val chartHistory = Prefs.getDeviceChartHistory(this, selectedDeviceId)
@@ -944,15 +945,17 @@ class MainActivity : AppCompatActivity() {
                 lastReadingTimestampMs = 0L
                 sessionStartMs = System.currentTimeMillis()
                 
-                // Update overlay visibility
-                if (deviceId == null) {
-                    // All devices mode - show overlay
-                    allDevicesOverlay.visibility = View.VISIBLE
-                    panelDashboard.visibility = View.INVISIBLE
-                } else {
-                    // Single device mode - hide overlay and load data
-                    allDevicesOverlay.visibility = View.GONE
-                    panelDashboard.visibility = View.VISIBLE
+                // Update overlay visibility (only when on Dashboard panel)
+                if (currentPanel == Panel.Dashboard) {
+                    if (deviceId == null) {
+                        // All devices mode - show overlay
+                        allDevicesOverlay.visibility = View.VISIBLE
+                    } else {
+                        // Single device mode - hide overlay and load data
+                        allDevicesOverlay.visibility = View.GONE
+                    }
+                }
+                if (deviceId != null) {
                     
                     val history = Prefs.getDeviceChartHistory(this@MainActivity, deviceId)
                     android.util.Log.d("RadiaCode", "Loaded ${history.size} readings for device $deviceId")
@@ -981,14 +984,16 @@ class MainActivity : AppCompatActivity() {
                 val statesMap = buildDeviceStatesMap(devices)
                 deviceSelector.setDevices(devices, statesMap)
                 
-                // Update overlay visibility based on selection
+                // Check if in all-devices mode
                 val isAllDevicesMode = selectedDeviceId == null && devices.size > 1
-                if (isAllDevicesMode) {
-                    allDevicesOverlay.visibility = View.VISIBLE
-                    panelDashboard.visibility = View.INVISIBLE
-                } else {
-                    allDevicesOverlay.visibility = View.GONE
-                    panelDashboard.visibility = View.VISIBLE
+                
+                // Update overlay visibility based on selection (only when on Dashboard panel)
+                if (currentPanel == Panel.Dashboard) {
+                    if (isAllDevicesMode) {
+                        allDevicesOverlay.visibility = View.VISIBLE
+                    } else {
+                        allDevicesOverlay.visibility = View.GONE
+                    }
                 }
 
                 // Dashboard metadata row (signal / temp / battery)
@@ -1438,6 +1443,7 @@ class MainActivity : AppCompatActivity() {
     private enum class Panel { Dashboard, Device, Settings, Logs }
 
     private fun setPanel(panel: Panel) {
+        currentPanel = panel
         panelDashboard.visibility = if (panel == Panel.Dashboard) View.VISIBLE else View.GONE
         panelDevice.visibility = if (panel == Panel.Device) View.VISIBLE else View.GONE
         panelSettings.visibility = if (panel == Panel.Settings) View.VISIBLE else View.GONE
