@@ -23,10 +23,12 @@ class NotificationSettingsActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     
     // Style selection
+    private lateinit var styleNone: View
     private lateinit var styleMinimal: View
     private lateinit var styleStatusOnly: View
     private lateinit var styleReadings: View
     private lateinit var styleDetailed: View
+    private lateinit var radioNone: RadioButton
     private lateinit var radioMinimal: RadioButton
     private lateinit var radioStatusOnly: RadioButton
     private lateinit var radioReadings: RadioButton
@@ -59,10 +61,12 @@ class NotificationSettingsActivity : AppCompatActivity() {
         toolbar = findViewById(R.id.toolbar)
         
         // Style options
+        styleNone = findViewById(R.id.styleNone)
         styleMinimal = findViewById(R.id.styleMinimal)
         styleStatusOnly = findViewById(R.id.styleStatusOnly)
         styleReadings = findViewById(R.id.styleReadings)
         styleDetailed = findViewById(R.id.styleDetailed)
+        radioNone = findViewById(R.id.radioNone)
         radioMinimal = findViewById(R.id.radioMinimal)
         radioStatusOnly = findViewById(R.id.radioStatusOnly)
         radioReadings = findViewById(R.id.radioReadings)
@@ -108,6 +112,7 @@ class NotificationSettingsActivity : AppCompatActivity() {
         // Style selection listeners
         val styleClickListener = View.OnClickListener { view ->
             val style = when (view.id) {
+                R.id.styleNone -> Prefs.NotificationStyle.NONE
                 R.id.styleMinimal -> Prefs.NotificationStyle.OFF
                 R.id.styleStatusOnly -> Prefs.NotificationStyle.STATUS_ONLY
                 R.id.styleReadings -> Prefs.NotificationStyle.READINGS
@@ -120,10 +125,16 @@ class NotificationSettingsActivity : AppCompatActivity() {
             // Show/hide detailed options
             detailedOptionsSection.visibility = if (style == Prefs.NotificationStyle.DETAILED) View.VISIBLE else View.GONE
             
+            // If "None" is selected, offer to open Android notification settings
+            if (style == Prefs.NotificationStyle.NONE) {
+                openNotificationChannelSettings()
+            }
+            
             updatePreview()
             notifyServiceOfChange()
         }
         
+        styleNone.setOnClickListener(styleClickListener)
         styleMinimal.setOnClickListener(styleClickListener)
         styleStatusOnly.setOnClickListener(styleClickListener)
         styleReadings.setOnClickListener(styleClickListener)
@@ -163,6 +174,7 @@ class NotificationSettingsActivity : AppCompatActivity() {
 
     private fun selectStyle(style: Prefs.NotificationStyle) {
         // Clear all
+        radioNone.isChecked = false
         radioMinimal.isChecked = false
         radioStatusOnly.isChecked = false
         radioReadings.isChecked = false
@@ -170,10 +182,31 @@ class NotificationSettingsActivity : AppCompatActivity() {
         
         // Select the appropriate one
         when (style) {
+            Prefs.NotificationStyle.NONE -> radioNone.isChecked = true
             Prefs.NotificationStyle.OFF -> radioMinimal.isChecked = true
             Prefs.NotificationStyle.STATUS_ONLY -> radioStatusOnly.isChecked = true
             Prefs.NotificationStyle.READINGS -> radioReadings.isChecked = true
             Prefs.NotificationStyle.DETAILED -> radioDetailed.isChecked = true
+        }
+    }
+    
+    private fun openNotificationChannelSettings() {
+        try {
+            val intent = android.content.Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, "radiacode_live")
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            // Fallback to app notification settings
+            try {
+                val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+                startActivity(intent)
+            } catch (_: Exception) {
+                // Ignore if settings can't be opened
+            }
         }
     }
 
@@ -181,6 +214,10 @@ class NotificationSettingsActivity : AppCompatActivity() {
         val style = Prefs.getNotificationStyle(this)
         
         when (style) {
+            Prefs.NotificationStyle.NONE -> {
+                previewTitle.text = "Open RadiaCode"
+                previewContent.text = "(Notification hidden - disable in Android settings)"
+            }
             Prefs.NotificationStyle.OFF -> {
                 previewTitle.text = "Open RadiaCode"
                 previewContent.text = "Service running"

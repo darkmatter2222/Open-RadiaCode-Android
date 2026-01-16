@@ -290,6 +290,7 @@ class RadiaCodeForegroundService : Service() {
             }
             
             when (style) {
+                Prefs.NotificationStyle.NONE,
                 Prefs.NotificationStyle.OFF -> {
                     notifyUpdate("Open RadiaCode", "Service running")
                 }
@@ -308,6 +309,7 @@ class RadiaCodeForegroundService : Service() {
         
         // Build notification based on style
         when (style) {
+            Prefs.NotificationStyle.NONE,
             Prefs.NotificationStyle.OFF -> {
                 notifyUpdate("Open RadiaCode", "Service running")
             }

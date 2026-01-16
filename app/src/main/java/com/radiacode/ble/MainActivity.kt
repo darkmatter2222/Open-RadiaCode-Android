@@ -1472,6 +1472,7 @@ class MainActivity : AppCompatActivity() {
         // Notification style
         val notifStyle = Prefs.getNotificationStyle(this)
         valueNotificationStyle.text = when (notifStyle) {
+            Prefs.NotificationStyle.NONE -> "None"
             Prefs.NotificationStyle.OFF -> "Minimal"
             Prefs.NotificationStyle.STATUS_ONLY -> "Status"
             Prefs.NotificationStyle.READINGS -> "Readings"

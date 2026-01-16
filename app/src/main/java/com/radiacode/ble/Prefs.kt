@@ -56,6 +56,7 @@ object Prefs {
      * Notification style - controls what appears in the persistent notification
      */
     enum class NotificationStyle {
+        NONE,                   // Hidden/None - minimal notification, guide to disable in Android settings
         OFF,                    // Minimal notification (required for foreground service, but minimal content)
         STATUS_ONLY,            // Connection status only (e.g., "Connected" or "Disconnected")
         READINGS,               // Show current readings (default)
