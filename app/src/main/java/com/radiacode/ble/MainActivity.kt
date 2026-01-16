@@ -11,8 +11,10 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.ActionBarDrawerToggle
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.core.content.FileProvider
@@ -29,6 +31,9 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.radiacode.ble.ui.MetricCardView
 import com.radiacode.ble.ui.ProChartView
 import com.radiacode.ble.ui.StatRowView
+import com.radiacode.ble.ui.IsotopeChartView
+import com.radiacode.ble.ui.StackedAreaChartView
+import com.radiacode.ble.ui.IsotopeBarChartView
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -91,6 +96,31 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cpsChartGoRealtime: android.widget.ImageButton
     private lateinit var cpsStats: StatRowView
 
+    // Isotope detection panel
+    private lateinit var isotopePanel: LinearLayout
+    private lateinit var isotopeChartTitle: TextView
+    private lateinit var isotopeDisplayModeToggle: TextView
+    private lateinit var isotopeChartTypeBtn: android.widget.ImageButton
+    private lateinit var isotopeSettingsBtn: android.widget.ImageButton
+    private lateinit var isotopeScanBtn: MaterialButton
+    private lateinit var isotopeRealtimeSwitch: SwitchMaterial
+    private lateinit var isotopeStatusLabel: TextView
+    private lateinit var isotopeChartContainer: android.widget.FrameLayout
+    private lateinit var isotopeMultiLineChart: IsotopeChartView
+    private lateinit var isotopeStackedChart: StackedAreaChartView
+    private lateinit var isotopeBarChart: IsotopeBarChartView
+    private lateinit var isotopeScanResultContainer: LinearLayout
+    private lateinit var isotopeScanResultText: TextView
+    private lateinit var isotopeScanProgress: android.widget.ProgressBar
+    private lateinit var isotopeQuickView: LinearLayout
+    private lateinit var isotopeTopResult: TextView
+    
+    // Isotope detection state
+    private var isotopeDetector: IsotopeDetector? = null
+    private val isotopePredictionHistory = IsotopePredictionHistory(300)
+    private var isIsotopeRealtimeActive = false
+    private var lastSpectrumData: SpectrumData? = null
+
     private lateinit var sessionInfo: TextView
     
     // Intelligence card
@@ -121,6 +151,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowSpikePercentages: View
     private lateinit var rowSmartAlerts: View
     private lateinit var rowTrendArrows: View
+    private lateinit var rowIsotopeSettings: View
 
     private lateinit var valueWindow: TextView
     private lateinit var valueSmoothing: TextView
@@ -131,6 +162,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valueSmartAlerts: TextView
     private lateinit var valueTrendArrows: TextView
     private lateinit var valueNotificationStyle: TextView
+    private lateinit var valueIsotopeSettings: TextView
     
     // Settings sections (expandable)
     private lateinit var sectionAppHeader: View
@@ -201,6 +233,26 @@ class MainActivity : AppCompatActivity() {
             updateDeviceSelectorStates()
         }
     }
+    
+    private val spectrumReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != RadiaCodeForegroundService.ACTION_SPECTRUM_DATA) return
+            val counts = intent.getIntArrayExtra(RadiaCodeForegroundService.EXTRA_SPECTRUM_COUNTS) ?: return
+            val a0 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A0, 0f)
+            val a1 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A1, 3.0f)
+            val a2 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A2, 0f)
+            
+            val spectrum = SpectrumData(
+                durationSeconds = 0,  // Not tracked in broadcast
+                counts = counts,
+                a0 = a0,
+                a1 = a1,
+                a2 = a2,
+                timestampMs = System.currentTimeMillis()
+            )
+            onSpectrumDataReceived(spectrum)
+        }
+    }
 
     private val findDevicesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
@@ -265,6 +317,7 @@ class MainActivity : AppCompatActivity() {
         setupLogsPanel()
         setupMetricCards()
         setupCharts()
+        setupIsotopePanel()
         setupToolbarDeviceSelector()
 
         refreshSettingsRows()
@@ -320,6 +373,25 @@ class MainActivity : AppCompatActivity() {
         cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
         cpsStats = findViewById(R.id.cpsStats)
 
+        // Isotope detection panel
+        isotopePanel = findViewById(R.id.isotopePanel)
+        isotopeChartTitle = findViewById(R.id.isotopeChartTitle)
+        isotopeDisplayModeToggle = findViewById(R.id.isotopeDisplayModeToggle)
+        isotopeChartTypeBtn = findViewById(R.id.isotopeChartTypeBtn)
+        isotopeSettingsBtn = findViewById(R.id.isotopeSettingsBtn)
+        isotopeScanBtn = findViewById(R.id.isotopeScanBtn)
+        isotopeRealtimeSwitch = findViewById(R.id.isotopeRealtimeSwitch)
+        isotopeStatusLabel = findViewById(R.id.isotopeStatusLabel)
+        isotopeChartContainer = findViewById(R.id.isotopeChartContainer)
+        isotopeMultiLineChart = findViewById(R.id.isotopeMultiLineChart)
+        isotopeStackedChart = findViewById(R.id.isotopeStackedChart)
+        isotopeBarChart = findViewById(R.id.isotopeBarChart)
+        isotopeScanResultContainer = findViewById(R.id.isotopeScanResultContainer)
+        isotopeScanResultText = findViewById(R.id.isotopeScanResultText)
+        isotopeScanProgress = findViewById(R.id.isotopeScanProgress)
+        isotopeQuickView = findViewById(R.id.isotopeQuickView)
+        isotopeTopResult = findViewById(R.id.isotopeTopResult)
+
         sessionInfo = findViewById(R.id.sessionInfo)
         
         // Intelligence card
@@ -348,6 +420,7 @@ class MainActivity : AppCompatActivity() {
         rowPause = findViewById(R.id.rowPause)
         rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
         rowTrendArrows = findViewById(R.id.rowTrendArrows)
+        rowIsotopeSettings = findViewById(R.id.rowIsotopeSettings)
 
         valueWindow = findViewById(R.id.valueWindow)
         valueSmoothing = findViewById(R.id.valueSmoothing)
@@ -357,6 +430,7 @@ class MainActivity : AppCompatActivity() {
         valuePause = findViewById(R.id.valuePause)
         valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
         valueTrendArrows = findViewById(R.id.valueTrendArrows)
+        valueIsotopeSettings = findViewById(R.id.valueIsotopeSettings)
         valueNotificationStyle = findViewById(R.id.valueNotificationStyle)
         
         // Expandable section headers and content
@@ -536,6 +610,10 @@ class MainActivity : AppCompatActivity() {
         rowSmartAlerts.setOnClickListener {
             startActivity(Intent(this, AlertConfigActivity::class.java))
         }
+        
+        rowIsotopeSettings.setOnClickListener {
+            startActivity(Intent(this, IsotopeSettingsActivity::class.java))
+        }
     }
     
     private fun setupExpandableSection(header: View, content: View, arrow: android.widget.ImageView, expanded: Boolean) {
@@ -650,6 +728,230 @@ class MainActivity : AppCompatActivity() {
                 cpsChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
             }
         })
+    }
+
+    private fun setupIsotopePanel() {
+        // Initialize the isotope detector with enabled isotopes
+        val enabledIsotopes = Prefs.getEnabledIsotopes(this)
+        isotopeDetector = IsotopeDetector(enabledIsotopes)
+        
+        // Show/hide panel based on connection state (will be updated dynamically)
+        isotopePanel.visibility = View.VISIBLE
+        
+        // Apply saved settings
+        val realtimeEnabled = Prefs.isIsotopeRealtimeEnabled(this)
+        isotopeRealtimeSwitch.isChecked = realtimeEnabled
+        isIsotopeRealtimeActive = realtimeEnabled
+        
+        val displayMode = Prefs.getIsotopeDisplayMode(this)
+        updateIsotopeDisplayModeToggle(displayMode)
+        
+        val chartMode = Prefs.getIsotopeChartMode(this)
+        updateIsotopeChartMode(chartMode)
+        
+        // Setup click listeners
+        isotopeScanBtn.setOnClickListener { performIsotopeScan() }
+        
+        isotopeRealtimeSwitch.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setIsotopeRealtimeEnabled(this, isChecked)
+            isIsotopeRealtimeActive = isChecked
+            updateIsotopePanelState()
+        }
+        
+        isotopeDisplayModeToggle.setOnClickListener {
+            val current = Prefs.getIsotopeDisplayMode(this)
+            val next = when (current) {
+                Prefs.IsotopeDisplayMode.PROBABILITY -> Prefs.IsotopeDisplayMode.FRACTION
+                Prefs.IsotopeDisplayMode.FRACTION -> Prefs.IsotopeDisplayMode.PROBABILITY
+            }
+            Prefs.setIsotopeDisplayMode(this, next)
+            updateIsotopeDisplayModeToggle(next)
+            refreshIsotopeCharts()
+        }
+        
+        isotopeChartTypeBtn.setOnClickListener { showIsotopeChartTypeDialog() }
+        
+        isotopeSettingsBtn.setOnClickListener {
+            startActivity(Intent(this, IsotopeSettingsActivity::class.java))
+        }
+        
+        updateIsotopePanelState()
+    }
+    
+    private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
+        isotopeDisplayModeToggle.text = when (mode) {
+            Prefs.IsotopeDisplayMode.PROBABILITY -> "PROB"
+            Prefs.IsotopeDisplayMode.FRACTION -> "FRAC"
+        }
+    }
+    
+    private fun updateIsotopeChartMode(mode: Prefs.IsotopeChartMode) {
+        isotopeMultiLineChart.visibility = View.GONE
+        isotopeStackedChart.visibility = View.GONE
+        isotopeBarChart.visibility = View.GONE
+        isotopeScanResultContainer.visibility = View.GONE
+        
+        when (mode) {
+            Prefs.IsotopeChartMode.MULTI_LINE -> isotopeMultiLineChart.visibility = View.VISIBLE
+            Prefs.IsotopeChartMode.STACKED_AREA -> isotopeStackedChart.visibility = View.VISIBLE
+            Prefs.IsotopeChartMode.ANIMATED_BAR -> isotopeBarChart.visibility = View.VISIBLE
+        }
+    }
+    
+    private fun updateIsotopePanelState() {
+        if (isIsotopeRealtimeActive) {
+            isotopeStatusLabel.text = "Streaming"
+            isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_green))
+            val mode = Prefs.getIsotopeChartMode(this)
+            updateIsotopeChartMode(mode)
+        } else {
+            if (isotopePredictionHistory.isEmpty) {
+                isotopeStatusLabel.text = "Idle"
+                isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_text_muted))
+                isotopeScanResultContainer.visibility = View.VISIBLE
+                isotopeScanResultText.text = "Press SCAN to identify isotopes"
+                isotopeMultiLineChart.visibility = View.GONE
+                isotopeStackedChart.visibility = View.GONE
+                isotopeBarChart.visibility = View.GONE
+            }
+        }
+    }
+    
+    private fun showIsotopeChartTypeDialog() {
+        val options = arrayOf("Multi-Line Chart", "Stacked Area Chart", "Animated Bars")
+        val current = Prefs.getIsotopeChartMode(this).ordinal
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Chart Type")
+            .setSingleChoiceItems(options, current) { dialog, which ->
+                val mode = Prefs.IsotopeChartMode.values()[which]
+                Prefs.setIsotopeChartMode(this, mode)
+                updateIsotopeChartMode(mode)
+                refreshIsotopeCharts()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun performIsotopeScan() {
+        // Show scanning state immediately
+        isotopeScanResultContainer.visibility = View.VISIBLE
+        isotopeMultiLineChart.visibility = View.GONE
+        isotopeStackedChart.visibility = View.GONE
+        isotopeBarChart.visibility = View.GONE
+        isotopeScanResultText.text = "Reading spectrum…"
+        isotopeScanProgress.visibility = View.VISIBLE
+        isotopeStatusLabel.text = "Scanning…"
+        isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_amber))
+        
+        // Request fresh spectrum data from service
+        RadiaCodeForegroundService.requestSpectrum(this)
+        
+        // Wait a bit for response (the spectrum receiver will update lastSpectrumData)
+        // If we get data via broadcast, onSpectrumDataReceived will be called
+        // Fall back to existing data after timeout
+        mainHandler.postDelayed({
+            val spectrum = lastSpectrumData
+            if (spectrum == null) {
+                isotopeScanResultText.text = "No spectrum data available.\nConnect to a device first."
+                isotopeScanProgress.visibility = View.GONE
+                isotopeStatusLabel.text = "Error"
+                isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_red))
+                return@postDelayed
+            }
+            
+            // Analyze the spectrum
+            val detector = isotopeDetector ?: return@postDelayed
+            val result = detector.analyze(spectrum)
+            
+            isotopeScanProgress.visibility = View.GONE
+            isotopeStatusLabel.text = "Complete"
+            isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_green))
+            
+            // Display results
+            displayScanResults(result)
+        }, 1500) // Give time for BLE read to complete
+    }
+    
+    private fun displayScanResults(result: IsotopeDetector.AnalysisResult) {
+        val topFive = result.topFive
+        if (topFive.isEmpty()) {
+            isotopeScanResultText.text = "No isotopes detected"
+            return
+        }
+        
+        val displayMode = Prefs.getIsotopeDisplayMode(this)
+        val sb = StringBuilder()
+        
+        for ((i, pred) in topFive.withIndex()) {
+            val value = if (displayMode == Prefs.IsotopeDisplayMode.PROBABILITY) {
+                "${(pred.probability * 100).toInt()}%"
+            } else {
+                "%.1f%%".format(pred.fraction * 100)
+            }
+            val icon = when (i) {
+                0 -> "🥇"
+                1 -> "🥈"
+                2 -> "🥉"
+                else -> "  "
+            }
+            sb.append("$icon ${pred.name}: $value\n")
+        }
+        
+        isotopeScanResultText.text = sb.toString().trim()
+        isotopeScanResultContainer.visibility = View.VISIBLE
+        
+        // Update top result quick view
+        val top = topFive.firstOrNull()
+        if (top != null) {
+            val topValue = if (displayMode == Prefs.IsotopeDisplayMode.PROBABILITY) {
+                "${(top.probability * 100).toInt()}%"
+            } else {
+                "%.1f%%".format(top.fraction * 100)
+            }
+            isotopeTopResult.text = "${top.name}: $topValue"
+        }
+    }
+    
+    private fun refreshIsotopeCharts() {
+        if (isotopePredictionHistory.isEmpty) return
+        
+        val history = isotopePredictionHistory.getAll()
+        val topIds = isotopePredictionHistory.getCurrentTop(5).map { it.isotopeId }
+        val displayMode = Prefs.getIsotopeDisplayMode(this)
+        val showProbability = displayMode == Prefs.IsotopeDisplayMode.PROBABILITY
+        
+        isotopeMultiLineChart.setData(history, topIds, showProbability)
+        isotopeStackedChart.setData(history, topIds)
+        isotopeBarChart.setData(history, showProbability)
+        
+        // Update top result
+        val top = isotopePredictionHistory.getCurrentTop(1).firstOrNull()
+        if (top != null) {
+            val value = if (showProbability) {
+                "${(top.probability * 100).toInt()}%"
+            } else {
+                "%.1f%%".format(top.fraction * 100)
+            }
+            isotopeTopResult.text = "${top.name}: $value"
+        }
+    }
+    
+    /**
+     * Called when new spectrum data is received (from service).
+     * This will be called frequently when real-time mode is active.
+     */
+    fun onSpectrumDataReceived(spectrum: SpectrumData) {
+        lastSpectrumData = spectrum
+        
+        if (!isIsotopeRealtimeActive) return
+        
+        val detector = isotopeDetector ?: return
+        val result = detector.analyze(spectrum)
+        
+        isotopePredictionHistory.add(result)
+        refreshIsotopeCharts()
     }
 
     /**
@@ -1478,6 +1780,11 @@ class MainActivity : AppCompatActivity() {
             Prefs.NotificationStyle.READINGS -> "Readings"
             Prefs.NotificationStyle.DETAILED -> "Detailed"
         }
+        
+        // Isotope settings
+        val enabledIsotopes = Prefs.getEnabledIsotopes(this)
+        val totalIsotopes = IsotopeLibrary.ALL_ISOTOPES.size
+        valueIsotopeSettings.text = "${enabledIsotopes.size}/$totalIsotopes enabled"
     }
 
     private enum class Panel { Dashboard, Device, Settings, Logs }
@@ -1610,15 +1917,19 @@ class MainActivity : AppCompatActivity() {
     private fun registerReadingReceiver() {
         val readingFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_READING)
         val stateFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_DEVICE_STATE_CHANGED)
+        val spectrumFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_SPECTRUM_DATA)
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(readingReceiver, readingFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
                 registerReceiver(deviceStateReceiver, stateFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                registerReceiver(spectrumReceiver, spectrumFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
                 registerReceiver(readingReceiver, readingFilter)
                 @Suppress("DEPRECATION")
                 registerReceiver(deviceStateReceiver, stateFilter)
+                @Suppress("DEPRECATION")
+                registerReceiver(spectrumReceiver, spectrumFilter)
             }
         } catch (_: Throwable) {}
     }
@@ -1629,6 +1940,9 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
         try {
             unregisterReceiver(deviceStateReceiver)
+        } catch (_: Throwable) {}
+        try {
+            unregisterReceiver(spectrumReceiver)
         } catch (_: Throwable) {}
     }
     

@@ -1099,4 +1099,143 @@ object Prefs {
         }
         return result
     }
+    
+    // ==================== ISOTOPE DETECTION SETTINGS ====================
+    
+    private const val KEY_ISOTOPE_ENABLED_SET = "isotope_enabled_set"
+    private const val KEY_ISOTOPE_REALTIME_ENABLED = "isotope_realtime_enabled"
+    private const val KEY_ISOTOPE_CHART_MODE = "isotope_chart_mode"
+    private const val KEY_ISOTOPE_DISPLAY_MODE = "isotope_display_mode"
+    private const val KEY_ISOTOPE_SHOW_DAUGHTERS = "isotope_show_daughters"
+    
+    /**
+     * Chart display mode for isotope panel.
+     */
+    enum class IsotopeChartMode {
+        MULTI_LINE,     // Multi-line time series (default)
+        STACKED_AREA,   // Stacked area chart
+        ANIMATED_BAR    // Animated horizontal bars
+    }
+    
+    /**
+     * What value to display on isotope charts.
+     */
+    enum class IsotopeDisplayMode {
+        PROBABILITY,    // 0-100% probability (default)
+        FRACTION        // Fractional contribution
+    }
+    
+    /**
+     * Get enabled isotopes (returns set of isotope IDs).
+     */
+    fun getEnabledIsotopes(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val raw = prefs.getStringSet(KEY_ISOTOPE_ENABLED_SET, null)
+        return raw ?: IsotopeLibrary.DEFAULT_ENABLED
+    }
+    
+    /**
+     * Set enabled isotopes.
+     */
+    fun setEnabledIsotopes(context: Context, isotopes: Set<String>) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet(KEY_ISOTOPE_ENABLED_SET, isotopes)
+            .apply()
+    }
+    
+    /**
+     * Enable or disable a specific isotope.
+     */
+    fun setIsotopeEnabled(context: Context, isotopeId: String, enabled: Boolean) {
+        val current = getEnabledIsotopes(context).toMutableSet()
+        if (enabled) {
+            current.add(isotopeId)
+        } else {
+            current.remove(isotopeId)
+        }
+        setEnabledIsotopes(context, current)
+    }
+    
+    /**
+     * Check if real-time isotope detection is enabled.
+     */
+    fun isIsotopeRealtimeEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ISOTOPE_REALTIME_ENABLED, false)
+    }
+    
+    /**
+     * Enable or disable real-time isotope detection.
+     */
+    fun setIsotopeRealtimeEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ISOTOPE_REALTIME_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get isotope chart display mode.
+     */
+    fun getIsotopeChartMode(context: Context): IsotopeChartMode {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val name = prefs.getString(KEY_ISOTOPE_CHART_MODE, null)
+        return try {
+            if (name != null) IsotopeChartMode.valueOf(name) else IsotopeChartMode.MULTI_LINE
+        } catch (_: Exception) {
+            IsotopeChartMode.MULTI_LINE
+        }
+    }
+    
+    /**
+     * Set isotope chart display mode.
+     */
+    fun setIsotopeChartMode(context: Context, mode: IsotopeChartMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ISOTOPE_CHART_MODE, mode.name)
+            .apply()
+    }
+    
+    /**
+     * Get isotope display mode (probability vs fraction).
+     */
+    fun getIsotopeDisplayMode(context: Context): IsotopeDisplayMode {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val name = prefs.getString(KEY_ISOTOPE_DISPLAY_MODE, null)
+        return try {
+            if (name != null) IsotopeDisplayMode.valueOf(name) else IsotopeDisplayMode.PROBABILITY
+        } catch (_: Exception) {
+            IsotopeDisplayMode.PROBABILITY
+        }
+    }
+    
+    /**
+     * Set isotope display mode.
+     */
+    fun setIsotopeDisplayMode(context: Context, mode: IsotopeDisplayMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ISOTOPE_DISPLAY_MODE, mode.name)
+            .apply()
+    }
+    
+    /**
+     * Get whether to show decay chain daughters vs parent isotope.
+     */
+    fun isShowIsotopeDaughters(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ISOTOPE_SHOW_DAUGHTERS, false)
+    }
+    
+    /**
+     * Set whether to show decay chain daughters vs parent isotope.
+     */
+    fun setShowIsotopeDaughters(context: Context, show: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_ISOTOPE_SHOW_DAUGHTERS, show)
+            .apply()
+    }
 }

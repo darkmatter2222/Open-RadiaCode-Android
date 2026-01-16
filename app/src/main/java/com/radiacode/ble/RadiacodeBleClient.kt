@@ -245,6 +245,96 @@ internal class RadiacodeBleClient(
             }
     }
 
+    /**
+     * Reads the current gamma spectrum (typically 1024 channels).
+     * Returns SpectrumData containing duration, calibration coefficients, and counts.
+     */
+    fun readSpectrum(): CompletableFuture<SpectrumData> {
+        Log.d(TAG, "readSpectrum: RD_VIRT_STRING VS_SPECTRUM")
+        val payload = RadiacodeProtocol.packU32LE(RadiacodeProtocol.VS_SPECTRUM.toLong())
+        return execute(RadiacodeProtocol.COMMAND_RD_VIRT_STRING, payload)
+            .thenApply { resp ->
+                if (resp.size < 8) throw IllegalStateException("RD_VIRT_STRING response too short")
+                val bb = ByteBuffer.wrap(resp).order(ByteOrder.LITTLE_ENDIAN)
+                val retcode = bb.int
+                val flen = bb.int
+                if (retcode != 1) throw IllegalStateException("RD_VIRT_STRING (SPECTRUM) failed ret=$retcode")
+                if (flen < 16) throw IllegalStateException("Spectrum data too short flen=$flen")
+                
+                // Format: <Ifff> duration_seconds, a0, a1, a2 (calibration), then counts
+                val durationSeconds = bb.int
+                val a0 = bb.float  // keV offset
+                val a1 = bb.float  // keV/channel (linear)
+                val a2 = bb.float  // keV/channel² (quadratic)
+                
+                // Parse counts - remaining bytes are the spectrum data
+                // RadiaCode uses various formats (simple U32 array or RLE compressed)
+                val countsBytes = flen - 16  // 4 (duration) + 12 (calibration)
+                val counts = parseSpectrumCounts(bb, countsBytes)
+                
+                Log.d(TAG, "readSpectrum: duration=${durationSeconds}s a0=$a0 a1=$a1 a2=$a2 channels=${counts.size}")
+                SpectrumData(
+                    durationSeconds = durationSeconds,
+                    a0 = a0,
+                    a1 = a1,
+                    a2 = a2,
+                    counts = counts,
+                    timestampMs = System.currentTimeMillis()
+                )
+            }
+            .whenComplete { _, t ->
+                if (t != null) {
+                    Log.e(TAG, "readSpectrum failed", t)
+                }
+            }
+    }
+    
+    /**
+     * Reads the energy calibration coefficients from the device.
+     * Returns EnergyCalibration with a0, a1, a2 coefficients.
+     * Energy(keV) = a0 + a1 * channel + a2 * channel²
+     */
+    fun readEnergyCalibration(): CompletableFuture<EnergyCalibration> {
+        Log.d(TAG, "readEnergyCalibration: RD_VIRT_STRING VS_ENERGY_CALIB")
+        val payload = RadiacodeProtocol.packU32LE(RadiacodeProtocol.VS_ENERGY_CALIB.toLong())
+        return execute(RadiacodeProtocol.COMMAND_RD_VIRT_STRING, payload)
+            .thenApply { resp ->
+                if (resp.size < 8) throw IllegalStateException("RD_VIRT_STRING response too short")
+                val bb = ByteBuffer.wrap(resp).order(ByteOrder.LITTLE_ENDIAN)
+                val retcode = bb.int
+                val flen = bb.int
+                if (retcode != 1) throw IllegalStateException("RD_VIRT_STRING (ENERGY_CALIB) failed ret=$retcode")
+                if (flen < 12) throw IllegalStateException("Calibration data too short flen=$flen")
+                
+                val a0 = bb.float
+                val a1 = bb.float
+                val a2 = bb.float
+                
+                Log.d(TAG, "readEnergyCalibration: a0=$a0 a1=$a1 a2=$a2")
+                EnergyCalibration(a0 = a0, a1 = a1, a2 = a2)
+            }
+            .whenComplete { _, t ->
+                if (t != null) {
+                    Log.e(TAG, "readEnergyCalibration failed", t)
+                }
+            }
+    }
+    
+    /**
+     * Parse spectrum counts from the response buffer.
+     * RadiaCode can use simple U32 array or run-length encoded format.
+     * We attempt simple parsing first; 1024 channels * 4 bytes = 4096 bytes expected.
+     */
+    private fun parseSpectrumCounts(bb: ByteBuffer, bytesRemaining: Int): IntArray {
+        // Simple format: array of U32 counts
+        val numChannels = bytesRemaining / 4
+        val counts = IntArray(numChannels)
+        for (i in 0 until numChannels) {
+            counts[i] = bb.int
+        }
+        return counts
+    }
+
     private fun execute(command: Int, args: ByteArray): CompletableFuture<ByteArray> {
         val g = gatt ?: return CompletableFuture.failedFuture(IllegalStateException("Not connected"))
         val w = writeChar ?: return CompletableFuture.failedFuture(IllegalStateException("Write char missing"))

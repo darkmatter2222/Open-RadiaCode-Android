@@ -438,6 +438,18 @@ class MultiDeviceBleManager(
     }
     
     /**
+     * Get BLE client for a device (for direct operations like spectrum reading).
+     * Returns the client for first connected device if deviceId is null.
+     */
+    internal fun getClient(deviceId: String? = null): RadiacodeBleClient? {
+        val targetId = deviceId ?: devices.values
+            .firstOrNull { it.state.connectionState == DeviceConnectionState.CONNECTED }
+            ?.config?.id
+        
+        return targetId?.let { devices[it]?.client }
+    }
+    
+    /**
      * Reload devices from preferences and sync state.
      */
     fun reloadDevices() {

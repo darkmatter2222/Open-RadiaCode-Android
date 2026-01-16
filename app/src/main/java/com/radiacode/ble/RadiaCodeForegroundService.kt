@@ -37,14 +37,20 @@ class RadiaCodeForegroundService : Service() {
         private const val ACTION_RECONNECT = "com.radiacode.ble.action.RECONNECT"
         private const val ACTION_RELOAD_DEVICES = "com.radiacode.ble.action.RELOAD_DEVICES"
         private const val ACTION_REFRESH_NOTIFICATION = "com.radiacode.ble.action.REFRESH_NOTIFICATION"
+        private const val ACTION_REQUEST_SPECTRUM = "com.radiacode.ble.action.REQUEST_SPECTRUM"
 
         const val ACTION_READING = "com.radiacode.ble.action.READING"
         const val ACTION_DEVICE_STATE_CHANGED = "com.radiacode.ble.action.DEVICE_STATE"
+        const val ACTION_SPECTRUM_DATA = "com.radiacode.ble.action.SPECTRUM_DATA"
         const val EXTRA_TS_MS = "ts_ms"
         const val EXTRA_USV_H = "usv_h"
         const val EXTRA_CPS = "cps"
         const val EXTRA_DEVICE_ID = "device_id"
         const val EXTRA_CONNECTION_STATE = "connection_state"
+        const val EXTRA_SPECTRUM_COUNTS = "spectrum_counts"
+        const val EXTRA_CALIB_A0 = "calib_a0"
+        const val EXTRA_CALIB_A1 = "calib_a1"
+        const val EXTRA_CALIB_A2 = "calib_a2"
 
         private const val EXTRA_ADDRESS = "address"
 
@@ -75,6 +81,19 @@ class RadiaCodeForegroundService : Service() {
         
         fun refreshNotification(context: Context) {
             val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_REFRESH_NOTIFICATION)
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {
+                // Service might not be running
+            }
+        }
+        
+        fun requestSpectrum(context: Context, deviceId: String? = null) {
+            val intent = Intent(context, RadiaCodeForegroundService::class.java)
+                .setAction(ACTION_REQUEST_SPECTRUM)
+            if (deviceId != null) {
+                intent.putExtra(EXTRA_DEVICE_ID, deviceId)
+            }
             try {
                 context.startService(intent)
             } catch (_: Exception) {
@@ -148,6 +167,11 @@ class RadiaCodeForegroundService : Service() {
             }
             ACTION_REFRESH_NOTIFICATION -> {
                 updateNotificationFromState()
+                return START_STICKY
+            }
+            ACTION_REQUEST_SPECTRUM -> {
+                val requestedDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
+                executor.submit { handleSpectrumRequest(requestedDeviceId) }
                 return START_STICKY
             }
             ACTION_START, null -> {
@@ -229,6 +253,47 @@ class RadiaCodeForegroundService : Service() {
         } catch (_: Throwable) {}
         
         updateNotificationFromState()
+    }
+    
+    private fun handleSpectrumRequest(requestedDeviceId: String?) {
+        val manager = deviceManager ?: return
+        val client = manager.getClient(requestedDeviceId)
+        
+        if (client == null) {
+            Log.w(TAG, "handleSpectrumRequest: No connected device")
+            return
+        }
+        
+        try {
+            // Read calibration first
+            val calibration = client.readEnergyCalibration().get(5, TimeUnit.SECONDS)
+            
+            // Read spectrum
+            val spectrumData = client.readSpectrum().get(5, TimeUnit.SECONDS)
+            
+            if (spectrumData != null) {
+                // Combine calibration with spectrum
+                val fullData = spectrumData.copy(
+                    a0 = calibration?.a0 ?: spectrumData.a0,
+                    a1 = calibration?.a1 ?: spectrumData.a1,
+                    a2 = calibration?.a2 ?: spectrumData.a2
+                )
+                
+                Log.d(TAG, "Spectrum read: ${fullData.numChannels} channels, duration=${fullData.durationSeconds}s")
+                
+                // Broadcast spectrum data
+                val i = Intent(ACTION_SPECTRUM_DATA)
+                    .setPackage(packageName)
+                    .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
+                    .putExtra(EXTRA_SPECTRUM_COUNTS, fullData.counts)
+                    .putExtra(EXTRA_CALIB_A0, fullData.a0)
+                    .putExtra(EXTRA_CALIB_A1, fullData.a1)
+                    .putExtra(EXTRA_CALIB_A2, fullData.a2)
+                sendBroadcast(i)
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "handleSpectrumRequest failed", t)
+        }
     }
     
     private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {

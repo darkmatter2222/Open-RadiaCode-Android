@@ -158,6 +158,25 @@ Configure widgets with advanced options when adding to your home screen:
 - **Chart Settings**: Time window, smoothing, spike markers, spike percentages
 - **Display Settings**: Unit selection (µSv/h, nSv/h, CPS, CPM)
 - **Alerts**: Dose threshold, Smart Alerts configuration
+- **Isotope Detection**: Configure enabled isotopes, show/hide decay daughters
+
+### Isotope Identification (NEW)
+Real-time isotope identification from gamma spectra:
+
+- **15 Common Isotopes**: K-40, Th-232, U-238, Ra-226, Cs-137, Co-60, Am-241, Ir-192, Ba-133, Tc-99m, I-131, F-18, Cs-134, Na-22, Eu-152
+- **Two Modes**:
+  - **Scan Mode**: Press "SCAN" for one-shot spectrum analysis
+  - **Real-time Mode**: Toggle streaming for continuous identification
+- **Three Chart Types**:
+  - **Multi-line Chart**: Time series of top isotope probabilities
+  - **Stacked Area Chart**: Fraction visualization over time
+  - **Animated Bars**: Horizontal bars with sparkline history
+- **Configurable Display**:
+  - Probability mode (0-100% confidence)
+  - Fraction mode (relative contribution)
+- **Energy Calibration**: Accurate keV-to-channel conversion using device calibration
+- **ROI Analysis**: Simple Region of Interest algorithm with sigmoid scoring
+- **Isotope Settings**: Enable/disable individual isotopes, grouped by category (Natural, Medical, Industrial, Fission)
 - **Advanced**: Pause live updates
 
 ## Design Theme

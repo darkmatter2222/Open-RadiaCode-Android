@@ -60,6 +60,11 @@
             android:label="Smart Alerts" />
 
         <activity
+            android:name=".IsotopeSettingsActivity"
+            android:exported="false"
+            android:label="Isotope Settings" />
+
+        <activity
             android:name=".WidgetConfigActivity"
             android:exported="true"
             android:theme="@style/Theme.RadiaCode"

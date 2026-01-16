@@ -126,6 +126,50 @@ Horizontal metrics strip showing min/avg/max/delta:
 └────────────────────────────────────────┘
 ```
 
+### Isotope Identification Panel
+
+Located below the count rate chart on the dashboard:
+
+```
+┌──────────────────────────────────────────┐
+│ ISOTOPE ID         📊  ⚙️  ● Streaming  │  ← Header with chart/settings buttons
+├──────────────────────────────────────────┤
+│ ┌──────────────────────────────────────┐ │
+│ │ [SCAN] ○ Real-time                   │ │  ← Mode selector
+│ └──────────────────────────────────────┘ │
+│                                          │
+│ ┌──────────────────────────────────────┐ │
+│ │ Multi-line / Stacked / Bars          │ │  ← Chart type (toggle)
+│ │                                       │ │
+│ │ ▬▬▬▬▬▬▬▬▬▬ Cs-137 (42%)              │ │  ← Chart area with legend
+│ │ ▬▬▬▬▬▬▬ K-40 (31%)                   │ │
+│ │ ▬▬▬▬ Ra-226 (18%)                    │ │
+│ │ ▬▬ Co-60 (9%)                        │ │
+│ │                                       │ │
+│ └──────────────────────────────────────┘ │
+│                                          │
+│ TOP: Cs-137 • 42% probability            │  ← Quick view of top result
+└──────────────────────────────────────────┘
+```
+
+**Chart Types:**
+- **Multi-line**: Time series showing top 5 isotope probabilities as separate lines
+- **Stacked Area**: Cumulative fraction view over time
+- **Animated Bars**: Horizontal bars with mini sparkline history
+
+**Display Modes:**
+- **Probability**: 0-100% confidence for each isotope
+- **Fraction**: Relative contribution (adds to 100%)
+
+**Supported Isotopes (15):**
+
+| Category | Isotopes |
+|----------|----------|
+| Natural/Background | K-40, Th-232, U-238, Ra-226 |
+| Medical | Tc-99m, I-131, F-18 |
+| Industrial | Co-60, Am-241, Ir-192, Ba-133, Eu-152 |
+| Fission | Cs-137, Cs-134, Na-22 |
+
 ### Charts (deep analysis)
 
 - Larger charts (200dp height each)
@@ -210,3 +254,17 @@ Full wizard for configuring 0-10 statistical alerts:
 - Statistical trend display
 - Color-coded values
 - Connection status indicator
+
+### Isotope Identification
+- Real-time spectrum reading from RadiaCode device
+- Energy calibration using device coefficients (keV to channel conversion)
+- ROI-based isotope detection algorithm with sigmoid scoring
+- 15 common isotopes across 4 categories
+- Three chart visualization types:
+  - Multi-line time series
+  - Stacked area fractions
+  - Animated horizontal bars with sparklines
+- Scan mode for one-shot analysis
+- Real-time streaming mode for continuous identification
+- Configurable probability vs fraction display
+- Isotope settings activity to enable/disable individual isotopes
