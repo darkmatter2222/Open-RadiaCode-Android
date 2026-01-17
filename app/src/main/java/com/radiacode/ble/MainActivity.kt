@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
+import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -23,6 +24,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -90,6 +93,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cpsChartReset: android.widget.ImageButton
     private lateinit var cpsChartGoRealtime: android.widget.ImageButton
     private lateinit var cpsStats: StatRowView
+
+    // Dashboard - Live Map
+    private lateinit var mapCard: com.radiacode.ble.ui.MapCardView
 
     // Isotope detection panel
     private lateinit var isotopePanel: LinearLayout
@@ -321,12 +327,14 @@ class MainActivity : AppCompatActivity() {
 
     private val requiredPermissions: Array<String>
         get() {
-            val perms = ArrayList<String>(3)
+            val perms = ArrayList<String>(5)
+            // Location permissions (always needed for map)
+            perms += Manifest.permission.ACCESS_FINE_LOCATION
+            perms += Manifest.permission.ACCESS_COARSE_LOCATION
+            
             if (Build.VERSION.SDK_INT >= 31) {
                 perms += Manifest.permission.BLUETOOTH_SCAN
                 perms += Manifest.permission.BLUETOOTH_CONNECT
-            } else {
-                perms += Manifest.permission.ACCESS_FINE_LOCATION
             }
             if (Build.VERSION.SDK_INT >= 33) {
                 perms += Manifest.permission.POST_NOTIFICATIONS
@@ -348,6 +356,7 @@ class MainActivity : AppCompatActivity() {
         setupLogsPanel()
         setupMetricCards()
         setupCharts()
+        setupMapCard(savedInstanceState)
         setupIsotopePanel()
         setupToolbarDeviceSelector()
 
@@ -398,6 +407,9 @@ class MainActivity : AppCompatActivity() {
         cpsChartReset = findViewById(R.id.cpsChartReset)
         cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
         cpsStats = findViewById(R.id.cpsStats)
+
+        // Live Map
+        mapCard = findViewById(R.id.mapCard)
 
         // Isotope detection panel
         isotopePanel = findViewById(R.id.isotopePanel)
@@ -775,6 +787,36 @@ class MainActivity : AppCompatActivity() {
                 cpsChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
             }
         })
+    }
+
+    private fun setupMapCard(savedInstanceState: Bundle?) {
+        // Initialize map
+        mapCard.onCreate(savedInstanceState)
+        
+        // Setup reset callback
+        mapCard.onResetClickListener = {
+            val selectedDeviceId = Prefs.getSelectedDeviceId(this)
+            if (selectedDeviceId != null) {
+                Prefs.clearMapReadings(this, selectedDeviceId)
+            }
+        }
+        
+        // Load existing map readings for selected device
+        val selectedDeviceId = Prefs.getSelectedDeviceId(this)
+        if (selectedDeviceId != null) {
+            val mapReadings = Prefs.getMapReadings(this, selectedDeviceId)
+            for (reading in mapReadings) {
+                mapCard.addReading(
+                    com.radiacode.ble.ui.MapCardView.MapReading(
+                        latitude = reading.latitude,
+                        longitude = reading.longitude,
+                        doseRate = reading.uSvPerHour,
+                        countRate = reading.cps,
+                        timestampMs = reading.timestampMs
+                    )
+                )
+            }
+        }
     }
 
     private fun setupIsotopePanel() {
@@ -1326,6 +1368,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        mapCard.onResume()
         registerReadingReceiver()
         reloadChartHistoryForSelectedDevice()
         startUiLoop()
@@ -1375,13 +1418,35 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        mapCard.onPause()
         unregisterReadingReceiver()
         stopUiLoop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        mapCard.onDestroy()
         stopUiLoop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mapCard.onStart()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapCard.onStop()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapCard.onLowMemory()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        mapCard.onSaveInstanceState(outState)
     }
 
     private fun hasAllPermissions(): Boolean {
@@ -1629,6 +1694,30 @@ class MainActivity : AppCompatActivity() {
                     doseHistory.add(last.timestampMs, last.uSvPerHour)
                     cpsHistory.add(last.timestampMs, last.cps)
                     sampleCount++
+                    
+                    // Add reading to map with GPS location
+                    if (selectedDeviceId != null) {
+                        mapCard.addReadingAtCurrentLocation(last.uSvPerHour, last.cps, last.timestampMs)
+                        
+                        // Store map reading with GPS to Prefs (for persistence)
+                        if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
+                            == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(this@MainActivity)
+                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                location?.let {
+                                    val mapReading = Prefs.MapReading(
+                                        latitude = it.latitude,
+                                        longitude = it.longitude,
+                                        uSvPerHour = last.uSvPerHour,
+                                        cps = last.cps,
+                                        timestampMs = last.timestampMs
+                                    )
+                                    Prefs.addMapReading(this@MainActivity, selectedDeviceId, mapReading)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {

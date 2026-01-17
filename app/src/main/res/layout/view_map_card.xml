@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mapCardContainer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/card_background"
+    android:padding="12dp">
+
+    <!-- Header with title, metric selector, and reset button -->
+    <LinearLayout
+        android:id="@+id/mapCardHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:id="@+id/mapCardTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="LIVE MAP"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/pro_text_primary"
+            android:letterSpacing="0.05" />
+
+        <Spinner
+            android:id="@+id/mapMetricSelector"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/chip_outline_background"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:spinnerMode="dropdown" />
+
+        <ImageButton
+            android:id="@+id/mapResetButton"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_reset_zoom"
+            android:contentDescription="Reset map"
+            android:tint="@color/pro_text_secondary" />
+    </LinearLayout>
+
+    <!-- Map content with legend -->
+    <LinearLayout
+        android:id="@+id/mapCardContent"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:orientation="horizontal">
+
+        <!-- Google Map -->
+        <com.google.android.gms.maps.MapView
+            android:id="@+id/mapView"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+
+        <!-- Legend bar on the right -->
+        <LinearLayout
+            android:id="@+id/mapLegendLayout"
+            android:layout_width="60dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="8dp"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <!-- Max value label -->
+            <TextView
+                android:id="@+id/mapLegendMax"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 μSv/h"
+                android:textSize="10sp"
+                android:textColor="@color/pro_text_secondary"
+                android:gravity="center" />
+
+            <!-- Color gradient bar -->
+            <View
+                android:id="@+id/mapLegendBar"
+                android:layout_width="20dp"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                android:background="@drawable/legend_gradient" />
+
+            <!-- Min value label -->
+            <TextView
+                android:id="@+id/mapLegendMin"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 μSv/h"
+                android:textSize="10sp"
+                android:textColor="@color/pro_text_secondary"
+                android:gravity="center" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
