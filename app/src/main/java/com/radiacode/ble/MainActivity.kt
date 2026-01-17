@@ -90,6 +90,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cpsChartReset: android.widget.ImageButton
     private lateinit var cpsChartGoRealtime: android.widget.ImageButton
     private lateinit var cpsStats: StatRowView
+    
+    // Live Map Card
+    private lateinit var mapCard: com.radiacode.ble.ui.MapCardView
 
     // Isotope detection panel
     private lateinit var isotopePanel: LinearLayout
@@ -321,11 +324,15 @@ class MainActivity : AppCompatActivity() {
 
     private val requiredPermissions: Array<String>
         get() {
-            val perms = ArrayList<String>(3)
+            val perms = ArrayList<String>(4)
             if (Build.VERSION.SDK_INT >= 31) {
                 perms += Manifest.permission.BLUETOOTH_SCAN
                 perms += Manifest.permission.BLUETOOTH_CONNECT
             } else {
+                perms += Manifest.permission.ACCESS_FINE_LOCATION
+            }
+            // Always request location for map feature
+            if (Build.VERSION.SDK_INT >= 31) {
                 perms += Manifest.permission.ACCESS_FINE_LOCATION
             }
             if (Build.VERSION.SDK_INT >= 33) {
@@ -348,6 +355,7 @@ class MainActivity : AppCompatActivity() {
         setupLogsPanel()
         setupMetricCards()
         setupCharts()
+        setupMapCard()
         setupIsotopePanel()
         setupToolbarDeviceSelector()
 
@@ -398,6 +406,9 @@ class MainActivity : AppCompatActivity() {
         cpsChartReset = findViewById(R.id.cpsChartReset)
         cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
         cpsStats = findViewById(R.id.cpsStats)
+        
+        // Map card
+        mapCard = findViewById(R.id.mapCard)
 
         // Isotope detection panel
         isotopePanel = findViewById(R.id.isotopePanel)
@@ -775,6 +786,16 @@ class MainActivity : AppCompatActivity() {
                 cpsChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
             }
         })
+    }
+    
+    private fun setupMapCard() {
+        // Load existing data points
+        mapCard.loadDataPoints()
+        
+        // Start location tracking if permission is granted
+        if (hasAllPermissions()) {
+            mapCard.startLocationTracking()
+        }
     }
 
     private fun setupIsotopePanel() {
@@ -1398,6 +1419,8 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE && hasAllPermissions()) {
             startServiceIfConfigured()
+            // Start location tracking for map
+            mapCard.startLocationTracking()
         } else {
             updateStatus(false, "Permissions")
         }
@@ -1629,6 +1652,9 @@ class MainActivity : AppCompatActivity() {
                     doseHistory.add(last.timestampMs, last.uSvPerHour)
                     cpsHistory.add(last.timestampMs, last.cps)
                     sampleCount++
+                    
+                    // Add reading to map
+                    mapCard.addReading(last.uSvPerHour, last.cps)
                 }
 
                 if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {

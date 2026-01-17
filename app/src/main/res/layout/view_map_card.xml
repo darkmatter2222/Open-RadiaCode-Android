@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/card_background"
+    android:padding="12dp">
+    
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+        
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="LIVE MAP"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1" />
+        
+        <!-- Metric Selector -->
+        <Spinner
+            android:id="@+id/metricSelector"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:minHeight="32dp"
+            android:spinnerMode="dropdown" />
+        
+        <!-- Reset Button -->
+        <ImageButton
+            android:id="@+id/resetButton"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_reset_zoom"
+            android:contentDescription="Reset map data"
+            android:scaleType="centerInside"
+            android:padding="4dp" />
+    </LinearLayout>
+    
+    <!-- Map View -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="240dp" />
+    
+    <!-- Scale Bar -->
+    <com.radiacode.ble.ui.MapCardView.ScaleBarView
+        android:id="@+id/scaleBar"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="8dp" />
+    
+</LinearLayout>

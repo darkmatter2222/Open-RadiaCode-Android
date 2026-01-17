@@ -48,6 +48,10 @@ object Prefs {
     private const val KEY_DEVICE_CHART_HISTORY_PREFIX = "device_chart_history_"
     private const val KEY_DEVICE_METADATA_PREFIX = "device_metadata_"
     private const val MAX_DEVICES = 8
+    
+    // Map tracking keys
+    private const val KEY_MAP_DATA_POINTS = "map_data_points"
+    private const val MAX_MAP_POINTS = 500  // Limit to prevent excessive memory use
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -1289,6 +1293,83 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, hide)
+            .apply()
+    }
+    
+    // ========== Map Data Points ==========
+    
+    /**
+     * A single map data point containing location and radiation reading.
+     */
+    data class MapDataPoint(
+        val latitude: Double,
+        val longitude: Double,
+        val uSvPerHour: Float,
+        val cps: Float,
+        val timestampMs: Long
+    )
+    
+    /**
+     * Add a new map data point. Automatically limits to MAX_MAP_POINTS.
+     */
+    fun addMapDataPoint(context: Context, latitude: Double, longitude: Double, uSvPerHour: Float, cps: Float) {
+        val points = getMapDataPoints(context).toMutableList()
+        points.add(MapDataPoint(latitude, longitude, uSvPerHour, cps, System.currentTimeMillis()))
+        
+        // Limit to MAX_MAP_POINTS by removing oldest
+        while (points.size > MAX_MAP_POINTS) {
+            points.removeAt(0)
+        }
+        
+        // Serialize to JSON
+        val json = points.joinToString(separator = "\n") { point ->
+            "${point.latitude},${point.longitude},${point.uSvPerHour},${point.cps},${point.timestampMs}"
+        }
+        
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_DATA_POINTS, json)
+            .apply()
+    }
+    
+    /**
+     * Get all map data points.
+     */
+    fun getMapDataPoints(context: Context): List<MapDataPoint> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_MAP_DATA_POINTS, "") ?: ""
+        
+        if (json.isEmpty()) return emptyList()
+        
+        return json.lines()
+            .filter { it.isNotEmpty() }
+            .mapNotNull { line ->
+                val parts = line.split(",")
+                if (parts.size == 5) {
+                    try {
+                        MapDataPoint(
+                            latitude = parts[0].toDouble(),
+                            longitude = parts[1].toDouble(),
+                            uSvPerHour = parts[2].toFloat(),
+                            cps = parts[3].toFloat(),
+                            timestampMs = parts[4].toLong()
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+    }
+    
+    /**
+     * Clear all map data points.
+     */
+    fun clearMapDataPoints(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_MAP_DATA_POINTS)
             .apply()
     }
 }

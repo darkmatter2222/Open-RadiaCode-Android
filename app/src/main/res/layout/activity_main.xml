@@ -645,6 +645,13 @@
                             android:layout_height="52dp"
                             android:layout_marginTop="8dp" />
                     </LinearLayout>
+                    
+                    <!-- Live Map Card -->
+                    <com.radiacode.ble.ui.MapCardView
+                        android:id="@+id/mapCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp" />
 
                     <!-- Isotope Detection Panel -->
                     <LinearLayout

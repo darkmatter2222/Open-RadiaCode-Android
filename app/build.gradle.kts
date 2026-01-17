@@ -11,8 +11,8 @@ android {
         applicationId = "com.radiacode.ble"
         minSdk = 26
         targetSdk = 34
-        versionCode = 29
-        versionName = "0.41"
+        versionCode = 30
+        versionName = "0.42"
     }
 
     buildTypes {
@@ -39,4 +39,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+    
+    // Map library for live location tracking
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
 }
