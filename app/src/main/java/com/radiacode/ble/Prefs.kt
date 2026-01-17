@@ -30,10 +30,6 @@ object Prefs {
 
     private const val KEY_DOSE_THRESHOLD_USV_H = "dose_threshold_usv_h"
     
-    // Dashboard layout keys
-    private const val KEY_DASHBOARD_LAYOUT_JSON = "dashboard_layout_json"
-    private const val KEY_DASHBOARD_EDIT_MODE = "dashboard_edit_mode"
-    
     // Notification Settings keys
     private const val KEY_NOTIFICATION_STYLE = "notification_style"
     private const val KEY_NOTIFICATION_SHOW_READINGS = "notification_show_readings"
@@ -1296,26 +1292,32 @@ object Prefs {
             .apply()
     }
     
-    // ==================== DASHBOARD LAYOUT ====================
+    // ==================== Dashboard Layout ====================
+    
+    private const val KEY_DASHBOARD_LAYOUT_JSON = "dashboard_layout_json"
     
     /**
-     * Get the user's customized dashboard layout.
-     * Returns null if no custom layout is set (use default).
+     * Get the dashboard layout configuration.
+     * Returns default layout if none saved.
      */
-    fun getDashboardLayout(context: Context): DashboardLayout {
-        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getString(KEY_DASHBOARD_LAYOUT_JSON, null)
+    fun getDashboardLayout(context: Context): com.radiacode.ble.dashboard.DashboardLayout {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_DASHBOARD_LAYOUT_JSON, null)
         return if (json != null) {
-            DashboardLayout.fromJson(json) ?: DashboardLayout.createDefault()
+            try {
+                com.radiacode.ble.dashboard.DashboardLayout.fromJson(json)
+            } catch (_: Exception) {
+                com.radiacode.ble.dashboard.DashboardLayout.createDefault()
+            }
         } else {
-            DashboardLayout.createDefault()
+            com.radiacode.ble.dashboard.DashboardLayout.createDefault()
         }
     }
     
     /**
-     * Save the user's customized dashboard layout.
+     * Save the dashboard layout configuration.
      */
-    fun setDashboardLayout(context: Context, layout: DashboardLayout) {
+    fun setDashboardLayout(context: Context, layout: com.radiacode.ble.dashboard.DashboardLayout) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_DASHBOARD_LAYOUT_JSON, layout.toJson())
@@ -1329,24 +1331,6 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_DASHBOARD_LAYOUT_JSON)
-            .apply()
-    }
-    
-    /**
-     * Get whether dashboard is in edit mode.
-     */
-    fun isDashboardEditMode(context: Context): Boolean {
-        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_DASHBOARD_EDIT_MODE, false)
-    }
-    
-    /**
-     * Set dashboard edit mode.
-     */
-    fun setDashboardEditMode(context: Context, editMode: Boolean) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_DASHBOARD_EDIT_MODE, editMode)
             .apply()
     }
 }

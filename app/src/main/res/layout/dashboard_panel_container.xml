@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dashboard Panel Container: Wraps any panel content with drag handle and resize handles -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/panelContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/card_background"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- Panel Content (injected programmatically) -->
+    <FrameLayout
+        android:id="@+id/panelContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Drag Handle (edit mode only) -->
+    <ImageView
+        android:id="@+id/dragHandle"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:src="@drawable/ic_drag_handle"
+        android:contentDescription="Drag to reposition"
+        android:alpha="0.7"
+        android:visibility="gone"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="4dp" />
+
+    <!-- Resize Handles (edit mode only) -->
+    
+    <!-- Bottom-right corner resize -->
+    <View
+        android:id="@+id/resizeHandleCorner"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="bottom|end"
+        android:background="@drawable/resize_handle_corner"
+        android:visibility="gone" />
+
+    <!-- Right edge resize (horizontal) -->
+    <View
+        android:id="@+id/resizeHandleRight"
+        android:layout_width="12dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center_vertical|end"
+        android:background="@drawable/resize_handle_edge"
+        android:visibility="gone" />
+
+    <!-- Bottom edge resize (vertical) -->
+    <View
+        android:id="@+id/resizeHandleBottom"
+        android:layout_width="48dp"
+        android:layout_height="12dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:background="@drawable/resize_handle_edge"
+        android:visibility="gone" />
+
+</FrameLayout>

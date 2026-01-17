@@ -35,7 +35,10 @@ import com.radiacode.ble.ui.StatRowView
 import com.radiacode.ble.ui.IsotopeChartView
 import com.radiacode.ble.ui.StackedAreaChartView
 import com.radiacode.ble.ui.IsotopeBarChartView
-import com.radiacode.ble.ui.GridDashboardManager
+import com.radiacode.ble.dashboard.DashboardGridLayout
+import com.radiacode.ble.dashboard.DashboardLayout
+import com.radiacode.ble.dashboard.PanelType
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -70,9 +73,6 @@ class MainActivity : AppCompatActivity() {
     // Dashboard - Device Selector
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
-
-    // Dashboard - Drag-and-drop manager
-    private lateinit var gridDashboardManager: GridDashboardManager
 
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
@@ -204,9 +204,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionAdvancedContent: View
     private lateinit var sectionAdvancedArrow: android.widget.ImageView
     
+    // Dashboard settings section
+    private lateinit var sectionDashboardHeader: View
+    private lateinit var sectionDashboardContent: View
+    private lateinit var sectionDashboardArrow: android.widget.ImageView
+    private lateinit var rowEditDashboard: View
+    private lateinit var rowResetDashboard: View
+    
     // Application settings rows
     private lateinit var rowNotificationSettings: View
-    private lateinit var rowResetDashboard: View
+    
+    // Dashboard edit mode
+    private lateinit var fabEditDashboard: FloatingActionButton
+    private lateinit var editModeToolbar: LinearLayout
+    private lateinit var btnResetDashboard: MaterialButton
+    private lateinit var btnDoneEditing: MaterialButton
+    private var isDashboardEditMode: Boolean = false
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -355,7 +368,7 @@ class MainActivity : AppCompatActivity() {
         setupCharts()
         setupIsotopePanel()
         setupToolbarDeviceSelector()
-        applyDashboardLayout()
+        setupDashboardEditMode()
 
         refreshSettingsRows()
         updateChartTitles()
@@ -503,9 +516,21 @@ class MainActivity : AppCompatActivity() {
         sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
         sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
         
+        // Dashboard settings section
+        sectionDashboardHeader = findViewById(R.id.sectionDashboardHeader)
+        sectionDashboardContent = findViewById(R.id.sectionDashboardContent)
+        sectionDashboardArrow = findViewById(R.id.sectionDashboardArrow)
+        rowEditDashboard = findViewById(R.id.rowEditDashboard)
+        rowResetDashboard = findViewById(R.id.rowResetDashboard)
+        
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
-        rowResetDashboard = findViewById(R.id.rowResetDashboard)
+        
+        // Dashboard edit mode
+        fabEditDashboard = findViewById(R.id.fabEditDashboard)
+        editModeToolbar = findViewById(R.id.editModeToolbar)
+        btnResetDashboard = findViewById(R.id.btnResetDashboard)
+        btnDoneEditing = findViewById(R.id.btnDoneEditing)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -574,6 +599,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupSettingsPanel() {
         // Setup expandable sections
         setupExpandableSection(sectionAppHeader, sectionAppContent, sectionAppArrow, expanded = true)
+        setupExpandableSection(sectionDashboardHeader, sectionDashboardContent, sectionDashboardArrow, expanded = true)
         setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
         setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
@@ -583,23 +609,15 @@ class MainActivity : AppCompatActivity() {
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
         }
-
+        
+        // Dashboard settings
+        rowEditDashboard.setOnClickListener {
+            setPanel(Panel.Dashboard)
+            mainHandler.postDelayed({ enterDashboardEditMode() }, 300)
+        }
+        
         rowResetDashboard.setOnClickListener {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Reset dashboard")
-                .setMessage("Reset dashboard to the default layout? This cannot be undone.")
-                .setPositiveButton("Reset") { _, _ ->
-                    // Exit edit mode defensively so we don't persist the broken layout on the way out.
-                    if (::gridDashboardManager.isInitialized && gridDashboardManager.isEditMode) {
-                        gridDashboardManager.exitEditMode()
-                    }
-                    Prefs.resetDashboardLayout(this)
-                    Prefs.setDashboardEditMode(this, false)
-                    applyDashboardLayout()
-                    android.widget.Toast.makeText(this, "Dashboard reset", android.widget.Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+            showResetDashboardConfirmation()
         }
         
         rowWindow.setOnClickListener {
@@ -878,147 +896,6 @@ class MainActivity : AppCompatActivity() {
         }
         
         updateIsotopePanelState()
-    }
-
-    /**
-     * Applies the saved dashboard layout order and initializes the drag-and-drop manager.
-     * Call this after all dashboard views are bound.
-     */
-    private fun applyDashboardLayout() {
-        val layout = Prefs.getDashboardLayout(this)
-        val parent = panelDashboard as? LinearLayout ?: return
-        
-        // Get scroll view reference
-        val contentScroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.contentScroll)
-        
-        // Initialize the grid dashboard manager
-        gridDashboardManager = GridDashboardManager(
-            context = this,
-            dashboardContainer = parent,
-            scrollView = contentScroll,
-            deviceSelectorId = R.id.deviceSelector,
-            onLayoutChanged = { 
-                android.util.Log.d("RadiaCode", "Dashboard layout changed via drag")
-            },
-            onEditModeChanged = { isEditMode ->
-                onDashboardEditModeChanged(isEditMode)
-            }
-        )
-        
-        // Register individual cards with the manager
-        gridDashboardManager.registerCard(DashboardCardType.DOSE_CARD.id, doseCard)
-        gridDashboardManager.registerCard(DashboardCardType.CPS_CARD.id, cpsCard)
-        gridDashboardManager.registerCard(DashboardCardType.INTELLIGENCE.id, intelligenceCard)
-        gridDashboardManager.registerCard(DashboardCardType.DOSE_CHART.id, doseChartPanel)
-        gridDashboardManager.registerCard(DashboardCardType.CPS_CHART.id, cpsChartPanel)
-        gridDashboardManager.registerCard(DashboardCardType.ISOTOPE.id, isotopePanel)
-        
-        // Apply the layout
-        gridDashboardManager.applyLayout(layout)
-        
-        // Setup long-press to enter edit mode
-        setupDashboardEditMode()
-        
-        android.util.Log.d("RadiaCode", "Dashboard layout applied: ${layout.items.map { it.id }}")
-    }
-    
-    /**
-     * Setup long-press gesture to enter dashboard edit mode.
-     */
-    private fun setupDashboardEditMode() {
-        // Long press on any dashboard card enters edit mode
-        val cards = listOf(doseCard as View, cpsCard as View, intelligenceCard, doseChartPanel, cpsChartPanel, isotopePanel)
-        
-        for (card in cards) {
-            card.setOnLongClickListener { 
-                if (!gridDashboardManager.isEditMode) {
-                    gridDashboardManager.enterEditMode()
-                }
-                true
-            }
-        }
-    }
-    
-    /**
-     * Called when dashboard edit mode changes.
-     */
-    private fun onDashboardEditModeChanged(isEditMode: Boolean) {
-        if (isEditMode) {
-            showEditModeOverlay()
-        } else {
-            hideEditModeOverlay()
-        }
-    }
-    
-    private var editModeOverlay: android.widget.FrameLayout? = null
-    
-    private fun showEditModeOverlay() {
-        val rootView = findViewById<android.widget.FrameLayout>(android.R.id.content)
-        
-        val density = resources.displayMetrics.density
-        
-        editModeOverlay = android.widget.FrameLayout(this).apply {
-            layoutParams = android.widget.FrameLayout.LayoutParams(
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-            )
-            
-            // Header showing "Edit Mode"
-            val header = android.widget.TextView(context).apply {
-                text = "✏️ EDIT MODE - Drag cards to reorder"
-                setTextColor(resources.getColor(R.color.pro_cyan, null))
-                textSize = 14f
-                setPadding((16 * density).toInt(), (12 * density).toInt(), (16 * density).toInt(), (12 * density).toInt())
-                setBackgroundColor(resources.getColor(R.color.pro_surface, null))
-                gravity = android.view.Gravity.CENTER
-                layoutParams = android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    gravity = android.view.Gravity.TOP
-                }
-            }
-            addView(header)
-            
-            // Done button at bottom
-            val doneButton = android.widget.Button(context).apply {
-                text = "DONE"
-                setTextColor(resources.getColor(R.color.pro_background, null))
-                textSize = 16f
-                isAllCaps = true
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    cornerRadius = 24 * density
-                    setColor(resources.getColor(R.color.pro_cyan, null))
-                }
-                setPadding((48 * density).toInt(), (16 * density).toInt(), (48 * density).toInt(), (16 * density).toInt())
-                layoutParams = android.widget.FrameLayout.LayoutParams(
-                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (32 * density).toInt()
-                }
-                setOnClickListener {
-                    gridDashboardManager.exitEditMode()
-                }
-            }
-            addView(doneButton)
-            
-            isClickable = false
-            isFocusable = false
-        }
-        
-        rootView.addView(editModeOverlay)
-    }
-    
-    private fun hideEditModeOverlay() {
-        editModeOverlay?.let {
-            val rootView = findViewById<android.widget.FrameLayout>(android.R.id.content)
-            rootView.removeView(it)
-            editModeOverlay = null
-        }
     }
     
     private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
@@ -1571,16 +1448,10 @@ class MainActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        when {
-            drawerLayout.isDrawerOpen(GravityCompat.START) -> {
-                drawerLayout.closeDrawer(GravityCompat.START)
-            }
-            ::gridDashboardManager.isInitialized && gridDashboardManager.isEditMode -> {
-                gridDashboardManager.exitEditMode()
-            }
-            else -> {
-                super.onBackPressed()
-            }
+        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        } else {
+            super.onBackPressed()
         }
     }
 
@@ -2454,5 +2325,82 @@ class MainActivity : AppCompatActivity() {
         val devices = Prefs.getDevices(this)
         val statesMap = buildDeviceStatesMap(devices)
         deviceSelector.updateStates(statesMap)
+    }
+    
+    // ==================== DASHBOARD EDIT MODE ====================
+    
+    private fun setupDashboardEditMode() {
+        // FAB to enter edit mode
+        fabEditDashboard.setOnClickListener {
+            enterDashboardEditMode()
+        }
+        
+        // Done button exits edit mode
+        btnDoneEditing.setOnClickListener {
+            exitDashboardEditMode()
+        }
+        
+        // Reset button in toolbar
+        btnResetDashboard.setOnClickListener {
+            showResetDashboardConfirmation()
+        }
+    }
+    
+    private fun enterDashboardEditMode() {
+        isDashboardEditMode = true
+        
+        // Hide FAB, show toolbar
+        fabEditDashboard.visibility = View.GONE
+        editModeToolbar.visibility = View.VISIBLE
+        
+        // Enable edit mode on dashboard panels (when grid is integrated)
+        // TODO: Enable DashboardGridLayout.isEditMode = true
+        
+        // Show toast with instructions
+        android.widget.Toast.makeText(
+            this, 
+            "Long-press and drag to reposition panels", 
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+    
+    private fun exitDashboardEditMode() {
+        isDashboardEditMode = false
+        
+        // Show FAB, hide toolbar
+        fabEditDashboard.visibility = View.VISIBLE
+        editModeToolbar.visibility = View.GONE
+        
+        // Save layout changes (when grid is integrated)
+        // TODO: Save via Prefs.setDashboardLayout()
+    }
+    
+    private fun showResetDashboardConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Reset Dashboard Layout")
+            .setMessage("This will restore the default panel arrangement. Your data will not be affected.")
+            .setPositiveButton("Reset") { _, _ ->
+                resetDashboardLayout()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun resetDashboardLayout() {
+        Prefs.resetDashboardLayout(this)
+        
+        // Reset grid (when integrated)
+        // TODO: dashboardGrid.resetToDefault()
+        
+        android.widget.Toast.makeText(
+            this,
+            "Dashboard layout reset to default",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+        
+        // Exit edit mode if active
+        if (isDashboardEditMode) {
+            exitDashboardEditMode()
+        }
     }
 }
