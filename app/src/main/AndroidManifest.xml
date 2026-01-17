@@ -62,6 +62,13 @@
             android:label="Detailed Analysis" />
 
         <activity
+            android:name=".FullscreenMapActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.RadiaCode.Fullscreen"
+            android:label="Radiation Map" />
+
+        <activity
             android:name=".AlertConfigActivity"
             android:exported="false"
             android:label="Smart Alerts" />

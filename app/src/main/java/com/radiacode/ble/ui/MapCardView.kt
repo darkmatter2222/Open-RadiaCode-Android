@@ -15,16 +15,19 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import com.radiacode.ble.FullscreenMapActivity
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
+import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.TilesOverlay
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.*
@@ -49,13 +52,13 @@ class MapCardView @JvmOverloads constructor(
     // UI Components
     private lateinit var mapView: MapView
     private lateinit var metricSelector: Spinner
-    private lateinit var resetButton: ImageButton
     private lateinit var centerButton: ImageButton
     private lateinit var scaleBarView: ScaleBarView
     
     // Overlays
     private var hexagonOverlay: HexagonOverlay? = null
     private var positionOverlay: PositionOverlay? = null
+    private var homeLabelsOverlay: TilesOverlay? = null
     
     // Location
     private var locationManager: LocationManager? = null
@@ -93,13 +96,16 @@ class MapCardView @JvmOverloads constructor(
      */
     private fun createTileSource(theme: Prefs.MapTheme): XYTileSource {
         return when (theme) {
-            // Home theme uses Dark Matter as base, with color filter applied separately
+            // Home theme uses Dark Matter - already has correct gray background
+            // Color filter makes roads/labels pop green
             Prefs.MapTheme.HOME -> XYTileSource(
-                "CartoDB_DarkMatter", 0, 19, 256, ".png",
+                // Home base layer: Dark Matter without labels.
+                // Labels are drawn via a separate overlay (dark_only_labels).
+                "CartoDB_DarkMatter_NoLabels_Home", 0, 20, 256, ".png",
                 arrayOf(
-                    "https://a.basemaps.cartocdn.com/dark_all/",
-                    "https://b.basemaps.cartocdn.com/dark_all/",
-                    "https://c.basemaps.cartocdn.com/dark_all/"
+                    "https://a.basemaps.cartocdn.com/dark_nolabels/",
+                    "https://b.basemaps.cartocdn.com/dark_nolabels/",
+                    "https://c.basemaps.cartocdn.com/dark_nolabels/"
                 )
             )
             Prefs.MapTheme.DARK_MATTER -> XYTileSource(
@@ -150,6 +156,17 @@ class MapCardView @JvmOverloads constructor(
             )
         }
     }
+
+    private fun createHomeLabelsTileSource(): XYTileSource {
+        return XYTileSource(
+            "CartoDB_DarkMatter_OnlyLabels_Home", 0, 20, 256, ".png",
+            arrayOf(
+                "https://a.basemaps.cartocdn.com/dark_only_labels/",
+                "https://b.basemaps.cartocdn.com/dark_only_labels/",
+                "https://c.basemaps.cartocdn.com/dark_only_labels/"
+            )
+        )
+    }
     
     init {
         orientation = VERTICAL
@@ -163,14 +180,13 @@ class MapCardView @JvmOverloads constructor(
         setupViews()
         setupMap()
         setupMetricSelector()
-        setupResetButton()
         setupCenterButton()
+        setupHeaderClick()
     }
     
     private fun setupViews() {
         mapView = findViewById(R.id.mapView)
         metricSelector = findViewById(R.id.metricSelector)
-        resetButton = findViewById(R.id.resetButton)
         centerButton = findViewById(R.id.centerButton)
         
         // Create and add scale bar programmatically
@@ -185,6 +201,11 @@ class MapCardView @JvmOverloads constructor(
         mapView.setTileSource(createTileSource(theme))
         mapView.setMultiTouchControls(true)
         mapView.controller.setZoom(17.0)  // Closer zoom to see hexagons better
+
+        // Home theme is composed from two raster layers:
+        // - base: dark_nolabels (roads/features)
+        // - labels: dark_only_labels (text with baked-in halo)
+        updateHomeLabelsOverlay(theme)
         
         // Prevent parent ScrollView from intercepting touch events
         mapView.setOnTouchListener { v, event ->
@@ -218,6 +239,24 @@ class MapCardView @JvmOverloads constructor(
         positionOverlay = PositionOverlay()
         mapView.overlays.add(positionOverlay)
     }
+
+    private fun updateHomeLabelsOverlay(theme: Prefs.MapTheme) {
+        homeLabelsOverlay?.let { existing ->
+            mapView.overlays.remove(existing)
+        }
+        homeLabelsOverlay = null
+
+        if (theme != Prefs.MapTheme.HOME) return
+
+        val provider = MapTileProviderBasic(context, createHomeLabelsTileSource())
+        val overlay = TilesOverlay(provider, context)
+        overlay.loadingBackgroundColor = Color.TRANSPARENT
+        overlay.loadingLineColor = Color.TRANSPARENT
+
+        // Insert below our data overlays (hexagons/marker), above base tiles.
+        mapView.overlays.add(0, overlay)
+        homeLabelsOverlay = overlay
+    }
     
     /**
      * Setup the center-on-location button.
@@ -233,26 +272,37 @@ class MapCardView @JvmOverloads constructor(
     }
     
     /**
-     * Apply a color filter to match the app's Home theme.
-     * Creates a custom look matching the card background (#1A1A1E).
+     * Apply a color filter to match the app's cyberpunk theme.
+     * Home theme uses a two-overlay approach:
+     * - Base layer (dark_nolabels): muted green roads/linework
+     * - Labels layer (dark_only_labels): brighter fluorescent green text with baked-in halo
      */
     private fun applyThemeColorFilter(theme: Prefs.MapTheme) {
-        val tilesOverlay = mapView.overlayManager.tilesOverlay
+        val baseTilesOverlay = mapView.overlayManager.tilesOverlay
         
         if (theme == Prefs.MapTheme.HOME) {
-            // Custom color matrix to match app's card background (#1A1A1E)
-            // The card background RGB is approximately (26, 26, 30)
-            // We want to lighten the dark map tiles to match this grayish tone
-            val colorMatrix = ColorMatrix(floatArrayOf(
-                1.10f, 0.00f, 0.00f, 0f, 20f,   // Red: boost slightly
-                0.00f, 1.10f, 0.00f, 0f, 20f,   // Green: boost slightly  
-                0.00f, 0.05f, 1.15f, 0f, 25f,   // Blue: boost more for slight cool tint
-                0.00f, 0.00f, 0.00f, 1f,  0f    // Alpha: unchanged
+            // Base layer: boost green based on brightness and slightly reduce opacity
+            // so the MapView background (@color/pro_surface) participates in the final perceived gray.
+            val baseMatrix = ColorMatrix(floatArrayOf(
+                1.0f,  0.0f, 0.0f, 0f,    0f,   // R: keep
+                0.2f,  1.6f, 0.2f, 0f,   -7f,   // G: boost, keep darks subdued
+                0.0f,  0.0f, 1.0f, 0f,    0f,   // B: keep
+                0.0f,  0.0f, 0.0f, 0.85f, 0f    // A: blend toward MapView background
             ))
-            tilesOverlay.setColorFilter(ColorMatrixColorFilter(colorMatrix))
+            baseTilesOverlay.setColorFilter(ColorMatrixColorFilter(baseMatrix))
+
+            // Labels layer: stronger fluorescent green; keep halo/outline dark (no offsets).
+            val labelsMatrix = ColorMatrix(floatArrayOf(
+                0.15f, 0.0f,  0.0f, 0f, 0f,
+                0.0f,  2.4f,  0.0f, 0f, 0f,
+                0.0f,  0.0f,  0.15f,0f, 0f,
+                0.0f,  0.0f,  0.0f, 1f, 0f
+            ))
+            homeLabelsOverlay?.setColorFilter(ColorMatrixColorFilter(labelsMatrix))
         } else {
             // Clear any color filter for other themes
-            tilesOverlay.setColorFilter(null)
+            baseTilesOverlay.setColorFilter(null)
+            homeLabelsOverlay?.setColorFilter(null)
         }
     }
     
@@ -261,8 +311,18 @@ class MapCardView @JvmOverloads constructor(
      */
     fun setMapTheme(theme: Prefs.MapTheme) {
         mapView.setTileSource(createTileSource(theme))
+        updateHomeLabelsOverlay(theme)
         applyThemeColorFilter(theme)
         mapView.invalidate()
+    }
+    
+    /**
+     * Setup header click to launch fullscreen map.
+     */
+    private fun setupHeaderClick() {
+        findViewById<View>(R.id.headerRow).setOnClickListener {
+            FullscreenMapActivity.launch(context)
+        }
     }
     
     private fun setupMetricSelector() {
@@ -282,12 +342,6 @@ class MapCardView @JvmOverloads constructor(
             }
             
             override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-    }
-    
-    private fun setupResetButton() {
-        resetButton.setOnClickListener {
-            clearMapData()
         }
     }
     

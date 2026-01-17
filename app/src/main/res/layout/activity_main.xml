@@ -1195,65 +1195,6 @@
                                     app:tint="@color/pro_text_muted" />
                             </LinearLayout>
 
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="1dp"
-                                android:layout_marginStart="16dp"
-                                android:layout_marginEnd="16dp"
-                                android:background="@color/pro_border"
-                                android:alpha="0.5" />
-
-                            <!-- Map Theme -->
-                            <LinearLayout
-                                android:id="@+id/rowMapTheme"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:background="?attr/selectableItemBackground"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal"
-                                android:padding="16dp">
-
-                                <LinearLayout
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:orientation="vertical">
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:text="Map Theme"
-                                        android:textColor="@color/pro_text_primary"
-                                        android:textSize="15sp" />
-
-                                    <TextView
-                                        android:layout_width="wrap_content"
-                                        android:layout_height="wrap_content"
-                                        android:layout_marginTop="2dp"
-                                        android:text="Choose tile style for radiation map"
-                                        android:textColor="@color/pro_text_muted"
-                                        android:textSize="12sp" />
-                                </LinearLayout>
-
-                                <TextView
-                                    android:id="@+id/valueMapTheme"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="Dark Matter"
-                                    android:textColor="@color/pro_text_muted"
-                                    android:textSize="14sp"
-                                    android:fontFamily="monospace" />
-
-                                <ImageView
-                                    android:layout_width="20dp"
-                                    android:layout_height="20dp"
-                                    android:layout_marginStart="8dp"
-                                    android:src="@android:drawable/ic_menu_more"
-                                    app:tint="@color/pro_text_muted" />
-                            </LinearLayout>
-
                         </LinearLayout>
                     </LinearLayout>
 
@@ -1539,6 +1480,163 @@
                                     android:textColor="@color/pro_cyan"
                                     android:textSize="15sp"
                                     android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== MAP SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Map -->
+                        <LinearLayout
+                            android:id="@+id/sectionMapHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="MAP SETTINGS"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionMapArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionMapContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Map Theme -->
+                            <LinearLayout
+                                android:id="@+id/rowMapTheme"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Map Theme"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Choose tile style for radiation map"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueMapTheme"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Dark Matter"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Clear Map Data -->
+                            <LinearLayout
+                                android:id="@+id/rowClearMapData"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Clear Map Data"
+                                        android:textColor="@color/pro_red"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Delete all hexagon readings from the map"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_delete"
+                                    app:tint="@color/pro_red" />
                             </LinearLayout>
 
                         </LinearLayout>

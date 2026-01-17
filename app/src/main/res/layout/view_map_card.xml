@@ -8,11 +8,24 @@
     
     <!-- Header Row -->
     <LinearLayout
+        android:id="@+id/headerRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="8dp"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true">
+        
+        <!-- Expand Icon -->
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="6dp"
+            android:src="@android:drawable/ic_menu_crop"
+            android:tint="@color/pro_cyan"
+            android:contentDescription="Expand to fullscreen" />
         
         <TextView
             android:layout_width="0dp"
@@ -33,23 +46,11 @@
             android:minHeight="32dp"
             android:spinnerMode="dropdown" />
         
-        <!-- Reset Button -->
-        <ImageButton
-            android:id="@+id/resetButton"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_reset_zoom"
-            android:contentDescription="Reset map data"
-            android:scaleType="centerInside"
-            android:padding="4dp" />
-        
         <!-- Center on Location Button -->
         <ImageButton
             android:id="@+id/centerButton"
             android:layout_width="28dp"
             android:layout_height="28dp"
-            android:layout_marginStart="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_mylocation"
             android:contentDescription="Center on current location"
@@ -61,7 +62,8 @@
     <org.osmdroid.views.MapView
         android:id="@+id/mapView"
         android:layout_width="match_parent"
-        android:layout_height="240dp" />
+        android:layout_height="240dp"
+        android:background="@color/pro_surface" />
     
     <!-- Scale Bar (we'll draw this programmatically in the MapCardView) -->
     <FrameLayout
