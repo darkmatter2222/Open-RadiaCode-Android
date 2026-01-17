@@ -6,7 +6,8 @@
     <!-- Legacy (Android 11 and below) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- Android 12+ -->
     <uses-permission
@@ -28,6 +29,11 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.RadiaCode">
+
+        <!-- Google Maps API Key - Uses default unrestricted key for development -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDUm7nN1Z8fM6fV3z4z9gR8q9aZ2V8E2Zo" />
 
         <activity
             android:name=".MainActivity"

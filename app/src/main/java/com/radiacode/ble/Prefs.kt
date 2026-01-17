@@ -1291,4 +1291,77 @@ object Prefs {
             .putBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, hide)
             .apply()
     }
+    
+    // ===== Map Readings with GPS =====
+    
+    private const val KEY_MAP_READINGS_PREFIX = "map_readings_"
+    private const val MAX_MAP_READINGS = 1000
+    
+    /**
+     * Reading with GPS coordinates for map display.
+     */
+    data class MapReading(
+        val latitude: Double,
+        val longitude: Double,
+        val uSvPerHour: Float,
+        val cps: Float,
+        val timestampMs: Long
+    )
+    
+    /**
+     * Add a map reading with GPS coordinates for a specific device.
+     */
+    fun addMapReading(context: Context, deviceId: String, reading: MapReading) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val key = KEY_MAP_READINGS_PREFIX + deviceId
+        val existing = prefs.getString(key, "") ?: ""
+        
+        val newEntry = "${reading.timestampMs},${reading.latitude},${reading.longitude},${reading.uSvPerHour},${reading.cps}"
+        
+        val entries = existing.split(";").filter { it.isNotBlank() }.toMutableList()
+        entries.add(newEntry)
+        while (entries.size > MAX_MAP_READINGS) {
+            entries.removeAt(0)
+        }
+        
+        prefs.edit()
+            .putString(key, entries.joinToString(";"))
+            .apply()
+    }
+    
+    /**
+     * Get map readings for a specific device.
+     */
+    fun getMapReadings(context: Context, deviceId: String): List<MapReading> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_MAP_READINGS_PREFIX + deviceId, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        
+        return raw.split(";")
+            .filter { it.isNotBlank() }
+            .mapNotNull { entry ->
+                val parts = entry.split(",")
+                if (parts.size == 5) {
+                    try {
+                        MapReading(
+                            timestampMs = parts[0].toLong(),
+                            latitude = parts[1].toDouble(),
+                            longitude = parts[2].toDouble(),
+                            uSvPerHour = parts[3].toFloat(),
+                            cps = parts[4].toFloat()
+                        )
+                    } catch (_: Exception) { null }
+                } else null
+            }
+    }
+    
+    /**
+     * Clear map readings for a specific device.
+     */
+    fun clearMapReadings(context: Context, deviceId: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_MAP_READINGS_PREFIX + deviceId)
+            .apply()
+    }
 }
