@@ -79,7 +79,11 @@ class MapCardView @JvmOverloads constructor(
         mapView = findViewById(R.id.mapView)
         metricSelector = findViewById(R.id.metricSelector)
         resetButton = findViewById(R.id.resetButton)
-        scaleBarView = findViewById(R.id.scaleBar)
+        
+        // Create and add scale bar programmatically
+        val scaleBarContainer = findViewById<FrameLayout>(R.id.scaleBarContainer)
+        scaleBarView = ScaleBarView(context)
+        scaleBarContainer.addView(scaleBarView)
     }
     
     private fun setupMap() {

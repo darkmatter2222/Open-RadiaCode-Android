@@ -51,9 +51,9 @@
         android:layout_width="match_parent"
         android:layout_height="240dp" />
     
-    <!-- Scale Bar -->
-    <com.radiacode.ble.ui.MapCardView.ScaleBarView
-        android:id="@+id/scaleBar"
+    <!-- Scale Bar (we'll draw this programmatically in the MapCardView) -->
+    <FrameLayout
+        android:id="@+id/scaleBarContainer"
         android:layout_width="match_parent"
         android:layout_height="40dp"
         android:layout_marginTop="8dp" />
