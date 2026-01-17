@@ -88,27 +88,19 @@
                         android:layout_marginBottom="12dp"
                         android:visibility="gone" />
 
-                    <!-- Metric Cards Row -->
-                    <LinearLayout
-                        android:id="@+id/metricCardsRow"
+                    <!-- Metric Cards - managed dynamically by GridDashboardManager -->
+                    <!-- These cards start here but will be moved into grid rows -->
+                    <com.radiacode.ble.ui.MetricCardView
+                        android:id="@+id/doseCard"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:layout_height="160dp"
+                        android:visibility="gone" />
 
-                        <com.radiacode.ble.ui.MetricCardView
-                            android:id="@+id/doseCard"
-                            android:layout_width="0dp"
-                            android:layout_height="160dp"
-                            android:layout_weight="1"
-                            android:layout_marginEnd="6dp" />
-
-                        <com.radiacode.ble.ui.MetricCardView
-                            android:id="@+id/cpsCard"
-                            android:layout_width="0dp"
-                            android:layout_height="160dp"
-                            android:layout_weight="1"
-                            android:layout_marginStart="6dp" />
-                    </LinearLayout>
+                    <com.radiacode.ble.ui.MetricCardView
+                        android:id="@+id/cpsCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="160dp"
+                        android:visibility="gone" />
 
                     <!-- Intelligence Report Card -->
                     <LinearLayout

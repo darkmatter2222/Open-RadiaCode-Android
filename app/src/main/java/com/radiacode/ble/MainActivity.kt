@@ -35,7 +35,7 @@ import com.radiacode.ble.ui.StatRowView
 import com.radiacode.ble.ui.IsotopeChartView
 import com.radiacode.ble.ui.StackedAreaChartView
 import com.radiacode.ble.ui.IsotopeBarChartView
-import com.radiacode.ble.ui.DraggableDashboardManager
+import com.radiacode.ble.ui.GridDashboardManager
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -72,10 +72,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var allDevicesOverlay: View
 
     // Dashboard - Drag-and-drop manager
-    private lateinit var draggableDashboardManager: DraggableDashboardManager
-
-    // Dashboard - Metric cards row (for reordering)
-    private lateinit var metricCardsRow: LinearLayout
+    private lateinit var gridDashboardManager: GridDashboardManager
 
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
@@ -388,9 +385,6 @@ class MainActivity : AppCompatActivity() {
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
-
-        // Metric cards row (for dashboard reordering)
-        metricCardsRow = findViewById(R.id.metricCardsRow)
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -874,61 +868,33 @@ class MainActivity : AppCompatActivity() {
         val layout = Prefs.getDashboardLayout(this)
         val parent = panelDashboard as? LinearLayout ?: return
         
-        // Map card types to their views
-        val viewMap = mapOf(
-            DashboardCardType.DOSE_CARD.id to metricCardsRow,
-            DashboardCardType.CPS_CARD.id to null, // Part of metricCardsRow
-            DashboardCardType.INTELLIGENCE.id to intelligenceCard,
-            DashboardCardType.DOSE_CHART.id to doseChartPanel,
-            DashboardCardType.CPS_CHART.id to cpsChartPanel,
-            DashboardCardType.ISOTOPE.id to isotopePanel
-        )
+        // Get scroll view reference
+        val contentScroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.contentScroll)
         
-        // Get the first index after deviceSelector (index 0)
-        val startIndex = 1
-        
-        // Deduplicate and track order
-        val orderedViews = layout.items.mapNotNull { item ->
-            when (item.id) {
-                DashboardCardType.DOSE_CARD.id -> metricCardsRow
-                DashboardCardType.CPS_CARD.id -> null // Handled by DOSE_CARD
-                DashboardCardType.INTELLIGENCE.id -> intelligenceCard
-                DashboardCardType.DOSE_CHART.id -> doseChartPanel
-                DashboardCardType.CPS_CHART.id -> cpsChartPanel
-                DashboardCardType.ISOTOPE.id -> isotopePanel
-                else -> null
-            }
-        }.distinct()
-        
-        // Remove views from parent (except deviceSelector at index 0)
-        orderedViews.forEach { view ->
-            parent.removeView(view)
-        }
-        
-        // Re-add views in the order specified
-        var insertIndex = startIndex
-        for (view in orderedViews) {
-            parent.addView(view, insertIndex)
-            insertIndex++
-        }
-        
-        // Initialize the drag-and-drop manager
-        draggableDashboardManager = DraggableDashboardManager(
+        // Initialize the grid dashboard manager
+        gridDashboardManager = GridDashboardManager(
             context = this,
-            dashboardPanel = parent,
+            dashboardContainer = parent,
+            scrollView = contentScroll,
+            deviceSelectorId = R.id.deviceSelector,
             onLayoutChanged = { 
                 android.util.Log.d("RadiaCode", "Dashboard layout changed via drag")
+            },
+            onEditModeChanged = { isEditMode ->
+                onDashboardEditModeChanged(isEditMode)
             }
         )
         
-        // Register cards with the manager
-        draggableDashboardManager.registerCards(
-            metricCardsRow = metricCardsRow,
-            intelligenceCard = intelligenceCard as View,
-            doseChartPanel = doseChartPanel,
-            cpsChartPanel = cpsChartPanel,
-            isotopePanel = isotopePanel
-        )
+        // Register individual cards with the manager
+        gridDashboardManager.registerCard(DashboardCardType.DOSE_CARD.id, doseCard)
+        gridDashboardManager.registerCard(DashboardCardType.CPS_CARD.id, cpsCard)
+        gridDashboardManager.registerCard(DashboardCardType.INTELLIGENCE.id, intelligenceCard)
+        gridDashboardManager.registerCard(DashboardCardType.DOSE_CHART.id, doseChartPanel)
+        gridDashboardManager.registerCard(DashboardCardType.CPS_CHART.id, cpsChartPanel)
+        gridDashboardManager.registerCard(DashboardCardType.ISOTOPE.id, isotopePanel)
+        
+        // Apply the layout
+        gridDashboardManager.applyLayout(layout)
         
         // Setup long-press to enter edit mode
         setupDashboardEditMode()
@@ -941,33 +907,98 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupDashboardEditMode() {
         // Long press on any dashboard card enters edit mode
-        val cards = listOf(metricCardsRow, intelligenceCard, doseChartPanel, cpsChartPanel, isotopePanel)
+        val cards = listOf(doseCard as View, cpsCard as View, intelligenceCard, doseChartPanel, cpsChartPanel, isotopePanel)
         
         for (card in cards) {
             card.setOnLongClickListener { 
-                if (!draggableDashboardManager.isEditMode) {
-                    draggableDashboardManager.enterEditMode()
-                    showEditModeToast()
+                if (!gridDashboardManager.isEditMode) {
+                    gridDashboardManager.enterEditMode()
                 }
                 true
             }
         }
-        
-        // Tapping outside cards or scrolling exits edit mode
-        val contentScroll = findViewById<View>(R.id.contentScroll)
-        contentScroll.setOnClickListener {
-            if (draggableDashboardManager.isEditMode) {
-                draggableDashboardManager.exitEditMode()
-            }
+    }
+    
+    /**
+     * Called when dashboard edit mode changes.
+     */
+    private fun onDashboardEditModeChanged(isEditMode: Boolean) {
+        if (isEditMode) {
+            showEditModeOverlay()
+        } else {
+            hideEditModeOverlay()
         }
     }
     
-    private fun showEditModeToast() {
-        android.widget.Toast.makeText(
-            this,
-            "Drag cards to reorder • Tap elsewhere to exit",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+    private var editModeOverlay: android.widget.FrameLayout? = null
+    
+    private fun showEditModeOverlay() {
+        val rootView = findViewById<android.widget.FrameLayout>(android.R.id.content)
+        
+        val density = resources.displayMetrics.density
+        
+        editModeOverlay = android.widget.FrameLayout(this).apply {
+            layoutParams = android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            
+            // Header showing "Edit Mode"
+            val header = android.widget.TextView(context).apply {
+                text = "✏️ EDIT MODE - Drag cards to reorder"
+                setTextColor(resources.getColor(R.color.pro_cyan, null))
+                textSize = 14f
+                setPadding((16 * density).toInt(), (12 * density).toInt(), (16 * density).toInt(), (12 * density).toInt())
+                setBackgroundColor(resources.getColor(R.color.pro_surface, null))
+                gravity = android.view.Gravity.CENTER
+                layoutParams = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = android.view.Gravity.TOP
+                }
+            }
+            addView(header)
+            
+            // Done button at bottom
+            val doneButton = android.widget.Button(context).apply {
+                text = "DONE"
+                setTextColor(resources.getColor(R.color.pro_background, null))
+                textSize = 16f
+                isAllCaps = true
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                    cornerRadius = 24 * density
+                    setColor(resources.getColor(R.color.pro_cyan, null))
+                }
+                setPadding((48 * density).toInt(), (16 * density).toInt(), (48 * density).toInt(), (16 * density).toInt())
+                layoutParams = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
+                    bottomMargin = (32 * density).toInt()
+                }
+                setOnClickListener {
+                    gridDashboardManager.exitEditMode()
+                }
+            }
+            addView(doneButton)
+            
+            isClickable = false
+            isFocusable = false
+        }
+        
+        rootView.addView(editModeOverlay)
+    }
+    
+    private fun hideEditModeOverlay() {
+        editModeOverlay?.let {
+            val rootView = findViewById<android.widget.FrameLayout>(android.R.id.content)
+            rootView.removeView(it)
+            editModeOverlay = null
+        }
     }
     
     private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
@@ -1524,8 +1555,8 @@ class MainActivity : AppCompatActivity() {
             drawerLayout.isDrawerOpen(GravityCompat.START) -> {
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
-            ::draggableDashboardManager.isInitialized && draggableDashboardManager.isEditMode -> {
-                draggableDashboardManager.exitEditMode()
+            ::gridDashboardManager.isInitialized && gridDashboardManager.isEditMode -> {
+                gridDashboardManager.exitEditMode()
             }
             else -> {
                 super.onBackPressed()
