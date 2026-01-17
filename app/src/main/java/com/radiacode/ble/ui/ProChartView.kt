@@ -904,7 +904,15 @@ class ProChartView @JvmOverloads constructor(
         // Get visible range based on zoom/pan
         val (visibleStart, visibleEnd) = getVisibleRange()
         val visibleSamples = samples.subList(visibleStart, visibleEnd + 1)
-        val visibleTimestamps = if (timestampsMs.size > visibleEnd) timestampsMs.subList(visibleStart, visibleEnd + 1) else emptyList()
+
+        // IMPORTANT: Keep X mapping consistent everywhere.
+        // The chart curve and alert overlays must both map X using timestamps, otherwise overlays drift
+        // (e.g., "half-speed" movement then a snap when ranges realign).
+        val hasAlignedTimestamps = timestampsMs.size == samples.size && timestampsMs.size > visibleEnd
+        val visibleStartTime = if (hasAlignedTimestamps) timestampsMs[visibleStart] else 0L
+        val visibleEndTime = if (hasAlignedTimestamps) timestampsMs[visibleEnd] else 0L
+        val timeRangeMs = (visibleEndTime - visibleStartTime).toFloat()
+        val useTimeAxis = hasAlignedTimestamps && timeRangeMs > 0f
 
         var minV = Float.POSITIVE_INFINITY
         var maxV = Float.NEGATIVE_INFINITY
@@ -967,8 +975,19 @@ class ProChartView @JvmOverloads constructor(
         val fillPath = Path()
         val n = visibleSamples.size
 
+        fun xForLocalIndex(localIdx: Int): Float {
+            if (n <= 1) return chartLeft
+            return if (useTimeAxis) {
+                val ts = timestampsMs[visibleStart + localIdx]
+                val frac = ((ts - visibleStartTime).toFloat() / timeRangeMs).coerceIn(0f, 1f)
+                chartLeft + chartWidth * frac
+            } else {
+                chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+            }
+        }
+
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(i)
             val yNorm = (visibleSamples[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
@@ -992,14 +1011,14 @@ class ProChartView @JvmOverloads constructor(
         // Draw rolling average line (dotted) for visible portion
         if (rollingAvgSamples.size >= samples.size && visibleSamples.isNotEmpty()) {
             val visibleAvg = rollingAvgSamples.subList(visibleStart, visibleEnd + 1)
-            drawRollingAverageLine(canvas, chartWidth, chartHeight, yMin, yRange, visibleAvg)
+            drawRollingAverageLine(canvas, chartHeight, yMin, yRange, visibleAvg, ::xForLocalIndex)
         }
 
         // Threshold line removed - now using Smart Alerts system instead
 
         // Draw delta spike markers for visible portion (if enabled)
         if (showSpikeMarkers) {
-            drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
+            drawSpikeMarkers(canvas, chartHeight, yMin, yRange, visibleSamples, visibleStart, ::xForLocalIndex)
         }
 
         // Draw alert markers (dashed lines + icon; shading clipped under the curve)
@@ -1007,7 +1026,7 @@ class ProChartView @JvmOverloads constructor(
 
         // Draw peak marker
         if (n > 0) {
-            val x = chartLeft + chartWidth * (peakIndex.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(peakIndex)
             val yNorm = (visibleSamples[peakIndex] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             canvas.drawCircle(x, y, density * 5f, peakPaint)
@@ -1029,7 +1048,7 @@ class ProChartView @JvmOverloads constructor(
             // Convert global index to visible index
             if (idx in visibleStart..visibleEnd) {
                 val localIdx = idx - visibleStart
-                val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+                val x = xForLocalIndex(localIdx)
                 val yNorm = (samples[idx] - yMin) / yRange
                 val y = chartBottom - chartHeight * yNorm
 
@@ -1071,16 +1090,16 @@ class ProChartView @JvmOverloads constructor(
     /** Draw rolling average as a dotted line */
     private fun drawRollingAverageLine(
         canvas: Canvas,
-        chartWidth: Float,
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
-        visibleAvg: List<Float>
+        visibleAvg: List<Float>,
+        xForLocalIndex: (Int) -> Float
     ) {
         val avgPath = Path()
         val n = visibleAvg.size
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(i)
             val yNorm = (visibleAvg[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
@@ -1165,12 +1184,12 @@ class ProChartView @JvmOverloads constructor(
     /** Draw vertical spike markers at significant delta points */
     private fun drawSpikeMarkers(
         canvas: Canvas,
-        chartWidth: Float,
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
         visibleSamples: List<Float>,
-        visibleStart: Int
+        visibleStart: Int,
+        xForLocalIndex: (Int) -> Float
     ) {
         val n = visibleSamples.size
         for (spikeIdx in spikeIndices) {
@@ -1181,7 +1200,7 @@ class ProChartView @JvmOverloads constructor(
             
             // Convert to local index within visible range
             val localIdx = spikeIdx - visibleStart
-            val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(localIdx)
             val yNorm = (samples[spikeIdx] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             
