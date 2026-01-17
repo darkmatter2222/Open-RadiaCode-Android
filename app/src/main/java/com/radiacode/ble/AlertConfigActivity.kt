@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -153,8 +154,9 @@ class AlertConfigActivity : AppCompatActivity() {
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.inputAlertName)
         val metricSpinner = dialogView.findViewById<Spinner>(R.id.spinnerMetric)
         val conditionSpinner = dialogView.findViewById<Spinner>(R.id.spinnerCondition)
-        val thresholdLayout = dialogView.findViewById<TextInputLayout>(R.id.layoutThreshold)
+        val thresholdLayout = dialogView.findViewById<View>(R.id.layoutThreshold)
         val thresholdInput = dialogView.findViewById<TextInputEditText>(R.id.inputThreshold)
+        val unitSpinner = dialogView.findViewById<Spinner>(R.id.spinnerUnit)
         val sigmaLayout = dialogView.findViewById<TextInputLayout>(R.id.layoutSigma)
         val sigmaSpinner = dialogView.findViewById<Spinner>(R.id.spinnerSigma)
         val durationInput = dialogView.findViewById<TextInputEditText>(R.id.inputDuration)
@@ -176,15 +178,40 @@ class AlertConfigActivity : AppCompatActivity() {
         conditionSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             conditions.map { it.first })
         
-        // Setup color spinner
-        val colors = listOf("Amber" to "amber", "Red" to "red")
-        colorSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            colors.map { it.first })
+        // Setup unit spinner
+        val units = listOf("μSv/h" to "usv_h", "cps" to "cps")
+        unitSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            units.map { it.first })
         
-        // Setup severity spinner
-        val severities = listOf("Low" to "low", "Medium" to "medium", "High" to "high")
-        severitySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            severities.map { it.first })
+        // Setup color spinner with colored dots
+        val colors = Prefs.AlertColor.values().map { "${getColorDot(it)} ${it.displayName}" to it.name.lowercase() }
+        colorSpinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, colors.map { it.first }) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getView(position, convertView, parent)
+                (view as? TextView)?.setTextColor(ContextCompat.getColor(context, R.color.pro_text_primary))
+                return view
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getDropDownView(position, convertView, parent)
+                (view as? TextView)?.setTextColor(ContextCompat.getColor(context, R.color.pro_text_primary))
+                return view
+            }
+        }
+        
+        // Setup severity spinner with icons
+        val severities = Prefs.AlertSeverity.values().map { "${it.icon} ${it.displayName}" to it.name.lowercase() }
+        severitySpinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, severities.map { it.first }) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getView(position, convertView, parent)
+                (view as? TextView)?.setTextColor(ContextCompat.getColor(context, R.color.pro_text_primary))
+                return view
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getDropDownView(position, convertView, parent)
+                (view as? TextView)?.setTextColor(ContextCompat.getColor(context, R.color.pro_text_primary))
+                return view
+            }
+        }
 
         // Setup sigma spinner (1σ, 2σ, 3σ)
         val sigmaOptions = listOf("1σ (68%)" to 1.0, "2σ (95%)" to 2.0, "3σ (99.7%)" to 3.0)
@@ -200,6 +227,15 @@ class AlertConfigActivity : AppCompatActivity() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+        
+        // Auto-update unit spinner based on metric selection
+        metricSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                // Set appropriate default unit based on metric
+                unitSpinner.setSelection(if (metrics[pos].second == "dose") 0 else 1)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
 
         // Pre-populate if editing
         if (existing != null) {
@@ -211,6 +247,7 @@ class AlertConfigActivity : AppCompatActivity() {
             } else {
                 thresholdInput.setText(String.format(Locale.US, "%.4f", existing.threshold))
             }
+            unitSpinner.setSelection(units.indexOfFirst { it.second == existing.thresholdUnit }.coerceAtLeast(0))
             durationInput.setText(existing.durationSeconds.toString())
             cooldownInput.setText((existing.cooldownMs / 1000).toString())
             colorSpinner.setSelection(colors.indexOfFirst { it.second == existing.color }.coerceAtLeast(0))
@@ -219,8 +256,8 @@ class AlertConfigActivity : AppCompatActivity() {
             // Defaults
             durationInput.setText("5")
             cooldownInput.setText("60")
-            colorSpinner.setSelection(0)  // Amber
-            severitySpinner.setSelection(1)  // Medium
+            colorSpinner.setSelection(2)  // Amber (index 2)
+            severitySpinner.setSelection(2)  // Medium (index 2)
         }
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
@@ -241,6 +278,7 @@ class AlertConfigActivity : AppCompatActivity() {
 
                 val metric = metrics[metricSpinner.selectedItemPosition].second
                 val condition = conditions[conditionSpinner.selectedItemPosition].second
+                val thresholdUnit = units[unitSpinner.selectedItemPosition].second
                 
                 val threshold: Double
                 val sigma: Double
@@ -269,6 +307,7 @@ class AlertConfigActivity : AppCompatActivity() {
                     metric = metric,
                     condition = condition,
                     threshold = threshold,
+                    thresholdUnit = thresholdUnit,
                     sigma = sigma,
                     durationSeconds = duration,
                     cooldownMs = cooldown,
@@ -293,6 +332,18 @@ class AlertConfigActivity : AppCompatActivity() {
 
         dialog.show()
     }
+    
+    /** Get a colored dot emoji/unicode for the color */
+    private fun getColorDot(color: Prefs.AlertColor): String {
+        return when (color) {
+            Prefs.AlertColor.CYAN -> "🔵"
+            Prefs.AlertColor.GREEN -> "🟢"
+            Prefs.AlertColor.AMBER -> "🟡"
+            Prefs.AlertColor.ORANGE -> "🟠"
+            Prefs.AlertColor.RED -> "🔴"
+            Prefs.AlertColor.MAGENTA -> "🟣"
+        }
+    }
 
     private fun toggleAlert(position: Int, enabled: Boolean) {
         val alert = alerts[position].copy(enabled = enabled)
@@ -302,10 +353,20 @@ class AlertConfigActivity : AppCompatActivity() {
 
     private fun deleteAlert(position: Int) {
         val alert = alerts[position]
-        Prefs.deleteSmartAlert(this, alert.id)
-        alerts.removeAt(position)
-        adapter.notifyItemRemoved(position)
-        updateEmptyState()
+        
+        // Show confirmation dialog
+        AlertDialog.Builder(this)
+            .setTitle("Delete Alert")
+            .setMessage("Are you sure you want to delete \"${alert.name}\"?")
+            .setPositiveButton("Delete") { _, _ ->
+                Prefs.deleteSmartAlert(this, alert.id)
+                alerts.removeAt(position)
+                adapter.notifyItemRemoved(position)
+                updateEmptyState()
+                Toast.makeText(this, "Alert deleted", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // RecyclerView Adapter
@@ -321,6 +382,7 @@ class AlertConfigActivity : AppCompatActivity() {
             val description: TextView = view.findViewById(R.id.alertDescription)
             val switch: SwitchMaterial = view.findViewById(R.id.alertSwitch)
             val editButton: ImageButton = view.findViewById(R.id.btnEdit)
+            val deleteButton: ImageButton = view.findViewById(R.id.btnDelete)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -338,6 +400,7 @@ class AlertConfigActivity : AppCompatActivity() {
                 onToggle(holder.adapterPosition, isChecked)
             }
             holder.editButton.setOnClickListener { onEdit(holder.adapterPosition) }
+            holder.deleteButton.setOnClickListener { onDelete(holder.adapterPosition) }
             holder.itemView.setOnClickListener { onEdit(holder.adapterPosition) }
         }
 
@@ -345,13 +408,16 @@ class AlertConfigActivity : AppCompatActivity() {
 
         private fun formatDescription(alert: Prefs.SmartAlert): String {
             val metricLabel = if (alert.metric == "dose") "Dose" else "Count"
+            val unitLabel = Prefs.ThresholdUnit.fromString(alert.thresholdUnit).symbol
+            val severityEnum = alert.getSeverityEnum()
+            val colorEnum = alert.getColorEnum()
             val conditionLabel = when (alert.condition) {
-                "above" -> "above ${String.format(Locale.US, "%.4f", alert.threshold)}"
-                "below" -> "below ${String.format(Locale.US, "%.4f", alert.threshold)}"
+                "above" -> "above ${String.format(Locale.US, "%.4f", alert.threshold)} $unitLabel"
+                "below" -> "below ${String.format(Locale.US, "%.4f", alert.threshold)} $unitLabel"
                 "outside_sigma" -> "outside ${alert.sigma.toInt()}σ"
                 else -> alert.condition
             }
-            return "$metricLabel $conditionLabel for ${alert.durationSeconds}s"
+            return "${severityEnum.icon} $metricLabel $conditionLabel for ${alert.durationSeconds}s"
         }
     }
 

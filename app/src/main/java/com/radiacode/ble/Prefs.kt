@@ -372,19 +372,94 @@ object Prefs {
     
     // ========== Smart Alerts System ==========
     
+    // Alert Event key
+    private const val KEY_ALERT_EVENTS_JSON = "alert_events_json"
+    private const val MAX_ALERT_EVENTS = 100  // Keep last 100 events for chart visualization
+    
+    /**
+     * Alert severity levels with associated icons
+     */
+    enum class AlertSeverity(val displayName: String, val icon: String) {
+        INFO("Info", "ℹ️"),
+        LOW("Low", "⬇️"),
+        MEDIUM("Medium", "⚠️"),
+        HIGH("High", "🔶"),
+        CRITICAL("Critical", "🔴"),
+        EMERGENCY("Emergency", "🚨");
+        
+        companion object {
+            fun fromString(value: String): AlertSeverity {
+                return when (value.lowercase()) {
+                    "info" -> INFO
+                    "low" -> LOW
+                    "medium" -> MEDIUM
+                    "high" -> HIGH
+                    "critical" -> CRITICAL
+                    "emergency" -> EMERGENCY
+                    else -> MEDIUM
+                }
+            }
+        }
+    }
+    
+    /**
+     * Alert colors with hex values
+     */
+    enum class AlertColor(val displayName: String, val hexColor: String) {
+        CYAN("Cyan", "00E5FF"),
+        GREEN("Green", "69F0AE"),
+        AMBER("Amber", "FFD740"),
+        ORANGE("Orange", "FF9800"),
+        RED("Red", "FF5252"),
+        MAGENTA("Magenta", "E040FB");
+        
+        companion object {
+            fun fromString(value: String): AlertColor {
+                return when (value.lowercase()) {
+                    "cyan" -> CYAN
+                    "green" -> GREEN
+                    "amber" -> AMBER
+                    "orange" -> ORANGE
+                    "red" -> RED
+                    "magenta" -> MAGENTA
+                    else -> AMBER
+                }
+            }
+        }
+    }
+    
+    /**
+     * Threshold unit - explicit specification of measurement unit
+     */
+    enum class ThresholdUnit(val displayName: String, val symbol: String) {
+        USV_H("Microsieverts/hour", "μSv/h"),
+        CPS("Counts per second", "cps");
+        
+        companion object {
+            fun fromString(value: String): ThresholdUnit {
+                return when (value.lowercase()) {
+                    "usv_h", "usv", "dose" -> USV_H
+                    "cps", "count" -> CPS
+                    else -> USV_H
+                }
+            }
+        }
+    }
+    
     /**
      * Smart Alert configuration
      * @param id Unique identifier
      * @param name User-friendly name
      * @param enabled Whether the alert is active
-     * @param metric "dose" or "cps"
+     * @param metric "dose" or "count"
      * @param condition "above", "below", "outside_sigma"
      * @param threshold For above/below: the threshold value. For outside_sigma: number of std devs
+     * @param thresholdUnit Explicit unit: "usv_h" or "cps"
      * @param durationSeconds How long the condition must persist before alerting (0 = instant)
      * @param cooldownMs Minimum time in milliseconds between repeat alerts
      * @param lastTriggeredMs Last time this alert fired
-     * @param color Alert color: "amber" or "red"
-     * @param severity Alert severity: "low", "medium", or "high"
+     * @param color Alert color: cyan, green, amber, orange, red, magenta
+     * @param severity Alert severity: info, low, medium, high, critical, emergency
      */
     data class SmartAlert(
         val id: String,
@@ -393,16 +468,26 @@ object Prefs {
         val metric: String = "dose",  // "dose" or "count"
         val condition: String = "above",  // "above", "below", "outside_sigma"
         val threshold: Double = 0.5,
+        val thresholdUnit: String = "usv_h",  // "usv_h" or "cps" - explicit unit
         val sigma: Double = 2.0,  // For "outside_sigma" condition: 1, 2, or 3 standard deviations
         val durationSeconds: Int = 0,  // 0 = instant, >0 = sustained
         val cooldownMs: Long = 60000L,  // milliseconds
         val lastTriggeredMs: Long = 0L,
-        val color: String = "amber",  // "amber" or "red"
-        val severity: String = "medium"  // "low", "medium", or "high"
+        val color: String = "amber",  // cyan, green, amber, orange, red, magenta
+        val severity: String = "medium"  // info, low, medium, high, critical, emergency
     ) {
         fun toJson(): String {
-            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs,"color":"$color","severity":"$severity"}"""
+            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"thresholdUnit":"$thresholdUnit","sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs,"color":"$color","severity":"$severity"}"""
         }
+        
+        /** Get the AlertSeverity enum for this alert */
+        fun getSeverityEnum(): AlertSeverity = AlertSeverity.fromString(severity)
+        
+        /** Get the AlertColor enum for this alert */
+        fun getColorEnum(): AlertColor = AlertColor.fromString(color)
+        
+        /** Get the ThresholdUnit enum for this alert */
+        fun getUnitEnum(): ThresholdUnit = ThresholdUnit.fromString(thresholdUnit)
         
         companion object {
             fun fromJson(json: String): SmartAlert? {
@@ -414,6 +499,10 @@ object Prefs {
                     val metric = json.substringAfter("\"metric\":\"").substringBefore("\"")
                     val condition = json.substringAfter("\"condition\":\"").substringBefore("\"")
                     val threshold = json.substringAfter("\"threshold\":").substringBefore(",").toDouble()
+                    // Parse thresholdUnit with fallback based on metric
+                    val thresholdUnit = json.substringAfter("\"thresholdUnit\":\"").substringBefore("\"").ifEmpty { 
+                        if (metric == "dose") "usv_h" else "cps"
+                    }
                     val sigma = json.substringAfter("\"sigma\":").substringBefore(",").toDoubleOrNull() ?: 2.0
                     val durationSeconds = json.substringAfter("\"durationSeconds\":").substringBefore(",").toInt()
                     val cooldownMs = json.substringAfter("\"cooldownMs\":").substringBefore(",").toLongOrNull() 
@@ -421,7 +510,63 @@ object Prefs {
                     val lastTriggeredMs = json.substringAfter("\"lastTriggeredMs\":").substringBefore(",").substringBefore("}").toLong()
                     val color = json.substringAfter("\"color\":\"").substringBefore("\"").ifEmpty { "amber" }
                     val severity = json.substringAfter("\"severity\":\"").substringBefore("\"").ifEmpty { "medium" }
-                    SmartAlert(id, name, enabled, metric, condition, threshold, sigma, durationSeconds, cooldownMs, lastTriggeredMs, color, severity)
+                    SmartAlert(id, name, enabled, metric, condition, threshold, thresholdUnit, sigma, durationSeconds, cooldownMs, lastTriggeredMs, color, severity)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+    }
+    
+    /**
+     * Alert Event - records when an alert was triggered for chart visualization
+     * @param alertId The ID of the alert that triggered
+     * @param alertName Name of the alert
+     * @param triggerTimestampMs When the alert was triggered (notification fired)
+     * @param durationWindowStartMs Start of the duration window (when condition first became true)
+     * @param cooldownEndMs When the cooldown period ends
+     * @param metric "dose" or "count" - which chart to show on
+     * @param color The alert color for visualization
+     * @param severity The alert severity
+     * @param thresholdValue The threshold that was exceeded
+     * @param thresholdUnit The unit of the threshold
+     */
+    data class AlertEvent(
+        val alertId: String,
+        val alertName: String,
+        val triggerTimestampMs: Long,
+        val durationWindowStartMs: Long = 0L,  // When the condition first became true
+        val cooldownEndMs: Long = 0L,  // When the cooldown period ends
+        val metric: String,
+        val color: String,
+        val severity: String,
+        val thresholdValue: Double,
+        val thresholdUnit: String
+    ) {
+        fun toJson(): String {
+            return """{"alertId":"$alertId","alertName":"$alertName","triggerTimestampMs":$triggerTimestampMs,"durationWindowStartMs":$durationWindowStartMs,"cooldownEndMs":$cooldownEndMs,"metric":"$metric","color":"$color","severity":"$severity","thresholdValue":$thresholdValue,"thresholdUnit":"$thresholdUnit"}"""
+        }
+        
+        /** Get the AlertColor enum for this event */
+        fun getColorEnum(): AlertColor = AlertColor.fromString(color)
+        
+        /** Get the AlertSeverity enum for this event */
+        fun getSeverityEnum(): AlertSeverity = AlertSeverity.fromString(severity)
+        
+        companion object {
+            fun fromJson(json: String): AlertEvent? {
+                return try {
+                    val alertId = json.substringAfter("\"alertId\":\"").substringBefore("\"")
+                    val alertName = json.substringAfter("\"alertName\":\"").substringBefore("\"")
+                    val triggerTimestampMs = json.substringAfter("\"triggerTimestampMs\":").substringBefore(",").toLong()
+                    val durationWindowStartMs = json.substringAfter("\"durationWindowStartMs\":").substringBefore(",").toLongOrNull() ?: 0L
+                    val cooldownEndMs = json.substringAfter("\"cooldownEndMs\":").substringBefore(",").toLongOrNull() ?: 0L
+                    val metric = json.substringAfter("\"metric\":\"").substringBefore("\"")
+                    val color = json.substringAfter("\"color\":\"").substringBefore("\"")
+                    val severity = json.substringAfter("\"severity\":\"").substringBefore("\"")
+                    val thresholdValue = json.substringAfter("\"thresholdValue\":").substringBefore(",").substringBefore("}").toDouble()
+                    val thresholdUnit = json.substringAfter("\"thresholdUnit\":\"").substringBefore("\"").ifEmpty { "usv_h" }
+                    AlertEvent(alertId, alertName, triggerTimestampMs, durationWindowStartMs, cooldownEndMs, metric, color, severity, thresholdValue, thresholdUnit)
                 } catch (e: Exception) {
                     null
                 }
@@ -468,6 +613,80 @@ object Prefs {
     fun deleteSmartAlert(context: Context, alertId: String) {
         val alerts = getSmartAlerts(context).filter { it.id != alertId }
         setSmartAlerts(context, alerts)
+    }
+    
+    // ========== Alert Events (for chart visualization) ==========
+    
+    /**
+     * Get all stored alert events for chart visualization
+     */
+    fun getAlertEvents(context: Context): List<AlertEvent> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_ALERT_EVENTS_JSON, "[]") ?: "[]"
+        if (json == "[]") return emptyList()
+        
+        return json.removeSurrounding("[", "]")
+            .split("},{")
+            .map { it.trim().let { s -> if (!s.startsWith("{")) "{$s" else s }.let { s -> if (!s.endsWith("}")) "$s}" else s } }
+            .mapNotNull { AlertEvent.fromJson(it) }
+    }
+    
+    /**
+     * Get alert events filtered by metric (for specific chart)
+     */
+    fun getAlertEventsForMetric(context: Context, metric: String): List<AlertEvent> {
+        return getAlertEvents(context).filter { it.metric == metric }
+    }
+    
+    /**
+     * Get alert events within a time range (for visible chart area)
+     */
+    fun getAlertEventsInRange(context: Context, metric: String, startMs: Long, endMs: Long): List<AlertEvent> {
+        return getAlertEvents(context).filter { event ->
+            event.metric == metric &&
+            // Event is visible if any part of it overlaps with the visible range
+            event.cooldownEndMs >= startMs &&
+            event.durationWindowStartMs <= endMs
+        }
+    }
+    
+    /**
+     * Add a new alert event
+     */
+    fun addAlertEvent(context: Context, event: AlertEvent) {
+        val events = getAlertEvents(context).toMutableList()
+        events.add(event)
+        
+        // Trim to max events, keeping newest
+        val trimmed = if (events.size > MAX_ALERT_EVENTS) {
+            events.sortedByDescending { it.triggerTimestampMs }.take(MAX_ALERT_EVENTS)
+        } else events
+        
+        setAlertEvents(context, trimmed)
+    }
+    
+    /**
+     * Clear old alert events (older than specified time)
+     */
+    fun clearOldAlertEvents(context: Context, olderThanMs: Long) {
+        val cutoff = System.currentTimeMillis() - olderThanMs
+        val events = getAlertEvents(context).filter { it.triggerTimestampMs > cutoff }
+        setAlertEvents(context, events)
+    }
+    
+    /**
+     * Clear all alert events
+     */
+    fun clearAllAlertEvents(context: Context) {
+        setAlertEvents(context, emptyList())
+    }
+    
+    private fun setAlertEvents(context: Context, events: List<AlertEvent>) {
+        val json = if (events.isEmpty()) "[]" else "[${events.joinToString(",") { it.toJson() }}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ALERT_EVENTS_JSON, json)
+            .apply()
     }
 
     fun setPollIntervalMs(context: Context, intervalMs: Long) {

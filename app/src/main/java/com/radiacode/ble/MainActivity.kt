@@ -201,6 +201,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionAlertsHeader: View
     private lateinit var sectionAlertsContent: View
     private lateinit var sectionAlertsArrow: android.widget.ImageView
+    private lateinit var sectionDetectionHeader: View
+    private lateinit var sectionDetectionContent: View
+    private lateinit var sectionDetectionArrow: android.widget.ImageView
     private lateinit var sectionAdvancedHeader: View
     private lateinit var sectionAdvancedContent: View
     private lateinit var sectionAdvancedArrow: android.widget.ImageView
@@ -522,6 +525,9 @@ class MainActivity : AppCompatActivity() {
         sectionAlertsHeader = findViewById(R.id.sectionAlertsHeader)
         sectionAlertsContent = findViewById(R.id.sectionAlertsContent)
         sectionAlertsArrow = findViewById(R.id.sectionAlertsArrow)
+        sectionDetectionHeader = findViewById(R.id.sectionDetectionHeader)
+        sectionDetectionContent = findViewById(R.id.sectionDetectionContent)
+        sectionDetectionArrow = findViewById(R.id.sectionDetectionArrow)
         sectionAdvancedHeader = findViewById(R.id.sectionAdvancedHeader)
         sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
         sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
@@ -613,6 +619,7 @@ class MainActivity : AppCompatActivity() {
         setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
         setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
+        setupExpandableSection(sectionDetectionHeader, sectionDetectionContent, sectionDetectionArrow, expanded = true)
         setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
         
         // Application settings
@@ -1805,6 +1812,45 @@ class MainActivity : AppCompatActivity() {
         mainHandler.post {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
+
+            // Update alert markers from stored events, filtered by metric
+            val allAlertEvents = Prefs.getAlertEvents(this)
+            android.util.Log.d("MainActivity", "updateCharts: loaded ${allAlertEvents.size} alert events total")
+            allAlertEvents.forEach { e ->
+                android.util.Log.d("MainActivity", "  Event: metric=${e.metric}, name=${e.alertName}, trigger=${e.triggerTimestampMs}")
+            }
+            
+            // Filter and map dose alerts
+            val doseAlertMarkers = allAlertEvents
+                .filter { it.metric == "dose" }
+                .map { event ->
+                    ProChartView.AlertMarker(
+                        triggerTimestampMs = event.triggerTimestampMs,
+                        durationWindowStartMs = event.durationWindowStartMs,
+                        cooldownEndMs = event.cooldownEndMs,
+                        color = "#${event.getColorEnum().hexColor}",
+                        icon = event.getSeverityEnum().icon,
+                        name = event.alertName
+                    )
+                }
+            android.util.Log.d("MainActivity", "Dose chart: ${doseAlertMarkers.size} markers")
+            doseChart.setAlertMarkers(doseAlertMarkers)
+            
+            // Filter and map count alerts
+            val countAlertMarkers = allAlertEvents
+                .filter { it.metric == "count" }
+                .map { event ->
+                    ProChartView.AlertMarker(
+                        triggerTimestampMs = event.triggerTimestampMs,
+                        durationWindowStartMs = event.durationWindowStartMs,
+                        cooldownEndMs = event.cooldownEndMs,
+                        color = "#${event.getColorEnum().hexColor}",
+                        icon = event.getSeverityEnum().icon,
+                        name = event.alertName
+                    )
+                }
+            android.util.Log.d("MainActivity", "Count chart: ${countAlertMarkers.size} markers")
+            cpsChart.setAlertMarkers(countAlertMarkers)
 
             val sparkDose = doseDec.second.takeLast(20)
             val sparkCps = cpsDec.second.takeLast(20)
