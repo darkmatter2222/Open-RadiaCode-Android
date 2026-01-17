@@ -10,27 +10,33 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
-import kotlin.math.max
-import kotlin.math.min
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.*
 
 /**
  * Professional map card with:
  * - Real-time location tracking
- * - Radiation reading markers on the map
+ * - Hexagonal grid overlay for radiation readings
+ * - Color-coded hexagons based on average readings
+ * - Dark theme map tiles
  * - Metric selector (dose rate / count rate)
  * - Dynamic color scale bar
- * - Reset button to clear markers
  */
 class MapCardView @JvmOverloads constructor(
     context: Context,
@@ -44,7 +50,12 @@ class MapCardView @JvmOverloads constructor(
     private lateinit var mapView: MapView
     private lateinit var metricSelector: Spinner
     private lateinit var resetButton: ImageButton
+    private lateinit var centerButton: ImageButton
     private lateinit var scaleBarView: ScaleBarView
+    
+    // Overlays
+    private var hexagonOverlay: HexagonOverlay? = null
+    private var positionOverlay: PositionOverlay? = null
     
     // Location
     private var locationManager: LocationManager? = null
@@ -56,9 +67,88 @@ class MapCardView @JvmOverloads constructor(
     private var selectedMetric = MetricType.DOSE_RATE
     private val dataPoints = mutableListOf<Prefs.MapDataPoint>()
     
+    // Hexagon grid data: maps hex cell ID -> list of readings
+    private val hexagonData = mutableMapOf<String, MutableList<HexReading>>()
+    
+    // Hex resolution: ~30m edge length ≈ house-sized hexagons
+    // This is roughly H3 resolution 9 (edge ~174m) to 10 (edge ~66m)
+    // We'll use a custom grid with ~25m cells
+    companion object {
+        const val HEX_SIZE_METERS = 25.0  // Edge length in meters (house-sized)
+    }
+    
+    data class HexReading(
+        val uSvPerHour: Float,
+        val cps: Float,
+        val timestampMs: Long
+    )
+    
     enum class MetricType {
         DOSE_RATE,
         COUNT_RATE
+    }
+    
+    /**
+     * Create a tile source for the given map theme.
+     */
+    private fun createTileSource(theme: Prefs.MapTheme): XYTileSource {
+        return when (theme) {
+            // Home theme uses Dark Matter as base, with color filter applied separately
+            Prefs.MapTheme.HOME -> XYTileSource(
+                "CartoDB_DarkMatter", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.basemaps.cartocdn.com/dark_all/",
+                    "https://b.basemaps.cartocdn.com/dark_all/",
+                    "https://c.basemaps.cartocdn.com/dark_all/"
+                )
+            )
+            Prefs.MapTheme.DARK_MATTER -> XYTileSource(
+                "CartoDB_DarkMatter", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.basemaps.cartocdn.com/dark_all/",
+                    "https://b.basemaps.cartocdn.com/dark_all/",
+                    "https://c.basemaps.cartocdn.com/dark_all/"
+                )
+            )
+            Prefs.MapTheme.DARK_GRAY -> XYTileSource(
+                "CartoDB_DarkGray", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.basemaps.cartocdn.com/dark_nolabels/",
+                    "https://b.basemaps.cartocdn.com/dark_nolabels/",
+                    "https://c.basemaps.cartocdn.com/dark_nolabels/"
+                )
+            )
+            Prefs.MapTheme.VOYAGER -> XYTileSource(
+                "CartoDB_Voyager", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.basemaps.cartocdn.com/rastertiles/voyager/",
+                    "https://b.basemaps.cartocdn.com/rastertiles/voyager/",
+                    "https://c.basemaps.cartocdn.com/rastertiles/voyager/"
+                )
+            )
+            Prefs.MapTheme.POSITRON -> XYTileSource(
+                "CartoDB_Positron", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.basemaps.cartocdn.com/light_all/",
+                    "https://b.basemaps.cartocdn.com/light_all/",
+                    "https://c.basemaps.cartocdn.com/light_all/"
+                )
+            )
+            Prefs.MapTheme.TONER -> XYTileSource(
+                "Stamen_Toner", 0, 18, 256, ".png",
+                arrayOf(
+                    "https://tiles.stadiamaps.com/tiles/stamen_toner/"
+                )
+            )
+            Prefs.MapTheme.STANDARD -> XYTileSource(
+                "OpenStreetMap", 0, 19, 256, ".png",
+                arrayOf(
+                    "https://a.tile.openstreetmap.org/",
+                    "https://b.tile.openstreetmap.org/",
+                    "https://c.tile.openstreetmap.org/"
+                )
+            )
+        }
     }
     
     init {
@@ -74,12 +164,14 @@ class MapCardView @JvmOverloads constructor(
         setupMap()
         setupMetricSelector()
         setupResetButton()
+        setupCenterButton()
     }
     
     private fun setupViews() {
         mapView = findViewById(R.id.mapView)
         metricSelector = findViewById(R.id.metricSelector)
         resetButton = findViewById(R.id.resetButton)
+        centerButton = findViewById(R.id.centerButton)
         
         // Create and add scale bar programmatically
         val scaleBarContainer = findViewById<FrameLayout>(R.id.scaleBarContainer)
@@ -88,12 +180,89 @@ class MapCardView @JvmOverloads constructor(
     }
     
     private fun setupMap() {
-        mapView.setTileSource(TileSourceFactory.MAPNIK)
+        // Load tile source from saved preference
+        val theme = Prefs.getMapTheme(context)
+        mapView.setTileSource(createTileSource(theme))
         mapView.setMultiTouchControls(true)
-        mapView.controller.setZoom(15.0)
+        mapView.controller.setZoom(17.0)  // Closer zoom to see hexagons better
+        
+        // Prevent parent ScrollView from intercepting touch events
+        mapView.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    // Request parent to not intercept touch events
+                    v.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Allow parent to intercept again
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false  // Let the map handle the touch
+        }
+        
+        // Apply color filter for Home theme
+        applyThemeColorFilter(theme)
         
         // Set default center (will be updated when location is available)
         mapView.controller.setCenter(GeoPoint(0.0, 0.0))
+        
+        // Add hexagon overlay (below position marker)
+        hexagonOverlay = HexagonOverlay()
+        mapView.overlays.add(hexagonOverlay)
+        
+        // Add tap detection overlay for hexagon details
+        mapView.overlays.add(HexagonTapOverlay())
+        
+        // Add position marker overlay (on top of hexagons)
+        positionOverlay = PositionOverlay()
+        mapView.overlays.add(positionOverlay)
+    }
+    
+    /**
+     * Setup the center-on-location button.
+     */
+    private fun setupCenterButton() {
+        centerButton.setOnClickListener {
+            currentLocation?.let { location ->
+                val geoPoint = GeoPoint(location.latitude, location.longitude)
+                mapView.controller.animateTo(geoPoint)
+                mapView.controller.setZoom(17.0)
+            }
+        }
+    }
+    
+    /**
+     * Apply a color filter to match the app's Home theme.
+     * Creates a custom look matching the card background (#1A1A1E).
+     */
+    private fun applyThemeColorFilter(theme: Prefs.MapTheme) {
+        val tilesOverlay = mapView.overlayManager.tilesOverlay
+        
+        if (theme == Prefs.MapTheme.HOME) {
+            // Custom color matrix to match app's card background (#1A1A1E)
+            // The card background RGB is approximately (26, 26, 30)
+            // We want to lighten the dark map tiles to match this grayish tone
+            val colorMatrix = ColorMatrix(floatArrayOf(
+                1.10f, 0.00f, 0.00f, 0f, 20f,   // Red: boost slightly
+                0.00f, 1.10f, 0.00f, 0f, 20f,   // Green: boost slightly  
+                0.00f, 0.05f, 1.15f, 0f, 25f,   // Blue: boost more for slight cool tint
+                0.00f, 0.00f, 0.00f, 1f,  0f    // Alpha: unchanged
+            ))
+            tilesOverlay.setColorFilter(ColorMatrixColorFilter(colorMatrix))
+        } else {
+            // Clear any color filter for other themes
+            tilesOverlay.setColorFilter(null)
+        }
+    }
+    
+    /**
+     * Change the map theme dynamically.
+     */
+    fun setMapTheme(theme: Prefs.MapTheme) {
+        mapView.setTileSource(createTileSource(theme))
+        applyThemeColorFilter(theme)
+        mapView.invalidate()
     }
     
     private fun setupMetricSelector() {
@@ -108,7 +277,7 @@ class MapCardView @JvmOverloads constructor(
         metricSelector.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 selectedMetric = if (position == 0) MetricType.DOSE_RATE else MetricType.COUNT_RATE
-                updateMapMarkers()
+                updateHexagonColors()
                 updateScaleBar()
             }
             
@@ -140,6 +309,8 @@ class MapCardView @JvmOverloads constructor(
             override fun onLocationChanged(location: Location) {
                 currentLocation = location
                 updateMapCenter(location)
+                // Invalidate to redraw position marker
+                mapView.invalidate()
             }
             
             @Deprecated("Deprecated in Java")
@@ -187,6 +358,109 @@ class MapCardView @JvmOverloads constructor(
     }
     
     /**
+     * Convert lat/lng to hexagon cell ID.
+     * Uses an axial coordinate system for pointy-top hexagons.
+     */
+    private fun latLngToHexId(lat: Double, lng: Double): String {
+        // Convert to meters (approximate, good enough for small areas)
+        val metersPerDegreeLat = 111320.0
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
+        
+        val x = lng * metersPerDegreeLng
+        val y = lat * metersPerDegreeLat
+        
+        // Hex grid math (pointy-top hexagons)
+        val size = HEX_SIZE_METERS
+        val q = (sqrt(3.0) / 3.0 * x - 1.0 / 3.0 * y) / size
+        val r = (2.0 / 3.0 * y) / size
+        
+        // Round to nearest hex
+        val (hexQ, hexR) = axialRound(q, r)
+        
+        return "$hexQ,$hexR"
+    }
+    
+    /**
+     * Round fractional axial coordinates to nearest hex.
+     */
+    private fun axialRound(q: Double, r: Double): Pair<Int, Int> {
+        val s = -q - r
+        
+        var rq = round(q).toInt()
+        var rr = round(r).toInt()
+        var rs = round(s).toInt()
+        
+        val qDiff = abs(rq - q)
+        val rDiff = abs(rr - r)
+        val sDiff = abs(rs - s)
+        
+        if (qDiff > rDiff && qDiff > sDiff) {
+            rq = -rr - rs
+        } else if (rDiff > sDiff) {
+            rr = -rq - rs
+        }
+        
+        return Pair(rq, rr)
+    }
+    
+    /**
+     * Get the center point of a hexagon in lat/lng.
+     */
+    private fun hexIdToLatLng(hexId: String): Pair<Double, Double>? {
+        val parts = hexId.split(",")
+        if (parts.size != 2) return null
+        
+        val q = parts[0].toIntOrNull() ?: return null
+        val r = parts[1].toIntOrNull() ?: return null
+        
+        val size = HEX_SIZE_METERS
+        
+        // Convert axial to pixel (meters)
+        val x = size * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
+        val y = size * (3.0 / 2.0 * r)
+        
+        // Convert meters back to lat/lng (use approximate center lat for correction)
+        val centerLat = currentLocation?.latitude ?: 0.0
+        val metersPerDegreeLat = 111320.0
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
+        
+        val lng = x / metersPerDegreeLng
+        val lat = y / metersPerDegreeLat
+        
+        return Pair(lat, lng)
+    }
+    
+    /**
+     * Get the 6 corner points of a hexagon for drawing.
+     */
+    private fun getHexCorners(hexId: String): List<GeoPoint>? {
+        val center = hexIdToLatLng(hexId) ?: return null
+        val corners = mutableListOf<GeoPoint>()
+        
+        val centerLat = center.first
+        val centerLng = center.second
+        
+        val metersPerDegreeLat = 111320.0
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(currentLocation?.latitude ?: centerLat))
+        
+        // 6 corners for pointy-top hexagon
+        for (i in 0 until 6) {
+            val angleDeg = 60.0 * i - 30.0  // Pointy-top: start at -30°
+            val angleRad = Math.toRadians(angleDeg)
+            
+            val cornerX = HEX_SIZE_METERS * cos(angleRad)
+            val cornerY = HEX_SIZE_METERS * sin(angleRad)
+            
+            val cornerLat = centerLat + (cornerY / metersPerDegreeLat)
+            val cornerLng = centerLng + (cornerX / metersPerDegreeLng)
+            
+            corners.add(GeoPoint(cornerLat, cornerLng))
+        }
+        
+        return corners
+    }
+    
+    /**
      * Add a new reading at the current location.
      */
     fun addReading(uSvPerHour: Float, cps: Float) {
@@ -202,21 +476,37 @@ class MapCardView @JvmOverloads constructor(
         
         dataPoints.add(point)
         
+        // Add to hexagon grid
+        val hexId = latLngToHexId(location.latitude, location.longitude)
+        val reading = HexReading(uSvPerHour, cps, System.currentTimeMillis())
+        hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+        
         // Save to prefs
         Prefs.addMapDataPoint(context, location.latitude, location.longitude, uSvPerHour, cps)
         
         // Update map
-        updateMapMarkers()
+        updateHexagonColors()
         updateScaleBar()
     }
     
     /**
-     * Load existing data points from storage.
+     * Load existing data points from storage and rebuild hexagon grid.
      */
     fun loadDataPoints() {
         dataPoints.clear()
-        dataPoints.addAll(Prefs.getMapDataPoints(context))
-        updateMapMarkers()
+        hexagonData.clear()
+        
+        val points = Prefs.getMapDataPoints(context)
+        dataPoints.addAll(points)
+        
+        // Rebuild hexagon data from saved points
+        points.forEach { point ->
+            val hexId = latLngToHexId(point.latitude, point.longitude)
+            val reading = HexReading(point.uSvPerHour, point.cps, point.timestampMs)
+            hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+        }
+        
+        updateHexagonColors()
         updateScaleBar()
     }
     
@@ -225,82 +515,51 @@ class MapCardView @JvmOverloads constructor(
      */
     fun clearMapData() {
         dataPoints.clear()
+        hexagonData.clear()
         Prefs.clearMapDataPoints(context)
-        updateMapMarkers()
+        updateHexagonColors()
         updateScaleBar()
     }
     
-    private fun updateMapMarkers() {
-        // Clear existing markers
-        mapView.overlays.clear()
-        
-        if (dataPoints.isEmpty()) return
-        
-        // Add markers for each data point
-        dataPoints.forEach { point ->
-            val marker = Marker(mapView)
-            marker.position = GeoPoint(point.latitude, point.longitude)
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            
-            // Color based on value
-            val value = when (selectedMetric) {
-                MetricType.DOSE_RATE -> point.uSvPerHour
-                MetricType.COUNT_RATE -> point.cps
-            }
-            
-            marker.icon = createMarkerIcon(value)
-            marker.title = formatMarkerTitle(point)
-            
-            mapView.overlays.add(marker)
-        }
-        
+    /**
+     * Update hexagon overlay colors based on current metric selection.
+     */
+    private fun updateHexagonColors() {
         mapView.invalidate()
     }
     
-    private fun createMarkerIcon(value: Float): android.graphics.drawable.Drawable {
-        val minValue = dataPoints.minOfOrNull { 
+    /**
+     * Get average value for a hexagon cell.
+     */
+    private fun getHexAverage(hexId: String): Float? {
+        val readings = hexagonData[hexId] ?: return null
+        if (readings.isEmpty()) return null
+        
+        return when (selectedMetric) {
+            MetricType.DOSE_RATE -> readings.map { it.uSvPerHour }.average().toFloat()
+            MetricType.COUNT_RATE -> readings.map { it.cps }.average().toFloat()
+        }
+    }
+    
+    /**
+     * Get global min/max values across all hexagons.
+     */
+    private fun getGlobalMinMax(): Pair<Float, Float> {
+        if (hexagonData.isEmpty()) return Pair(0f, 1f)
+        
+        val allValues = hexagonData.values.flatten().map { reading ->
             when (selectedMetric) {
-                MetricType.DOSE_RATE -> it.uSvPerHour
-                MetricType.COUNT_RATE -> it.cps
+                MetricType.DOSE_RATE -> reading.uSvPerHour
+                MetricType.COUNT_RATE -> reading.cps
             }
-        } ?: 0f
-        
-        val maxValue = dataPoints.maxOfOrNull { 
-            when (selectedMetric) {
-                MetricType.DOSE_RATE -> it.uSvPerHour
-                MetricType.COUNT_RATE -> it.cps
-            }
-        } ?: 1f
-        
-        val normalizedValue = if (maxValue > minValue) {
-            (value - minValue) / (maxValue - minValue)
-        } else {
-            0.5f
         }
         
-        val color = interpolateColor(normalizedValue)
+        if (allValues.isEmpty()) return Pair(0f, 1f)
         
-        // Create a simple circular marker
-        val size = (12 * density).toInt()
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+        val minVal = allValues.minOrNull() ?: 0f
+        val maxVal = allValues.maxOrNull() ?: 1f
         
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-            this.color = color
-        }
-        
-        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 2 * density
-            this.color = Color.WHITE
-        }
-        
-        val radius = size / 2f
-        canvas.drawCircle(radius, radius, radius - strokePaint.strokeWidth, paint)
-        canvas.drawCircle(radius, radius, radius - strokePaint.strokeWidth, strokePaint)
-        
-        return android.graphics.drawable.BitmapDrawable(resources, bitmap)
+        return Pair(minVal, if (maxVal > minVal) maxVal else minVal + 1f)
     }
     
     private fun interpolateColor(normalizedValue: Float): Int {
@@ -328,39 +587,8 @@ class MapCardView @JvmOverloads constructor(
         return Color.rgb(r, g, b)
     }
     
-    private fun formatMarkerTitle(point: Prefs.MapDataPoint): String {
-        val doseUnit = Prefs.getDoseUnit(context)
-        val countUnit = Prefs.getCountUnit(context)
-        
-        val doseStr = when (doseUnit) {
-            Prefs.DoseUnit.USV_H -> String.format("%.3f µSv/h", point.uSvPerHour)
-            Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", point.uSvPerHour * 1000)
-        }
-        
-        val countStr = when (countUnit) {
-            Prefs.CountUnit.CPS -> String.format("%.1f CPS", point.cps)
-            Prefs.CountUnit.CPM -> String.format("%.0f CPM", point.cps * 60)
-        }
-        
-        return "$doseStr | $countStr"
-    }
-    
     private fun updateScaleBar() {
-        if (dataPoints.isEmpty()) {
-            scaleBarView.setRange(0f, 1f, selectedMetric)
-            return
-        }
-        
-        val values = dataPoints.map { 
-            when (selectedMetric) {
-                MetricType.DOSE_RATE -> it.uSvPerHour
-                MetricType.COUNT_RATE -> it.cps
-            }
-        }
-        
-        val minValue = values.minOrNull() ?: 0f
-        val maxValue = values.maxOrNull() ?: 1f
-        
+        val (minValue, maxValue) = getGlobalMinMax()
         scaleBarView.setRange(minValue, maxValue, selectedMetric)
     }
     
@@ -368,6 +596,63 @@ class MapCardView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         stopLocationTracking()
         mapView.onDetach()
+    }
+    
+    /**
+     * Custom overlay that draws hexagons on the map.
+     */
+    private inner class HexagonOverlay : Overlay() {
+        
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+        }
+        
+        private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f * density
+            color = Color.argb(80, 255, 255, 255)
+        }
+        
+        override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
+            if (shadow) return
+            if (hexagonData.isEmpty()) return
+            
+            val (minVal, maxVal) = getGlobalMinMax()
+            val projection = mapView.projection
+            
+            hexagonData.keys.forEach { hexId ->
+                val avg = getHexAverage(hexId) ?: return@forEach
+                val corners = getHexCorners(hexId) ?: return@forEach
+                
+                // Convert corners to screen coordinates
+                val path = Path()
+                corners.forEachIndexed { index, geoPoint ->
+                    val screenPoint = projection.toPixels(geoPoint, null)
+                    if (index == 0) {
+                        path.moveTo(screenPoint.x.toFloat(), screenPoint.y.toFloat())
+                    } else {
+                        path.lineTo(screenPoint.x.toFloat(), screenPoint.y.toFloat())
+                    }
+                }
+                path.close()
+                
+                // Calculate color based on normalized value
+                val normalized = if (maxVal > minVal) {
+                    ((avg - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
+                } else {
+                    0.5f
+                }
+                
+                val color = interpolateColor(normalized)
+                
+                // Draw semi-transparent filled hexagon
+                fillPaint.color = Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))
+                canvas.drawPath(path, fillPaint)
+                
+                // Draw border
+                canvas.drawPath(path, strokePaint)
+            }
+        }
     }
     
     /**
@@ -438,5 +723,146 @@ class MapCardView @JvmOverloads constructor(
                 MetricType.COUNT_RATE -> String.format("%.1f CPS", value)
             }
         }
+    }
+    
+    /**
+     * Custom overlay that draws a crosshair position marker at current location.
+     */
+    private inner class PositionOverlay : Overlay() {
+        
+        private val outerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f * density
+            color = ContextCompat.getColor(context, R.color.pro_cyan)
+        }
+        
+        private val innerCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = ContextCompat.getColor(context, R.color.pro_cyan)
+        }
+        
+        private val crosshairPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2f * density
+            color = ContextCompat.getColor(context, R.color.pro_cyan)
+        }
+        
+        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = Color.argb(60, 0, 229, 255)  // pro_cyan with alpha
+        }
+        
+        override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
+            if (shadow) return
+            
+            val location = currentLocation ?: return
+            val geoPoint = GeoPoint(location.latitude, location.longitude)
+            val screenPoint = mapView.projection.toPixels(geoPoint, null)
+            
+            val x = screenPoint.x.toFloat()
+            val y = screenPoint.y.toFloat()
+            
+            // Sizes reduced by 25% from original
+            val outerRadius = 10.5f * density
+            val innerRadius = 3.75f * density
+            val crosshairLength = 16.5f * density
+            val glowRadius = 15f * density
+            
+            // Draw glow effect
+            canvas.drawCircle(x, y, glowRadius, glowPaint)
+            
+            // Draw crosshair lines
+            canvas.drawLine(x - crosshairLength, y, x - outerRadius - 2 * density, y, crosshairPaint)
+            canvas.drawLine(x + outerRadius + 2 * density, y, x + crosshairLength, y, crosshairPaint)
+            canvas.drawLine(x, y - crosshairLength, x, y - outerRadius - 2 * density, crosshairPaint)
+            canvas.drawLine(x, y + outerRadius + 2 * density, x, y + crosshairLength, crosshairPaint)
+            
+            // Draw outer circle
+            canvas.drawCircle(x, y, outerRadius, outerCirclePaint)
+            
+            // Draw inner filled dot
+            canvas.drawCircle(x, y, innerRadius, innerCirclePaint)
+        }
+    }
+    
+    /**
+     * Overlay that detects taps on hexagons and shows details dialog.
+     */
+    private inner class HexagonTapOverlay : Overlay() {
+        
+        override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
+            val projection = mapView.projection
+            val geoPoint = projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
+            
+            // Convert tap location to hex ID
+            val hexId = latLngToHexId(geoPoint.latitude, geoPoint.longitude)
+            
+            // Check if this hex has data
+            val readings = hexagonData[hexId]
+            if (readings != null && readings.isNotEmpty()) {
+                showHexagonDetailsDialog(hexId, readings)
+                return true
+            }
+            
+            return false
+        }
+    }
+    
+    /**
+     * Show a dialog with detailed statistics for a hexagon.
+     */
+    private fun showHexagonDetailsDialog(hexId: String, readings: List<HexReading>) {
+        val doseValues = readings.map { it.uSvPerHour }
+        val cpsValues = readings.map { it.cps }
+        
+        val avgDose = doseValues.average().toFloat()
+        val minDose = doseValues.minOrNull() ?: 0f
+        val maxDose = doseValues.maxOrNull() ?: 0f
+        
+        val avgCps = cpsValues.average().toFloat()
+        val minCps = cpsValues.minOrNull() ?: 0f
+        val maxCps = cpsValues.maxOrNull() ?: 0f
+        
+        val readingCount = readings.size
+        val lastReadingTime = readings.maxByOrNull { it.timestampMs }?.timestampMs ?: 0L
+        val firstReadingTime = readings.minByOrNull { it.timestampMs }?.timestampMs ?: 0L
+        
+        val dateFormat = SimpleDateFormat("MMM d, h:mm:ss a", Locale.getDefault())
+        val lastTimeStr = if (lastReadingTime > 0) dateFormat.format(Date(lastReadingTime)) else "N/A"
+        val firstTimeStr = if (firstReadingTime > 0) dateFormat.format(Date(firstReadingTime)) else "N/A"
+        
+        // Calculate time span
+        val timeSpanMs = lastReadingTime - firstReadingTime
+        val timeSpanStr = when {
+            timeSpanMs < 60_000 -> "${timeSpanMs / 1000}s"
+            timeSpanMs < 3600_000 -> "${timeSpanMs / 60_000}m ${(timeSpanMs % 60_000) / 1000}s"
+            else -> "${timeSpanMs / 3600_000}h ${(timeSpanMs % 3600_000) / 60_000}m"
+        }
+        
+        val message = buildString {
+            appendLine("📊 HEXAGON STATISTICS")
+            appendLine()
+            appendLine("📍 Readings: $readingCount")
+            appendLine("⏱️ Time Span: $timeSpanStr")
+            appendLine()
+            appendLine("☢️ DOSE RATE (µSv/h)")
+            appendLine("   Average: ${String.format("%.4f", avgDose)}")
+            appendLine("   Min: ${String.format("%.4f", minDose)}")
+            appendLine("   Max: ${String.format("%.4f", maxDose)}")
+            appendLine()
+            appendLine("📈 COUNT RATE (CPS)")
+            appendLine("   Average: ${String.format("%.1f", avgCps)}")
+            appendLine("   Min: ${String.format("%.1f", minCps)}")
+            appendLine("   Max: ${String.format("%.1f", maxCps)}")
+            appendLine()
+            appendLine("🕐 First: $firstTimeStr")
+            appendLine("🕐 Last: $lastTimeStr")
+        }
+        
+        AlertDialog.Builder(context, R.style.DarkDialogTheme)
+            .setTitle("Hexagon Details")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 }

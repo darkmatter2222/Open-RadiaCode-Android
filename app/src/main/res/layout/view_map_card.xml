@@ -43,6 +43,18 @@
             android:contentDescription="Reset map data"
             android:scaleType="centerInside"
             android:padding="4dp" />
+        
+        <!-- Center on Location Button -->
+        <ImageButton
+            android:id="@+id/centerButton"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_mylocation"
+            android:contentDescription="Center on current location"
+            android:scaleType="centerInside"
+            android:padding="4dp" />
     </LinearLayout>
     
     <!-- Map View -->

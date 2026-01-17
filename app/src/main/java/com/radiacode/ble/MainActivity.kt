@@ -205,6 +205,8 @@ class MainActivity : AppCompatActivity() {
     
     // Application settings rows
     private lateinit var rowNotificationSettings: View
+    private lateinit var rowMapTheme: View
+    private lateinit var valueMapTheme: android.widget.TextView
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -510,6 +512,8 @@ class MainActivity : AppCompatActivity() {
         
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
+        rowMapTheme = findViewById(R.id.rowMapTheme)
+        valueMapTheme = findViewById(R.id.valueMapTheme)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -586,6 +590,10 @@ class MainActivity : AppCompatActivity() {
         // Application settings
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
+        
+        rowMapTheme.setOnClickListener {
+            showMapThemeDialog()
         }
         
         rowWindow.setOnClickListener {
@@ -953,6 +961,24 @@ class MainActivity : AppCompatActivity() {
                 Prefs.setIsotopeChartMode(this, mode)
                 updateIsotopeChartMode(mode)
                 refreshIsotopeCharts()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showMapThemeDialog() {
+        val themes = Prefs.MapTheme.values()
+        val themeNames = themes.map { it.displayName }.toTypedArray()
+        val current = themes.indexOf(Prefs.getMapTheme(this))
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Map Theme")
+            .setSingleChoiceItems(themeNames, current) { dialog, which ->
+                val selected = themes[which]
+                Prefs.setMapTheme(this, selected)
+                refreshSettingsRows()
+                mapCard.setMapTheme(selected)
                 dialog.dismiss()
             }
             .setNegativeButton("Cancel", null)
@@ -2122,6 +2148,9 @@ class MainActivity : AppCompatActivity() {
             Prefs.NotificationStyle.READINGS -> "Readings"
             Prefs.NotificationStyle.DETAILED -> "Detailed"
         }
+        
+        // Map theme
+        valueMapTheme.text = Prefs.getMapTheme(this).displayName
         
         // Isotope settings
         val enabledIsotopes = Prefs.getEnabledIsotopes(this)

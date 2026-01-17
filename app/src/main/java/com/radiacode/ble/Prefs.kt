@@ -51,10 +51,24 @@ object Prefs {
     
     // Map tracking keys
     private const val KEY_MAP_DATA_POINTS = "map_data_points"
+    private const val KEY_MAP_THEME = "map_theme"
     private const val MAX_MAP_POINTS = 500  // Limit to prevent excessive memory use
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
+    
+    /**
+     * Map theme options for the radiation map display.
+     */
+    enum class MapTheme(val displayName: String) {
+        HOME("Home"),                    // Custom theme matching app's card background
+        DARK_MATTER("Dark Matter"),      // CartoDB Dark Matter - darkest with labels
+        DARK_GRAY("Dark Gray"),          // CartoDB Dark Gray - dark without labels
+        VOYAGER("Voyager"),              // CartoDB Voyager - muted colors, good contrast
+        POSITRON("Positron"),            // CartoDB Positron - light gray, minimal
+        TONER("Toner"),                  // Stamen Toner - high contrast B&W
+        STANDARD("Standard")             // OpenStreetMap standard - colorful
+    }
     
     /**
      * Notification style - controls what appears in the persistent notification
@@ -1370,6 +1384,29 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_MAP_DATA_POINTS)
+            .apply()
+    }
+    
+    /**
+     * Get the current map theme.
+     */
+    fun getMapTheme(context: Context): MapTheme {
+        val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_MAP_THEME, MapTheme.DARK_MATTER.name)
+        return try {
+            MapTheme.valueOf(name ?: MapTheme.DARK_MATTER.name)
+        } catch (e: Exception) {
+            MapTheme.DARK_MATTER
+        }
+    }
+    
+    /**
+     * Set the map theme.
+     */
+    fun setMapTheme(context: Context, theme: MapTheme) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_THEME, theme.name)
             .apply()
     }
 }
