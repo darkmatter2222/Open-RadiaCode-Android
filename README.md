@@ -87,6 +87,12 @@ Key goal: appliance-style operation — once a preferred device is set, a foregr
 
 ### Dashboard
 - **Real-time charts** with zoom, pan, and configurable time windows (30s to 1h)
+- **Live Map View** - GPS-tracked radiation readings on interactive map
+  - Color-coded markers (green → yellow → red gradient)
+  - Switch between dose rate and count rate display
+  - Dynamic legend showing min/max values
+  - Reset button to clear readings
+  - Persistent storage of readings with GPS coordinates
 - **Delta cards** showing change rates with statistical sparklines
 - **Spike detection** with configurable markers and percentage annotations
 - **Statistical analysis** with z-score highlighting and trend indicators
