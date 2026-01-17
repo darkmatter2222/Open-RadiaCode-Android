@@ -1331,6 +1331,42 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_DASHBOARD_LAYOUT_JSON)
+            .remove(KEY_DASHBOARD_ORDER)
+            .apply()
+    }
+    
+    // ==================== Dashboard Section Order ====================
+    
+    private const val KEY_DASHBOARD_ORDER = "dashboard_section_order"
+    
+    /**
+     * Get the order of dashboard sections.
+     * Returns default order if none saved.
+     */
+    fun getDashboardOrder(context: Context): List<String> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_DASHBOARD_ORDER, null)
+        return if (json != null) {
+            try {
+                org.json.JSONArray(json).let { arr ->
+                    (0 until arr.length()).map { arr.getString(it) }
+                }
+            } catch (_: Exception) {
+                com.radiacode.ble.dashboard.DashboardReorderHelper.DEFAULT_ORDER
+            }
+        } else {
+            com.radiacode.ble.dashboard.DashboardReorderHelper.DEFAULT_ORDER
+        }
+    }
+    
+    /**
+     * Save the order of dashboard sections.
+     */
+    fun setDashboardOrder(context: Context, order: List<String>) {
+        val json = org.json.JSONArray(order).toString()
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_DASHBOARD_ORDER, json)
             .apply()
     }
 }

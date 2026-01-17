@@ -37,6 +37,7 @@ import com.radiacode.ble.ui.StackedAreaChartView
 import com.radiacode.ble.ui.IsotopeBarChartView
 import com.radiacode.ble.dashboard.DashboardGridLayout
 import com.radiacode.ble.dashboard.DashboardLayout
+import com.radiacode.ble.dashboard.DashboardReorderHelper
 import com.radiacode.ble.dashboard.PanelType
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
@@ -220,6 +221,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnResetDashboard: MaterialButton
     private lateinit var btnDoneEditing: MaterialButton
     private var isDashboardEditMode: Boolean = false
+    private var dashboardReorderHelper: DashboardReorderHelper? = null
+    
+    // Dashboard section wrappers for drag reordering
+    private lateinit var metricsCardsRow: LinearLayout
+    private lateinit var dashboardContainer: LinearLayout
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -391,6 +397,10 @@ class MainActivity : AppCompatActivity() {
         panelDevice = findViewById(R.id.panelDevice)
         panelSettings = findViewById(R.id.panelSettings)
         panelLogs = findViewById(R.id.panelLogs)
+        
+        // Dashboard container for reordering
+        dashboardContainer = panelDashboard as LinearLayout
+        metricsCardsRow = findViewById(R.id.metricsCardsRow)
 
         statusDot = findViewById(R.id.statusDot)
         statusLabel = findViewById(R.id.statusLabel)
@@ -2154,6 +2164,20 @@ class MainActivity : AppCompatActivity() {
         panelDevice.visibility = if (panel == Panel.Device) View.VISIBLE else View.GONE
         panelSettings.visibility = if (panel == Panel.Settings) View.VISIBLE else View.GONE
         panelLogs.visibility = if (panel == Panel.Logs) View.VISIBLE else View.GONE
+        
+        // Only show edit dashboard FAB on dashboard panel
+        if (panel == Panel.Dashboard) {
+            if (!isDashboardEditMode) {
+                fabEditDashboard.visibility = View.VISIBLE
+            }
+        } else {
+            fabEditDashboard.visibility = View.GONE
+            editModeToolbar.visibility = View.GONE
+            // Exit edit mode if switching away from dashboard
+            if (isDashboardEditMode) {
+                isDashboardEditMode = false
+            }
+        }
     }
 
     private fun doseUnitLabel(du: Prefs.DoseUnit): String = when (du) {
@@ -2344,6 +2368,22 @@ class MainActivity : AppCompatActivity() {
         btnResetDashboard.setOnClickListener {
             showResetDashboardConfirmation()
         }
+        
+        // Setup the reorder helper
+        dashboardReorderHelper = DashboardReorderHelper(dashboardContainer) { newOrder ->
+            Prefs.setDashboardOrder(this, newOrder)
+        }
+        
+        // Register sections for reordering
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_METRICS, metricsCardsRow)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_INTELLIGENCE, intelligenceCard)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_DOSE_CHART, doseChartPanel)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_COUNT_CHART, cpsChartPanel)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_ISOTOPE, isotopePanel)
+        
+        // Apply saved order
+        val savedOrder = Prefs.getDashboardOrder(this)
+        dashboardReorderHelper?.applyOrder(savedOrder)
     }
     
     private fun enterDashboardEditMode() {
@@ -2353,13 +2393,13 @@ class MainActivity : AppCompatActivity() {
         fabEditDashboard.visibility = View.GONE
         editModeToolbar.visibility = View.VISIBLE
         
-        // Enable edit mode on dashboard panels (when grid is integrated)
-        // TODO: Enable DashboardGridLayout.isEditMode = true
+        // Enable edit mode on reorder helper
+        dashboardReorderHelper?.isEditMode = true
         
         // Show toast with instructions
         android.widget.Toast.makeText(
             this, 
-            "Long-press and drag to reposition panels", 
+            "Long-press and drag panels to reorder them", 
             android.widget.Toast.LENGTH_SHORT
         ).show()
     }
@@ -2371,8 +2411,8 @@ class MainActivity : AppCompatActivity() {
         fabEditDashboard.visibility = View.VISIBLE
         editModeToolbar.visibility = View.GONE
         
-        // Save layout changes (when grid is integrated)
-        // TODO: Save via Prefs.setDashboardLayout()
+        // Disable edit mode on reorder helper
+        dashboardReorderHelper?.isEditMode = false
     }
     
     private fun showResetDashboardConfirmation() {
@@ -2389,8 +2429,8 @@ class MainActivity : AppCompatActivity() {
     private fun resetDashboardLayout() {
         Prefs.resetDashboardLayout(this)
         
-        // Reset grid (when integrated)
-        // TODO: dashboardGrid.resetToDefault()
+        // Reset reorder helper to default
+        dashboardReorderHelper?.resetToDefault()
         
         android.widget.Toast.makeText(
             this,
