@@ -109,37 +109,80 @@ class GridDashboardManager(
      */
     fun applyLayout(layout: DashboardLayout) {
         Log.d(TAG, "Applying layout with ${layout.items.size} items")
-        
-        // Build grid from layout items
+
+        // Build grid from layout items.
+        // IMPORTANT: Be defensive here. If a persisted layout gets partially corrupted (e.g. multiple items
+        // sharing a row where one is spanFull), the old grouping logic could produce empty rows and
+        // effectively "lose" cards, resulting in tall blank dashboard and irreversible state.
         gridRows.clear()
-        
-        // Group items by row
-        val rowMap = layout.items.groupBy { it.row }
-        val maxRow = rowMap.keys.maxOrNull() ?: 0
-        
-        for (rowIndex in 0..maxRow) {
-            val items = rowMap[rowIndex] ?: emptyList()
-            val row = when {
-                items.isEmpty() -> continue
-                items.size == 1 && items[0].spanFull -> {
-                    GridRow(fullWidthCard = items[0].id)
-                }
-                items.size == 1 && items[0].column == 0 -> {
-                    GridRow(leftCard = items[0].id)
-                }
-                items.size == 1 && items[0].column == 1 -> {
-                    GridRow(rightCard = items[0].id)
-                }
-                items.size >= 2 -> {
-                    val left = items.find { it.column == 0 }?.id
-                    val right = items.find { it.column == 1 }?.id
-                    GridRow(leftCard = left, rightCard = right)
-                }
-                else -> continue
+
+        // Keep only cards that actually exist in this build.
+        val knownItems = layout.items.filter { cardViews.containsKey(it.id) }
+        val placedIds = mutableSetOf<String>()
+
+        // Process by row order, but split rows that contain a full-span card.
+        val grouped = knownItems.groupBy { it.row }.toSortedMap()
+        for ((_, rowItemsRaw) in grouped) {
+            val rowItems = rowItemsRaw.sortedWith(compareBy<DashboardItem> { it.column }.thenBy { it.id })
+            val fullSpanItems = rowItems.filter { it.spanFull }
+            val sideItems = rowItems.filter { !it.spanFull }
+
+            // Any full-span item gets its own row.
+            for (item in fullSpanItems) {
+                gridRows.add(GridRow(fullWidthCard = item.id))
+                placedIds.add(item.id)
             }
-            gridRows.add(row)
+
+            // Pack side-by-side items (left/right) in order.
+            for (item in sideItems) {
+                val cardType = DashboardCardType.fromId(item.id)
+                val canBeSideBySide = cardType?.canBeSideBySide ?: true
+                if (!canBeSideBySide) {
+                    gridRows.add(GridRow(fullWidthCard = item.id))
+                    placedIds.add(item.id)
+                    continue
+                }
+
+                val preferRight = item.column == 1
+                val lastRow = gridRows.lastOrNull()
+                val canPlaceInLast = lastRow != null && lastRow.fullWidthCard == null && lastRow.hasSpace
+
+                if (canPlaceInLast) {
+                    val updated = if (preferRight && lastRow!!.rightCard == null) {
+                        lastRow.copy(rightCard = item.id)
+                    } else if (!preferRight && lastRow!!.leftCard == null) {
+                        lastRow.copy(leftCard = item.id)
+                    } else if (lastRow!!.leftCard == null) {
+                        lastRow.copy(leftCard = item.id)
+                    } else if (lastRow!!.rightCard == null) {
+                        lastRow.copy(rightCard = item.id)
+                    } else {
+                        null
+                    }
+
+                    if (updated != null) {
+                        gridRows[gridRows.size - 1] = updated
+                        placedIds.add(item.id)
+                        continue
+                    }
+                }
+
+                // Start a new side-by-side row.
+                gridRows.add(if (preferRight) GridRow(rightCard = item.id) else GridRow(leftCard = item.id))
+                placedIds.add(item.id)
+            }
         }
-        
+
+        // Ensure any registered cards missing from the saved layout still show up.
+        // This is a safety net so a bad saved layout never results in "blank" dashboard.
+        val missing = cardViews.keys.filter { it !in placedIds }
+        for (cardId in missing) {
+            gridRows.add(GridRow(fullWidthCard = cardId))
+        }
+
+        // Remove empties, if any.
+        gridRows.removeAll { it.isEmpty }
+
         rebuildDashboardViews()
     }
 
@@ -224,44 +267,61 @@ class GridDashboardManager(
      * Create a row view for the given grid row.
      */
     private fun createRowView(row: GridRow, rowIndex: Int): View {
-        return when {
-            row.fullWidthCard != null -> {
-                // Full-width card
-                createCardContainer(row.fullWidthCard, rowIndex, 0, true)
-            }
-            else -> {
+        // IMPORTANT: Always return a dedicated row container view.
+        // Never tag the actual card view itself; some cards rely on their tag internally.
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+
+            if (row.fullWidthCard != null) {
+                val cardContainer = FrameLayout(context)
+                val cardView = createCardContainer(row.fullWidthCard, rowIndex, 0, true)
+                cardContainer.addView(
+                    cardView,
+                    FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                addView(cardContainer)
+            } else {
                 // Side-by-side row
-                LinearLayout(context).apply {
+                val horizontal = LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutParams = LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                     )
-                    
-                    // Left column
-                    if (row.leftCard != null) {
-                        val container = createCardContainer(row.leftCard, rowIndex, 0, false)
-                        val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                        params.marginEnd = gap / 2
-                        addView(container, params)
-                    } else {
-                        addView(createEmptySlot(rowIndex, 0), LinearLayout.LayoutParams(0, (160 * density).toInt(), 1f).apply {
-                            marginEnd = gap / 2
-                        })
-                    }
-                    
-                    // Right column
-                    if (row.rightCard != null) {
-                        val container = createCardContainer(row.rightCard, rowIndex, 1, false)
-                        val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                        params.marginStart = gap / 2
-                        addView(container, params)
-                    } else {
-                        addView(createEmptySlot(rowIndex, 1), LinearLayout.LayoutParams(0, (160 * density).toInt(), 1f).apply {
-                            marginStart = gap / 2
-                        })
-                    }
                 }
+
+                // Left column
+                if (row.leftCard != null) {
+                    val container = createCardContainer(row.leftCard, rowIndex, 0, false)
+                    val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    params.marginEnd = gap / 2
+                    horizontal.addView(container, params)
+                } else {
+                    horizontal.addView(createEmptySlot(rowIndex, 0), LinearLayout.LayoutParams(0, (160 * density).toInt(), 1f).apply {
+                        marginEnd = gap / 2
+                    })
+                }
+
+                // Right column
+                if (row.rightCard != null) {
+                    val container = createCardContainer(row.rightCard, rowIndex, 1, false)
+                    val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    params.marginStart = gap / 2
+                    horizontal.addView(container, params)
+                } else {
+                    horizontal.addView(createEmptySlot(rowIndex, 1), LinearLayout.LayoutParams(0, (160 * density).toInt(), 1f).apply {
+                        marginStart = gap / 2
+                    })
+                }
+
+                addView(horizontal)
             }
         }
     }
@@ -279,6 +339,17 @@ class GridDashboardManager(
         
         // Remove from current parent
         (card.parent as? ViewGroup)?.removeView(card)
+
+        // Ensure the card is visible once it is managed by the grid.
+        // Some cards are declared as GONE in XML so they don't render twice before the manager re-parents them.
+        card.visibility = View.VISIBLE
+
+        // Defensive: clear any leftover transforms.
+        card.translationX = 0f
+        card.translationY = 0f
+        card.scaleX = 1f
+        card.scaleY = 1f
+        card.alpha = 1f
         
         if (!isEditMode) {
             // Return card directly when not in edit mode
@@ -415,7 +486,16 @@ class GridDashboardManager(
     
     private fun findDropTarget(rawX: Float, rawY: Float) {
         val screenWidth = context.resources.displayMetrics.widthPixels
-        val isRightSide = rawX > screenWidth / 2
+        val center = screenWidth / 2f
+        val isRightSide = rawX > center
+
+        // Center band snaps to full-width (span both columns).
+        // Also force full-width for cards that cannot be side-by-side.
+        val draggedId = draggedCardId
+        val draggedType = draggedId?.let { DashboardCardType.fromId(it) }
+        val canBeSideBySide = draggedType?.canBeSideBySide ?: true
+        val centerBandHalfWidth = screenWidth * 0.15f
+        val wantsFullWidth = !canBeSideBySide || kotlin.math.abs(rawX - center) <= centerBandHalfWidth
         
         // Find which row we're over by checking Y positions
         var targetRow = 0
@@ -444,8 +524,8 @@ class GridDashboardManager(
         
         val newTarget = GridPosition(
             row = targetRow,
-            column = if (isRightSide) 1 else 0,
-            spanFull = false
+            column = if (wantsFullWidth) 0 else if (isRightSide) 1 else 0,
+            spanFull = wantsFullWidth
         )
         
         if (dropTarget != newTarget) {
@@ -535,12 +615,23 @@ class GridDashboardManager(
         
         // Step 2: Insert at new position
         val adjustedRow = to.row.coerceIn(0, gridRows.size)
+
+        val cardType = DashboardCardType.fromId(cardId)
+        val canBeSideBySide = cardType?.canBeSideBySide ?: true
+
+        // Full-width drop: always insert a dedicated full-width row.
+        if (to.spanFull || !canBeSideBySide) {
+            gridRows.add(adjustedRow, GridRow(fullWidthCard = cardId))
+            gridRows.removeAll { it.isEmpty }
+            rebuildDashboardViews()
+            saveCurrentLayout()
+            vibrate()
+            return
+        }
         
         // Check if target row exists and has space
         if (adjustedRow < gridRows.size) {
             val targetRow = gridRows[adjustedRow]
-            val cardType = DashboardCardType.fromId(cardId)
-            val canBeSideBySide = cardType?.canBeSideBySide ?: true
             
             when {
                 // Card can't be side-by-side - insert as full row

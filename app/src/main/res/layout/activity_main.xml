@@ -1181,6 +1181,56 @@
                                     app:tint="@color/pro_text_muted" />
                             </LinearLayout>
 
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Reset Dashboard -->
+                            <LinearLayout
+                                android:id="@+id/rowResetDashboard"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Reset dashboard"
+                                        android:textColor="@color/pro_red"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Restore the default dashboard layout"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_revert"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
                         </LinearLayout>
                     </LinearLayout>
 

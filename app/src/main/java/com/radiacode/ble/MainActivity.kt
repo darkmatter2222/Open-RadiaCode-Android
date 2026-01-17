@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
     
     // Application settings rows
     private lateinit var rowNotificationSettings: View
+    private lateinit var rowResetDashboard: View
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -504,6 +505,7 @@ class MainActivity : AppCompatActivity() {
         
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
+        rowResetDashboard = findViewById(R.id.rowResetDashboard)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -580,6 +582,24 @@ class MainActivity : AppCompatActivity() {
         // Application settings
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
+
+        rowResetDashboard.setOnClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Reset dashboard")
+                .setMessage("Reset dashboard to the default layout? This cannot be undone.")
+                .setPositiveButton("Reset") { _, _ ->
+                    // Exit edit mode defensively so we don't persist the broken layout on the way out.
+                    if (::gridDashboardManager.isInitialized && gridDashboardManager.isEditMode) {
+                        gridDashboardManager.exitEditMode()
+                    }
+                    Prefs.resetDashboardLayout(this)
+                    Prefs.setDashboardEditMode(this, false)
+                    applyDashboardLayout()
+                    android.widget.Toast.makeText(this, "Dashboard reset", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
         
         rowWindow.setOnClickListener {
