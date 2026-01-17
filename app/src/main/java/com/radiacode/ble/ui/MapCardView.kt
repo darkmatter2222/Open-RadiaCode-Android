@@ -48,6 +48,7 @@ class MapCardView @JvmOverloads constructor(
     
     // Location
     private var locationManager: LocationManager? = null
+    private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
     private var isTrackingLocation = false
     
@@ -135,7 +136,7 @@ class MapCardView @JvmOverloads constructor(
         
         locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         
-        val locationListener = object : LocationListener {
+        locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 currentLocation = location
                 updateMapCenter(location)
@@ -152,7 +153,7 @@ class MapCardView @JvmOverloads constructor(
                 LocationManager.GPS_PROVIDER,
                 5000L,  // 5 seconds
                 10f,    // 10 meters
-                locationListener
+                locationListener!!
             )
             
             // Try to get last known location immediately
@@ -169,7 +170,14 @@ class MapCardView @JvmOverloads constructor(
      * Stop tracking location.
      */
     fun stopLocationTracking() {
-        locationManager?.removeUpdates { }
+        locationListener?.let { listener ->
+            try {
+                locationManager?.removeUpdates(listener)
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+        locationListener = null
         isTrackingLocation = false
     }
     
