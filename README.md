@@ -83,6 +83,8 @@ To update to a newer version:
 
 Key goal: appliance-style operation — once a preferred device is set, a foreground service keeps connecting and polling in the background, with home screen widgets showing the latest readings. The app automatically connects on boot and maintains connection in the background.
 
+<img src="https://github.com/user-attachments/assets/84d87a19-c2ab-4b88-8d1e-460ade11351a" alt="Open RadiaCode App Screenshot" width="300">
+
 ## Features
 
 ### Dashboard
