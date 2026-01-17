@@ -11,8 +11,8 @@ android {
         applicationId = "com.radiacode.ble"
         minSdk = 26
         targetSdk = 34
-        versionCode = 35
-        versionName = "0.46"
+        versionCode = 36
+        versionName = "0.47"
     }
 
     buildTypes {

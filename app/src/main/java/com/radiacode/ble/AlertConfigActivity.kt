@@ -228,11 +228,16 @@ class AlertConfigActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         
-        // Auto-update unit spinner based on metric selection
+        // Flag to prevent auto-update when editing existing alert
+        var isPopulating = isEdit
+        
+        // Auto-update unit spinner based on metric selection (only for new alerts)
         metricSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                // Set appropriate default unit based on metric
-                unitSpinner.setSelection(if (metrics[pos].second == "dose") 0 else 1)
+                // Only auto-set unit for NEW alerts, not when editing existing
+                if (!isPopulating) {
+                    unitSpinner.setSelection(if (metrics[pos].second == "dose") 0 else 1)
+                }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -252,6 +257,8 @@ class AlertConfigActivity : AppCompatActivity() {
             cooldownInput.setText((existing.cooldownMs / 1000).toString())
             colorSpinner.setSelection(colors.indexOfFirst { it.second == existing.color }.coerceAtLeast(0))
             severitySpinner.setSelection(severities.indexOfFirst { it.second == existing.severity }.coerceAtLeast(0))
+            // Allow future metric changes to auto-update unit
+            isPopulating = false
         } else {
             // Defaults
             durationInput.setText("5")
