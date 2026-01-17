@@ -1342,7 +1342,8 @@ class ProChartView @JvmOverloads constructor(
             // 1. Draw duration window (solid semi-transparent before trigger)
             // This shows the time period where the condition was met
             if (durationStartX < triggerX && marker.durationWindowStartMs < marker.triggerTimestampMs) {
-                alertRangePaint.color = Color.argb(50, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                // Stronger fill so it reads as a "bar" on dark backgrounds
+                alertRangePaint.color = Color.argb(85, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
                 alertRangePaint.shader = null
                 canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, alertRangePaint)
                 
@@ -1350,7 +1351,7 @@ class ProChartView @JvmOverloads constructor(
                 val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.STROKE
                     strokeWidth = density * 1f
-                    color = Color.argb(80, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                    color = Color.argb(140, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
                 }
                 canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, borderPaint)
             }
@@ -1360,7 +1361,7 @@ class ProChartView @JvmOverloads constructor(
             if (triggerX < cooldownEndX && marker.triggerTimestampMs < marker.cooldownEndMs) {
                 val cooldownGradient = LinearGradient(
                     triggerX, 0f, cooldownEndX, 0f,
-                    Color.argb(35, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
+                    Color.argb(75, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
                     Color.argb(0, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
                     Shader.TileMode.CLAMP
                 )

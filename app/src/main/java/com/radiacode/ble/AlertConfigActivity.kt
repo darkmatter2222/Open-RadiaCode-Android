@@ -186,6 +186,12 @@ class AlertConfigActivity : AppCompatActivity() {
             android.R.layout.simple_spinner_dropdown_item,
             units.map { it.first }
         )
+
+        // Option 1B: show unit but do not allow editing; it mirrors Metric.
+        unitSpinner.isEnabled = false
+        unitSpinner.isClickable = false
+        unitSpinner.alpha = 0.75f
+        unitSpinner.setOnTouchListener { _, _ -> true }
         
         // Setup color spinner with colored dots
         val colors = Prefs.AlertColor.values().map { "${getColorDot(it)} ${it.displayName}" to it.name.lowercase() }
@@ -232,16 +238,10 @@ class AlertConfigActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         
-        // Flag to prevent auto-update when editing existing alert
-        var isPopulating = isEdit
-        
-        // Auto-update unit spinner based on metric selection (only for new alerts)
+        // Auto-update unit display based on metric selection
         metricSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                // Only auto-set unit for NEW alerts, not when editing existing
-                if (!isPopulating) {
-                    unitSpinner.setSelection(if (metrics[pos].second == "dose") 0 else 1)
-                }
+                unitSpinner.setSelection(if (metrics[pos].second == "dose") 0 else 1)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
@@ -249,20 +249,21 @@ class AlertConfigActivity : AppCompatActivity() {
         // Pre-populate if editing
         if (existing != null) {
             nameInput.setText(existing.name)
-            metricSpinner.setSelection(metrics.indexOfFirst { it.second == existing.metric }.coerceAtLeast(0))
+            // Normalize old/buggy saved configs so Metric/Unit can't contradict.
+            val existingUnitEnum = Prefs.ThresholdUnit.fromString(existing.thresholdUnit)
+            val normalizedMetric = if (existingUnitEnum == Prefs.ThresholdUnit.CPS) "count" else "dose"
+            metricSpinner.setSelection(metrics.indexOfFirst { it.second == normalizedMetric }.coerceAtLeast(0))
             conditionSpinner.setSelection(conditions.indexOfFirst { it.second == existing.condition }.coerceAtLeast(0))
             if (existing.condition == "outside_sigma") {
                 sigmaSpinner.setSelection(sigmaOptions.indexOfFirst { it.second == existing.sigma }.coerceAtLeast(0))
             } else {
                 thresholdInput.setText(String.format(Locale.US, "%.4f", existing.threshold))
             }
-            unitSpinner.setSelection(units.indexOfFirst { it.second == existing.thresholdUnit }.coerceAtLeast(0))
+            unitSpinner.setSelection(if (normalizedMetric == "dose") 0 else 1)
             durationInput.setText(existing.durationSeconds.toString())
             cooldownInput.setText((existing.cooldownMs / 1000).toString())
             colorSpinner.setSelection(colors.indexOfFirst { it.second == existing.color }.coerceAtLeast(0))
             severitySpinner.setSelection(severities.indexOfFirst { it.second == existing.severity }.coerceAtLeast(0))
-            // Allow future metric changes to auto-update unit
-            isPopulating = false
         } else {
             // Defaults
             durationInput.setText("5")
@@ -289,7 +290,7 @@ class AlertConfigActivity : AppCompatActivity() {
 
                 val metric = metrics[metricSpinner.selectedItemPosition].second
                 val condition = conditions[conditionSpinner.selectedItemPosition].second
-                val thresholdUnit = units[unitSpinner.selectedItemPosition].second
+                val thresholdUnit = if (metric == "dose") "usv_h" else "cps"
                 
                 val threshold: Double
                 val sigma: Double

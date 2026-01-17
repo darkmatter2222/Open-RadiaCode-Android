@@ -1809,81 +1809,169 @@ class MainActivity : AppCompatActivity() {
         val doseDec = decimate(doseT, doseV)
         val cpsDec = decimate(cpsT, cpsV)
 
+        // Build chart markers directly from current series + configured alerts.
+        // This makes the visualization reliable even if notifications are blocked or events weren't persisted.
+        fun buildMarkersForMetric(
+            metric: String,
+            timestamps: List<Long>,
+            values: List<Float>,
+            displayDoseUnit: Prefs.DoseUnit,
+            displayCountUnit: Prefs.CountUnit,
+        ): List<ProChartView.AlertMarker> {
+            if (timestamps.size < 2 || timestamps.size != values.size) return emptyList()
+
+            val enabledAlerts = Prefs.getSmartAlerts(this)
+                .filter { it.enabled }
+                .filter { it.metric == metric }
+                .filter { it.condition == "above" || it.condition == "below" }
+
+            if (enabledAlerts.isEmpty()) return emptyList()
+
+            val out = ArrayList<ProChartView.AlertMarker>()
+
+            for (alert in enabledAlerts) {
+                val colorHex = "#${alert.getColorEnum().hexColor}"
+                val icon = alert.getSeverityEnum().icon
+
+                val thresholdDisplayed = when (metric) {
+                    "dose" -> {
+                        // Alerts store dose thresholds as usv_h; convert to chart display units.
+                        val base = alert.threshold
+                        if (displayDoseUnit == Prefs.DoseUnit.NSV_H) (base * 1000.0) else base
+                    }
+                    "count" -> {
+                        // Alerts store count thresholds as cps; convert to chart display units.
+                        val base = alert.threshold
+                        if (displayCountUnit == Prefs.CountUnit.CPM) (base * 60.0) else base
+                    }
+                    else -> alert.threshold
+                }
+
+                val requiredDurationMs = (alert.durationSeconds.coerceAtLeast(0) * 1000L)
+
+                var inSegment = false
+                var segStartIdx = 0
+
+                fun conditionTrue(v: Float): Boolean {
+                    return if (alert.condition == "above") v.toDouble() >= thresholdDisplayed else v.toDouble() <= thresholdDisplayed
+                }
+
+                for (i in values.indices) {
+                    val ok = conditionTrue(values[i])
+                    if (ok && !inSegment) {
+                        inSegment = true
+                        segStartIdx = i
+                    } else if (!ok && inSegment) {
+                        val segEndIdx = (i - 1).coerceAtLeast(segStartIdx)
+                        val startTs = timestamps[segStartIdx]
+                        val endTs = timestamps[segEndIdx]
+                        // Active region (thick translucent bar): start -> end
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = endTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+
+                        // Fired marker (dashed line + icon) once duration satisfied.
+                        if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
+                            val fireTs = startTs + requiredDurationMs
+                            out.add(
+                                ProChartView.AlertMarker(
+                                    triggerTimestampMs = fireTs,
+                                    durationWindowStartMs = startTs,
+                                    // Use segment end as a fade window to visually separate "trigger" moment.
+                                    cooldownEndMs = endTs,
+                                    color = colorHex,
+                                    icon = icon,
+                                    name = alert.name
+                                )
+                            )
+                        } else if (requiredDurationMs == 0L) {
+                            // Instant trigger: show dashed marker at the segment start.
+                            out.add(
+                                ProChartView.AlertMarker(
+                                    triggerTimestampMs = startTs,
+                                    durationWindowStartMs = startTs,
+                                    cooldownEndMs = endTs,
+                                    color = colorHex,
+                                    icon = icon,
+                                    name = alert.name
+                                )
+                            )
+                        }
+
+                        inSegment = false
+                    }
+                }
+
+                if (inSegment) {
+                    val startTs = timestamps[segStartIdx]
+                    val endTs = timestamps.last()
+                    out.add(
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = endTs,
+                            durationWindowStartMs = startTs,
+                            cooldownEndMs = endTs,
+                            color = colorHex,
+                            icon = icon,
+                            name = alert.name
+                        )
+                    )
+                    if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
+                        val fireTs = startTs + requiredDurationMs
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = fireTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+                    } else if (requiredDurationMs == 0L) {
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = startTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+                    }
+                }
+            }
+
+            return out
+        }
+
         mainHandler.post {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
 
-            // Update alert markers from stored events, filtered by metric
-            val allAlertEvents = Prefs.getAlertEvents(this)
-            android.util.Log.d("MainActivity", "updateCharts: loaded ${allAlertEvents.size} alert events total")
-            allAlertEvents.forEach { e ->
-                android.util.Log.d("MainActivity", "  Event: metric=${e.metric}, name=${e.alertName}, trigger=${e.triggerTimestampMs}")
-            }
-
-            // Active alerts (condition currently true) so we can visualize threshold exceedance immediately
-            val activeAlerts = Prefs.getActiveAlerts(this)
-            android.util.Log.d("MainActivity", "updateCharts: loaded ${activeAlerts.size} active alerts")
-            
-            // Filter and map dose alerts
-            val doseAlertMarkers = (
-                allAlertEvents
-                    .filter { it.metric == "dose" }
-                    .map { event ->
-                        ProChartView.AlertMarker(
-                            triggerTimestampMs = event.triggerTimestampMs,
-                            durationWindowStartMs = event.durationWindowStartMs,
-                            cooldownEndMs = event.cooldownEndMs,
-                            color = "#${event.getColorEnum().hexColor}",
-                            icon = event.getSeverityEnum().icon,
-                            name = event.alertName
-                        )
-                    } +
-                activeAlerts
-                    .filter { it.metric == "dose" }
-                    .map { state ->
-                        // Active marker: shade from start -> lastSeen, draw line at lastSeen
-                        ProChartView.AlertMarker(
-                            triggerTimestampMs = state.lastSeenMs,
-                            durationWindowStartMs = state.windowStartMs,
-                            cooldownEndMs = state.lastSeenMs,
-                            color = "#${Prefs.AlertColor.fromString(state.color).hexColor}",
-                            icon = Prefs.AlertSeverity.fromString(state.severity).icon,
-                            name = state.alertName
-                        )
-                    }
+            val doseMarkers = buildMarkersForMetric(
+                metric = "dose",
+                timestamps = doseDec.first,
+                values = doseDec.second,
+                displayDoseUnit = du,
+                displayCountUnit = cu,
             )
-            android.util.Log.d("MainActivity", "Dose chart: ${doseAlertMarkers.size} markers")
-            doseChart.setAlertMarkers(doseAlertMarkers)
-            
-            // Filter and map count alerts
-            val countAlertMarkers = (
-                allAlertEvents
-                    .filter { it.metric == "count" }
-                    .map { event ->
-                        ProChartView.AlertMarker(
-                            triggerTimestampMs = event.triggerTimestampMs,
-                            durationWindowStartMs = event.durationWindowStartMs,
-                            cooldownEndMs = event.cooldownEndMs,
-                            color = "#${event.getColorEnum().hexColor}",
-                            icon = event.getSeverityEnum().icon,
-                            name = event.alertName
-                        )
-                    } +
-                activeAlerts
-                    .filter { it.metric == "count" }
-                    .map { state ->
-                        ProChartView.AlertMarker(
-                            triggerTimestampMs = state.lastSeenMs,
-                            durationWindowStartMs = state.windowStartMs,
-                            cooldownEndMs = state.lastSeenMs,
-                            color = "#${Prefs.AlertColor.fromString(state.color).hexColor}",
-                            icon = Prefs.AlertSeverity.fromString(state.severity).icon,
-                            name = state.alertName
-                        )
-                    }
+            val countMarkers = buildMarkersForMetric(
+                metric = "count",
+                timestamps = cpsDec.first,
+                values = cpsDec.second,
+                displayDoseUnit = du,
+                displayCountUnit = cu,
             )
-            android.util.Log.d("MainActivity", "Count chart: ${countAlertMarkers.size} markers")
-            cpsChart.setAlertMarkers(countAlertMarkers)
+            doseChart.setAlertMarkers(doseMarkers)
+            cpsChart.setAlertMarkers(countMarkers)
 
             val sparkDose = doseDec.second.takeLast(20)
             val sparkCps = cpsDec.second.takeLast(20)
