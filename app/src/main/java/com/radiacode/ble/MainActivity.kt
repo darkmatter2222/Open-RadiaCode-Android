@@ -1958,15 +1958,15 @@ class MainActivity : AppCompatActivity() {
 
             val doseMarkers = buildMarkersForMetric(
                 metric = "dose",
-                timestamps = doseDec.first,
-                values = doseDec.second,
+                timestamps = doseT,
+                values = doseV,
                 displayDoseUnit = du,
                 displayCountUnit = cu,
             )
             val countMarkers = buildMarkersForMetric(
                 metric = "count",
-                timestamps = cpsDec.first,
-                values = cpsDec.second,
+                timestamps = cpsT,
+                values = cpsV,
                 displayDoseUnit = du,
                 displayCountUnit = cu,
             )
@@ -2415,6 +2415,12 @@ class MainActivity : AppCompatActivity() {
             outT.add(timestamps[i])
             outV.add(values[i])
             i += step
+        }
+        // Always include the last point so the visible time range is stable (prevents jitter).
+        val lastIdx = values.lastIndex
+        if (outT.isEmpty() || outT.last() != timestamps[lastIdx]) {
+            outT.add(timestamps[lastIdx])
+            outV.add(values[lastIdx])
         }
         return outT to outV
     }

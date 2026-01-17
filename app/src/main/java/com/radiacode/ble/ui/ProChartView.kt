@@ -1002,8 +1002,8 @@ class ProChartView @JvmOverloads constructor(
             drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
         }
 
-        // Draw alert markers (dashed lines, shaded regions, icons)
-        drawAlertMarkers(canvas, chartWidth, visibleStart, visibleEnd)
+        // Draw alert markers (dashed lines + icon; shading clipped under the curve)
+        drawAlertMarkers(canvas, chartWidth, visibleStart, visibleEnd, fillPath)
 
         // Draw peak marker
         if (n > 0) {
@@ -1283,7 +1283,8 @@ class ProChartView @JvmOverloads constructor(
         canvas: Canvas,
         chartWidth: Float,
         visibleStart: Int,
-        visibleEnd: Int
+        visibleEnd: Int,
+        fillPath: Path
     ) {
         if (alertMarkers.isEmpty() || timestampsMs.isEmpty()) {
             if (alertMarkers.isNotEmpty()) {
@@ -1338,30 +1339,30 @@ class ProChartView @JvmOverloads constructor(
             val durationStartX = timestampToX(marker.durationWindowStartMs)
             val triggerX = timestampToX(marker.triggerTimestampMs)
             val cooldownEndX = timestampToX(marker.cooldownEndMs)
-            
-            // 1. Draw duration window (solid semi-transparent before trigger)
-            // This shows the time period where the condition was met
+
+            // 1-2. Shading: clip to the under-curve fill so it only appears below the line
+            canvas.save()
+            canvas.clipPath(fillPath)
+
+            // 1. Duration window (solid semi-transparent before trigger)
             if (durationStartX < triggerX && marker.durationWindowStartMs < marker.triggerTimestampMs) {
-                // Stronger fill so it reads as a "bar" on dark backgrounds
-                alertRangePaint.color = Color.argb(85, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                alertRangePaint.color = Color.argb(45, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
                 alertRangePaint.shader = null
                 canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, alertRangePaint)
-                
-                // Draw a subtle border on the duration window
+
                 val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.STROKE
                     strokeWidth = density * 1f
-                    color = Color.argb(140, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                    color = Color.argb(90, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
                 }
                 canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, borderPaint)
             }
-            
-            // 2. Draw cooldown window (gradient fade-out after trigger)
-            // This shows when the alert won't fire again
+
+            // 2. Cooldown window (gradient fade-out after trigger)
             if (triggerX < cooldownEndX && marker.triggerTimestampMs < marker.cooldownEndMs) {
                 val cooldownGradient = LinearGradient(
                     triggerX, 0f, cooldownEndX, 0f,
-                    Color.argb(75, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
+                    Color.argb(35, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
                     Color.argb(0, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
                     Shader.TileMode.CLAMP
                 )
@@ -1369,6 +1370,8 @@ class ProChartView @JvmOverloads constructor(
                 canvas.drawRect(triggerX, chartTop, cooldownEndX, chartBottom, alertRangePaint)
                 alertRangePaint.shader = null
             }
+
+            canvas.restore()
             
             // 3. Draw dashed vertical line at trigger point
             alertLinePaint.color = markerColor
@@ -1377,34 +1380,24 @@ class ProChartView @JvmOverloads constructor(
             // 4. Draw small glow effect behind the trigger line
             val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                strokeWidth = density * 6f
-                color = Color.argb(40, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                strokeWidth = density * 4f
+                color = Color.argb(22, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
             }
             canvas.drawLine(triggerX, chartTop, triggerX, chartBottom, glowPaint)
             
             // 5. Draw severity icon at top of trigger line
             val iconSize = scaledDensity * 16f
-            val iconY = chartTop + density * 6f
-            
-            // Background circle for icon (with border)
-            alertLabelBgPaint.color = ContextCompat.getColor(context, R.color.pro_surface_elevated)
-            canvas.drawCircle(triggerX, iconY + iconSize / 2, iconSize / 2 + density * 4f, alertLabelBgPaint)
-            
-            // Border ring around icon
-            val iconBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = density * 2f
-                color = markerColor
-            }
-            canvas.drawCircle(triggerX, iconY + iconSize / 2, iconSize / 2 + density * 3f, iconBorderPaint)
-            
-            // Icon text
-            alertIconPaint.color = markerColor
+            val iconY = chartTop + density * 14f
+
+            // Icon text (no circular badge)
+            alertIconPaint.color = Color.WHITE
             alertIconPaint.textSize = iconSize
             alertIconPaint.textAlign = Paint.Align.CENTER
             val iconBounds = Rect()
             alertIconPaint.getTextBounds(marker.icon, 0, marker.icon.length, iconBounds)
+            alertIconPaint.setShadowLayer(density * 2f, 0f, density * 1f, Color.argb(160, 0, 0, 0))
             canvas.drawText(marker.icon, triggerX, iconY + iconSize / 2 + iconBounds.height() / 2, alertIconPaint)
+            alertIconPaint.clearShadowLayer()
             
             // 6. Draw alert name label below icon
             if (marker.name.isNotEmpty()) {
