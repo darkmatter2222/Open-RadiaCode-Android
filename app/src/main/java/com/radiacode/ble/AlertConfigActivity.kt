@@ -177,11 +177,15 @@ class AlertConfigActivity : AppCompatActivity() {
         )
         conditionSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
             conditions.map { it.first })
-        
+
         // Setup unit spinner
+        // Kept for clarity in the UI, but synchronized with Metric.
         val units = listOf("μSv/h" to "usv_h", "cps" to "cps")
-        unitSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-            units.map { it.first })
+        unitSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            units.map { it.first }
+        )
         
         // Setup color spinner with colored dots
         val colors = Prefs.AlertColor.values().map { "${getColorDot(it)} ${it.displayName}" to it.name.lowercase() }

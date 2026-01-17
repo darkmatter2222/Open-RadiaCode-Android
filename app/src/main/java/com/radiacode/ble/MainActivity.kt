@@ -1819,36 +1819,69 @@ class MainActivity : AppCompatActivity() {
             allAlertEvents.forEach { e ->
                 android.util.Log.d("MainActivity", "  Event: metric=${e.metric}, name=${e.alertName}, trigger=${e.triggerTimestampMs}")
             }
+
+            // Active alerts (condition currently true) so we can visualize threshold exceedance immediately
+            val activeAlerts = Prefs.getActiveAlerts(this)
+            android.util.Log.d("MainActivity", "updateCharts: loaded ${activeAlerts.size} active alerts")
             
             // Filter and map dose alerts
-            val doseAlertMarkers = allAlertEvents
-                .filter { it.metric == "dose" }
-                .map { event ->
-                    ProChartView.AlertMarker(
-                        triggerTimestampMs = event.triggerTimestampMs,
-                        durationWindowStartMs = event.durationWindowStartMs,
-                        cooldownEndMs = event.cooldownEndMs,
-                        color = "#${event.getColorEnum().hexColor}",
-                        icon = event.getSeverityEnum().icon,
-                        name = event.alertName
-                    )
-                }
+            val doseAlertMarkers = (
+                allAlertEvents
+                    .filter { it.metric == "dose" }
+                    .map { event ->
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = event.triggerTimestampMs,
+                            durationWindowStartMs = event.durationWindowStartMs,
+                            cooldownEndMs = event.cooldownEndMs,
+                            color = "#${event.getColorEnum().hexColor}",
+                            icon = event.getSeverityEnum().icon,
+                            name = event.alertName
+                        )
+                    } +
+                activeAlerts
+                    .filter { it.metric == "dose" }
+                    .map { state ->
+                        // Active marker: shade from start -> lastSeen, draw line at lastSeen
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = state.lastSeenMs,
+                            durationWindowStartMs = state.windowStartMs,
+                            cooldownEndMs = state.lastSeenMs,
+                            color = "#${Prefs.AlertColor.fromString(state.color).hexColor}",
+                            icon = Prefs.AlertSeverity.fromString(state.severity).icon,
+                            name = state.alertName
+                        )
+                    }
+            )
             android.util.Log.d("MainActivity", "Dose chart: ${doseAlertMarkers.size} markers")
             doseChart.setAlertMarkers(doseAlertMarkers)
             
             // Filter and map count alerts
-            val countAlertMarkers = allAlertEvents
-                .filter { it.metric == "count" }
-                .map { event ->
-                    ProChartView.AlertMarker(
-                        triggerTimestampMs = event.triggerTimestampMs,
-                        durationWindowStartMs = event.durationWindowStartMs,
-                        cooldownEndMs = event.cooldownEndMs,
-                        color = "#${event.getColorEnum().hexColor}",
-                        icon = event.getSeverityEnum().icon,
-                        name = event.alertName
-                    )
-                }
+            val countAlertMarkers = (
+                allAlertEvents
+                    .filter { it.metric == "count" }
+                    .map { event ->
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = event.triggerTimestampMs,
+                            durationWindowStartMs = event.durationWindowStartMs,
+                            cooldownEndMs = event.cooldownEndMs,
+                            color = "#${event.getColorEnum().hexColor}",
+                            icon = event.getSeverityEnum().icon,
+                            name = event.alertName
+                        )
+                    } +
+                activeAlerts
+                    .filter { it.metric == "count" }
+                    .map { state ->
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = state.lastSeenMs,
+                            durationWindowStartMs = state.windowStartMs,
+                            cooldownEndMs = state.lastSeenMs,
+                            color = "#${Prefs.AlertColor.fromString(state.color).hexColor}",
+                            icon = Prefs.AlertSeverity.fromString(state.severity).icon,
+                            name = state.alertName
+                        )
+                    }
+            )
             android.util.Log.d("MainActivity", "Count chart: ${countAlertMarkers.size} markers")
             cpsChart.setAlertMarkers(countAlertMarkers)
 

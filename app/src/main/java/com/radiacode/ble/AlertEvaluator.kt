@@ -57,6 +57,25 @@ class AlertEvaluator(private val context: Context) {
                 }
                 
                 val startTime = alertStartTimes[alert.id] ?: now
+
+                // Persist active state so UI can render immediately (even before duration requirement is met)
+                try {
+                    Prefs.upsertActiveAlert(
+                        context,
+                        Prefs.ActiveAlertState(
+                            alertId = alert.id,
+                            alertName = alert.name,
+                            metric = alert.metric,
+                            color = alert.color,
+                            severity = alert.severity,
+                            windowStartMs = startTime,
+                            lastSeenMs = now
+                        )
+                    )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Failed to persist active alert state", t)
+                }
+
                 val durationMs = now - startTime
                 val requiredDurationMs = alert.durationSeconds * 1000L
                 Log.d(TAG, "Alert '${alert.name}': duration ${durationMs}ms / ${requiredDurationMs}ms required")
@@ -82,6 +101,12 @@ class AlertEvaluator(private val context: Context) {
                     Log.d(TAG, "Alert '${alert.name}' condition no longer met, resetting timer")
                 }
                 alertStartTimes.remove(alert.id)
+
+                // Clear persisted active state
+                try {
+                    Prefs.removeActiveAlert(context, alert.id)
+                } catch (_: Throwable) {
+                }
             }
         }
     }

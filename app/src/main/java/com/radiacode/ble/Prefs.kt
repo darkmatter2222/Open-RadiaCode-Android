@@ -40,6 +40,9 @@ object Prefs {
     
     // Smart Alert keys
     private const val KEY_ALERTS_JSON = "alerts_json"
+
+    // Active alert state (for in-progress chart visualization)
+    private const val KEY_ACTIVE_ALERTS_JSON = "active_alerts_json"
     
     // Multi-device keys
     private const val KEY_DEVICES_JSON = "devices_json"
@@ -496,13 +499,14 @@ object Prefs {
                     val id = json.substringAfter("\"id\":\"").substringBefore("\"")
                     val name = json.substringAfter("\"name\":\"").substringBefore("\"")
                     val enabled = json.substringAfter("\"enabled\":").substringBefore(",").toBoolean()
-                    val metric = json.substringAfter("\"metric\":\"").substringBefore("\"")
+                    val metricRaw = json.substringAfter("\"metric\":\"").substringBefore("\"")
                     val condition = json.substringAfter("\"condition\":\"").substringBefore("\"")
                     val threshold = json.substringAfter("\"threshold\":").substringBefore(",").toDouble()
                     // Parse thresholdUnit with fallback based on metric
-                    val thresholdUnit = json.substringAfter("\"thresholdUnit\":\"").substringBefore("\"").ifEmpty { 
-                        if (metric == "dose") "usv_h" else "cps"
+                    val thresholdUnitRaw = json.substringAfter("\"thresholdUnit\":\"").substringBefore("\"").ifEmpty {
+                        if (metricRaw == "dose") "usv_h" else "cps"
                     }
+                    val (metric, thresholdUnit) = normalizeMetricAndUnit(metricRaw, thresholdUnitRaw)
                     val sigma = json.substringAfter("\"sigma\":").substringBefore(",").toDoubleOrNull() ?: 2.0
                     val durationSeconds = json.substringAfter("\"durationSeconds\":").substringBefore(",").toInt()
                     val cooldownMs = json.substringAfter("\"cooldownMs\":").substringBefore(",").toLongOrNull() 
@@ -616,6 +620,89 @@ object Prefs {
     }
     
     // ========== Alert Events (for chart visualization) ==========
+
+    private fun normalizeMetricAndUnit(metricRaw: String, thresholdUnitRaw: String): Pair<String, String> {
+        val unitEnum = ThresholdUnit.fromString(thresholdUnitRaw)
+        val metric = when (metricRaw.lowercase()) {
+            "dose" -> "dose"
+            "count" -> "count"
+            else -> if (unitEnum == ThresholdUnit.CPS) "count" else "dose"
+        }
+        val unit = if (metric == "dose") "usv_h" else "cps"
+        return metric to unit
+    }
+
+    /**
+     * Active alert state - represents an alert whose condition is currently true.
+     * This exists so the dashboard can draw shaded regions immediately (e.g. while duration is counting down)
+     * and while an alert remains in an active/triggering state.
+     */
+    data class ActiveAlertState(
+        val alertId: String,
+        val alertName: String,
+        val metric: String,
+        val color: String,
+        val severity: String,
+        val windowStartMs: Long,
+        val lastSeenMs: Long,
+    ) {
+        fun toJson(): String {
+            return """{"alertId":"$alertId","alertName":"$alertName","metric":"$metric","color":"$color","severity":"$severity","windowStartMs":$windowStartMs,"lastSeenMs":$lastSeenMs}"""
+        }
+
+        companion object {
+            fun fromJson(json: String): ActiveAlertState? {
+                return try {
+                    val alertId = json.substringAfter("\"alertId\":\"").substringBefore("\"")
+                    val alertName = json.substringAfter("\"alertName\":\"").substringBefore("\"")
+                    val metric = json.substringAfter("\"metric\":\"").substringBefore("\"")
+                    val color = json.substringAfter("\"color\":\"").substringBefore("\"")
+                    val severity = json.substringAfter("\"severity\":\"").substringBefore("\"")
+                    val windowStartMs = json.substringAfter("\"windowStartMs\":").substringBefore(",").toLongOrNull() ?: 0L
+                    val lastSeenMs = json.substringAfter("\"lastSeenMs\":").substringBefore("}").toLongOrNull() ?: 0L
+                    ActiveAlertState(alertId, alertName, metric, color, severity, windowStartMs, lastSeenMs)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+    }
+
+    fun getActiveAlerts(context: Context): List<ActiveAlertState> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_ACTIVE_ALERTS_JSON, "[]") ?: "[]"
+        if (json == "[]") return emptyList()
+
+        val now = System.currentTimeMillis()
+        // If the app/service was killed, stale entries would remain; ignore anything older than 2 minutes.
+        val staleCutoff = now - 120_000L
+
+        return json.removeSurrounding("[", "]")
+            .split("},{")
+            .map { it.trim().let { s -> if (!s.startsWith("{")) "{$s" else s }.let { s -> if (!s.endsWith("}")) "$s}" else s } }
+            .mapNotNull { ActiveAlertState.fromJson(it) }
+            .filter { it.lastSeenMs >= staleCutoff }
+    }
+
+    private fun setActiveAlerts(context: Context, states: List<ActiveAlertState>) {
+        val json = if (states.isEmpty()) "[]" else "[${states.joinToString(",") { it.toJson() }}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ACTIVE_ALERTS_JSON, json)
+            .apply()
+    }
+
+    fun upsertActiveAlert(context: Context, state: ActiveAlertState) {
+        val states = getActiveAlerts(context).toMutableList()
+        val idx = states.indexOfFirst { it.alertId == state.alertId }
+        if (idx >= 0) states[idx] = state else states.add(state)
+        setActiveAlerts(context, states)
+    }
+
+    fun removeActiveAlert(context: Context, alertId: String) {
+        val states = getActiveAlerts(context).filter { it.alertId != alertId }
+        setActiveAlerts(context, states)
+    }
     
     /**
      * Get all stored alert events for chart visualization
