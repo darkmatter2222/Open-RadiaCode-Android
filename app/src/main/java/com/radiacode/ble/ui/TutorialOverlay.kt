@@ -316,7 +316,7 @@ class TutorialOverlay(
                 TutorialStep(
                     title = "Safety Status",
                     description = "The safety card gives you instant context: Is this reading normal? The traffic-light indicator (🟢 Safe, 🟡 Elevated, 🔴 High) and comparisons to everyday sources help you understand your readings.",
-                    targetViewId = R.id.safetyCard,
+                    targetViewId = 0, // Will use center of screen as fallback
                     position = Position.TOP,
                     emoji = "🛡️"
                 ),
@@ -355,7 +355,7 @@ class TutorialOverlay(
          * Check if tutorial should be shown
          */
         fun shouldShowTutorial(context: Context): Boolean {
-            return Prefs.shouldShowDashboardTutorial(context)
+            return !Prefs.hasDashboardTutorialSeen(context)
         }
 
         /**

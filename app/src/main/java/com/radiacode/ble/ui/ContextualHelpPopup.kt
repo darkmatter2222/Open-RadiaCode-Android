@@ -22,7 +22,7 @@ import com.radiacode.ble.R
  */
 class ContextualHelpPopup(
     context: Context
-) : Dialog(context, R.style.Theme_RadiaCode_Dialog_Dim) {
+) : Dialog(context, R.style.DarkDialogTheme) {
 
     private val density = context.resources.displayMetrics.density
 
@@ -95,7 +95,7 @@ class ContextualHelpPopup(
             setTextColor(ContextCompat.getColor(context, R.color.pro_text_secondary))
             textSize = 14f
             setPadding(0, (density * 12).toInt(), 0, 0)
-            lineSpacingMultiplier = 1.3f
+            setLineSpacing(0f, 1.3f)
         }
         container.addView(descText)
 

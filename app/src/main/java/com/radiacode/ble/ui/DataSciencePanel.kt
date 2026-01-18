@@ -7,6 +7,7 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.R
 import com.radiacode.ble.StatisticsCalculator
+import com.radiacode.ble.Statistics
 import kotlin.math.*
 
 /**
@@ -26,7 +27,7 @@ class DataSciencePanel @JvmOverloads constructor(
     
     private var chartType: ChartType = ChartType.HISTOGRAM
     private var data: List<Float> = emptyList()
-    private var stats: StatisticsCalculator.Statistics? = null
+    private var stats: Statistics? = null
 
     // Histogram data
     private var histogramBins: IntArray = IntArray(0)
@@ -230,7 +231,7 @@ class DataSciencePanel @JvmOverloads constructor(
             return
         }
 
-        autocorrValues = (0 until maxLag).map { lag ->
+        autocorrValues = (0 until maxLag).map { lag: Int ->
             var sum = 0f
             for (i in 0 until data.size - lag) {
                 sum += (data[i] - mean) * (data[i + lag] - mean)

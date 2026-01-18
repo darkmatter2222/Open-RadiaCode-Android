@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
-import com.radiacode.ble.utils.IsotopeEncyclopedia
+import com.radiacode.ble.IsotopeEncyclopedia
 
 /**
  * Isotope Info Card
@@ -92,20 +92,23 @@ class IsotopeInfoCard @JvmOverloads constructor(
     }
 
     fun setIsotope(name: String, confidence: Float = 0.8f) {
-        this.isotopeInfo = IsotopeEncyclopedia.getInfo(name)
+        this.isotopeInfo = IsotopeEncyclopedia.getIsotopeInfo(name)
         this.confidence = confidence.coerceIn(0f, 1f)
+        requestLayout()
         invalidate()
     }
 
     fun setIsotope(info: IsotopeEncyclopedia.IsotopeInfo, confidence: Float = 0.8f) {
         this.isotopeInfo = info
         this.confidence = confidence.coerceIn(0f, 1f)
+        requestLayout()
         invalidate()
     }
 
     fun clear() {
         this.isotopeInfo = null
         this.confidence = 0f
+        requestLayout()
         invalidate()
     }
 
@@ -123,8 +126,8 @@ class IsotopeInfoCard @JvmOverloads constructor(
         val cornerRadius = 24f
         val rect = RectF(0f, 0f, width.toFloat(), height.toFloat())
 
-        // Glow effect behind card based on danger level
-        val glowColor = getDangerGlowColor(info.dangerLevel)
+        // Glow effect behind card based on category
+        val glowColor = getCategoryGlowColor(info.category)
         glowPaint.shader = RadialGradient(
             width / 2f, 0f,
             width / 2f,
@@ -145,7 +148,7 @@ class IsotopeInfoCard @JvmOverloads constructor(
 
         // === Header Section ===
         
-        // Symbol box on left
+        // Emoji box on left
         val symbolBoxSize = 100f
         val symbolRect = RectF(leftPadding, y, leftPadding + symbolBoxSize, y + symbolBoxSize)
         
@@ -155,14 +158,18 @@ class IsotopeInfoCard @JvmOverloads constructor(
         }
         canvas.drawRoundRect(symbolRect, 16f, 16f, symbolBgPaint)
         
-        // Symbol text
-        canvas.drawText(info.symbol, symbolRect.centerX(), symbolRect.centerY() + 24f, symbolPaint)
+        // Emoji
+        val emojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 48f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(info.emoji, symbolRect.centerX(), symbolRect.centerY() + 16f, emojiPaint)
 
-        // Name and element on right of symbol
+        // Name and symbol on right of emoji
         val nameX = leftPadding + symbolBoxSize + 20f
         canvas.drawText(info.fullName, nameX, y + 36f, namePaint)
         
-        val elementText = "${info.element} · ${info.symbol}"
+        val elementText = info.symbol
         canvas.drawText(elementText, nameX, y + 68f, labelPaint)
 
         // Confidence badge
@@ -173,10 +180,10 @@ class IsotopeInfoCard @JvmOverloads constructor(
         y += symbolBoxSize + 24f
 
         // === Energy Section ===
-        drawSectionLabel(canvas, "Primary Energies", leftPadding, y)
+        drawSectionLabel(canvas, "Gamma Energies", leftPadding, y)
         y += 36f
 
-        info.primaryEnergies.take(3).forEach { energy ->
+        info.gammaEnergies.take(3).forEach { energy ->
             canvas.drawText("${energy.toInt()} keV", leftPadding, y, energyPaint)
             y += 32f
         }
@@ -189,17 +196,16 @@ class IsotopeInfoCard @JvmOverloads constructor(
         // Half-life
         drawPropertyBox(canvas, "Half-life", info.halfLife, leftPadding, y, colWidth - 8f)
         
-        // Decay type
-        val decayText = info.decayType.joinToString(", ") { it.symbol }
-        drawPropertyBox(canvas, "Decay", decayText, leftPadding + colWidth, y, colWidth - 8f)
+        // Decay mode
+        drawPropertyBox(canvas, "Decay", info.decayMode, leftPadding + colWidth, y, colWidth - 8f)
         
         // Category
         drawPropertyBox(canvas, "Type", info.category.displayName, leftPadding + colWidth * 2, y, colWidth - 8f)
 
         y += 80f
 
-        // === Danger Level ===
-        drawDangerBadge(canvas, info.dangerLevel, leftPadding, y)
+        // === Category Badge ===
+        drawCategoryBadge(canvas, info.category, leftPadding, y)
 
         y += 48f
 
@@ -256,39 +262,22 @@ class IsotopeInfoCard @JvmOverloads constructor(
         canvas.drawText(text, rect.centerX() - textWidth / 2, rect.centerY() + 7f, tagPaint)
     }
 
-    private fun drawDangerBadge(canvas: Canvas, danger: IsotopeEncyclopedia.DangerLevel, x: Float, y: Float) {
-        val emoji = when (danger) {
-            IsotopeEncyclopedia.DangerLevel.LOW -> "🟢"
-            IsotopeEncyclopedia.DangerLevel.MODERATE -> "🟡"
-            IsotopeEncyclopedia.DangerLevel.HIGH -> "🟠"
-            IsotopeEncyclopedia.DangerLevel.VERY_HIGH -> "🔴"
-        }
-        
-        val label = when (danger) {
-            IsotopeEncyclopedia.DangerLevel.LOW -> "Low Hazard"
-            IsotopeEncyclopedia.DangerLevel.MODERATE -> "Moderate Hazard"
-            IsotopeEncyclopedia.DangerLevel.HIGH -> "High Hazard"
-            IsotopeEncyclopedia.DangerLevel.VERY_HIGH -> "Very High Hazard"
-        }
+    private fun drawCategoryBadge(canvas: Canvas, category: IsotopeEncyclopedia.Category, x: Float, y: Float) {
+        val label = category.displayName
+        val categoryColor = Color.parseColor("#${category.colorHex}")
 
-        val textColor = when (danger) {
-            IsotopeEncyclopedia.DangerLevel.LOW -> colorGreen
-            IsotopeEncyclopedia.DangerLevel.MODERATE -> colorYellow
-            IsotopeEncyclopedia.DangerLevel.HIGH -> Color.parseColor("#FF9800")
-            IsotopeEncyclopedia.DangerLevel.VERY_HIGH -> colorRed
-        }
-
-        valuePaint.color = textColor
+        valuePaint.color = categoryColor
         valuePaint.textSize = 28f
-        canvas.drawText("$emoji  $label", x, y, valuePaint)
+        canvas.drawText("●  $label", x, y, valuePaint)
     }
 
-    private fun getDangerGlowColor(danger: IsotopeEncyclopedia.DangerLevel): Int {
-        return when (danger) {
-            IsotopeEncyclopedia.DangerLevel.LOW -> Color.argb(20, 105, 240, 174)
-            IsotopeEncyclopedia.DangerLevel.MODERATE -> Color.argb(30, 255, 214, 0)
-            IsotopeEncyclopedia.DangerLevel.HIGH -> Color.argb(40, 255, 152, 0)
-            IsotopeEncyclopedia.DangerLevel.VERY_HIGH -> Color.argb(50, 255, 82, 82)
+    private fun getCategoryGlowColor(category: IsotopeEncyclopedia.Category): Int {
+        return when (category) {
+            IsotopeEncyclopedia.Category.NATURAL -> Color.argb(20, 105, 240, 174)
+            IsotopeEncyclopedia.Category.MEDICAL -> Color.argb(30, 0, 229, 255)
+            IsotopeEncyclopedia.Category.INDUSTRIAL -> Color.argb(30, 255, 215, 64)
+            IsotopeEncyclopedia.Category.FISSION -> Color.argb(40, 255, 82, 82)
+            IsotopeEncyclopedia.Category.COSMOGENIC -> Color.argb(30, 224, 64, 251)
         }
     }
 
