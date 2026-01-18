@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         private const val PERMISSION_REQUEST_CODE = 100
+        private const val AUDIO_PERMISSION_REQUEST_CODE = 101
         private const val TAG = "RadiaCode"
         private const val MAX_CHART_POINTS = 800
     }
@@ -425,9 +426,30 @@ class MainActivity : AppCompatActivity() {
     
     /**
      * Show the Vega introduction dialog.
+     * Requests RECORD_AUDIO permission for audio visualization.
      * @param isFirstRun If true, marks the intro as seen after dismissal.
      */
     private fun showVegaIntro(isFirstRun: Boolean = false) {
+        // Request RECORD_AUDIO permission for real-time audio visualization
+        // This allows the waveform to react to the actual audio being played
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
+            != PackageManager.PERMISSION_GRANTED) {
+            // Request permission, then show intro regardless of result
+            pendingIntroFirstRun = isFirstRun
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                AUDIO_PERMISSION_REQUEST_CODE
+            )
+        } else {
+            // Permission already granted, show intro
+            showVegaIntroDialog(isFirstRun)
+        }
+    }
+    
+    private var pendingIntroFirstRun = false
+    
+    private fun showVegaIntroDialog(isFirstRun: Boolean) {
         val dialog = VegaIntroDialog(this) {
             // Callback when dismissed
             if (isFirstRun) {
@@ -1570,12 +1592,21 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE && hasAllPermissions()) {
-            startServiceIfConfigured()
-            // Start location tracking for map
-            mapCard.startLocationTracking()
-        } else {
-            updateStatus(false, "Permissions")
+        when (requestCode) {
+            PERMISSION_REQUEST_CODE -> {
+                if (hasAllPermissions()) {
+                    startServiceIfConfigured()
+                    // Start location tracking for map
+                    mapCard.startLocationTracking()
+                } else {
+                    updateStatus(false, "Permissions")
+                }
+            }
+            AUDIO_PERMISSION_REQUEST_CODE -> {
+                // Show intro regardless of permission result
+                // The visualization will fall back to simulated if permission denied
+                showVegaIntroDialog(pendingIntroFirstRun)
+            }
         }
     }
 
