@@ -1409,4 +1409,76 @@ object Prefs {
             .putString(KEY_MAP_THEME, theme.name)
             .apply()
     }
+    
+    // ========== Map Widget Configuration ==========
+    
+    private const val KEY_MAP_WIDGET_CONFIG_PREFIX = "map_widget_config_"
+    private const val KEY_MAP_WIDGET_IDS = "map_widget_ids_json"
+    
+    /**
+     * Get configuration for a specific map widget instance.
+     */
+    fun getMapWidgetConfig(context: Context, widgetId: Int): MapWidgetConfig? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_MAP_WIDGET_CONFIG_PREFIX + widgetId, null) ?: return null
+        return MapWidgetConfig.fromJson(json)
+    }
+    
+    /**
+     * Save configuration for a specific map widget instance.
+     */
+    fun setMapWidgetConfig(context: Context, config: MapWidgetConfig) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_WIDGET_CONFIG_PREFIX + config.widgetId, config.toJson())
+            .apply()
+        
+        // Also update the master list of map widget IDs
+        val widgetIds = getMapWidgetIds(context).toMutableSet()
+        widgetIds.add(config.widgetId)
+        saveMapWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Delete configuration for a map widget instance (when widget is removed).
+     */
+    fun deleteMapWidgetConfig(context: Context, widgetId: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_MAP_WIDGET_CONFIG_PREFIX + widgetId)
+            .apply()
+        
+        val widgetIds = getMapWidgetIds(context).toMutableSet()
+        widgetIds.remove(widgetId)
+        saveMapWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Get all configured map widget IDs.
+     */
+    fun getMapWidgetIds(context: Context): Set<Int> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_MAP_WIDGET_IDS, "[]") ?: "[]"
+        return json.removeSurrounding("[", "]")
+            .split(",")
+            .filter { it.isNotBlank() }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .toSet()
+    }
+    
+    private fun saveMapWidgetIds(context: Context, ids: Set<Int>) {
+        val json = "[${ids.joinToString(",")}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_WIDGET_IDS, json)
+            .apply()
+    }
+    
+    /**
+     * Get all map widget configurations.
+     */
+    fun getAllMapWidgetConfigs(context: Context): List<MapWidgetConfig> {
+        return getMapWidgetIds(context)
+            .mapNotNull { getMapWidgetConfig(context, it) }
+    }
 }

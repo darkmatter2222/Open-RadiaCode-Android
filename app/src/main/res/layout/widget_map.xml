@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Map Widget Layout - displays radiation map visualization -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mapWidgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:background="@drawable/widget_background">
+
+    <!-- Header row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="4dp">
+
+        <!-- Metric label -->
+        <TextView
+            android:id="@+id/mapMetricLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="☢️ DOSE"
+            android:textColor="@color/pro_cyan"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <!-- Metadata row (temp/battery) -->
+        <LinearLayout
+            android:id="@+id/mapMetadataRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/mapTemperature"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🌡️ 25°C"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="10sp"
+                android:layout_marginEnd="8dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/mapBattery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔋 100%"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="10sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Map image - rendered as bitmap -->
+    <ImageView
+        android:id="@+id/mapImage"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="fitCenter"
+        android:contentDescription="Radiation map" />
+
+    <!-- Footer row -->
+    <TextView
+        android:id="@+id/mapPointCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="0 points"
+        android:textColor="@color/pro_text_muted"
+        android:textSize="9sp"
+        android:paddingTop="4dp" />
+
+</LinearLayout>

@@ -136,6 +136,30 @@
                 android:resource="@xml/widget_unified_info" />
         </receiver>
 
+        <!-- Map Widget - radiation map visualization -->
+        <receiver
+            android:name=".MapWidgetProvider"
+            android:exported="true"
+            android:label="Open RadiaCode Maps">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_map_info" />
+        </receiver>
+
+        <activity
+            android:name=".MapWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Configure Map Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

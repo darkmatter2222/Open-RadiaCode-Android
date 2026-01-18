@@ -6,4 +6,5 @@
     <string name="widget_simple_description">Compact display of dose and count rates</string>
     <string name="widget_chart_description">Dose and count rates with live sparkline charts</string>
     <string name="widget_unified_description">Customizable radiation widget with dose rate, count rate, and charts</string>
+    <string name="widget_map_description">Radiation map visualization with hexagonal grid overlay</string>
 </resources>
