@@ -349,11 +349,15 @@ class MapCardView @JvmOverloads constructor(
      * Start tracking user's location and updating map.
      */
     fun startLocationTracking() {
-        if (isTrackingLocation) return
+        if (isTrackingLocation) {
+            android.util.Log.d("MapCardView", "startLocationTracking: Already tracking")
+            return
+        }
         
         // Check location permission
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
+            android.util.Log.w("MapCardView", "startLocationTracking: No location permission")
             return
         }
         
@@ -361,6 +365,7 @@ class MapCardView @JvmOverloads constructor(
         
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
+                android.util.Log.d("MapCardView", "onLocationChanged: ${location.latitude},${location.longitude}")
                 currentLocation = location
                 updateMapCenter(location)
                 // Invalidate to redraw position marker
@@ -369,11 +374,16 @@ class MapCardView @JvmOverloads constructor(
             
             @Deprecated("Deprecated in Java")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
+            override fun onProviderEnabled(provider: String) {
+                android.util.Log.d("MapCardView", "GPS provider enabled")
+            }
+            override fun onProviderDisabled(provider: String) {
+                android.util.Log.w("MapCardView", "GPS provider disabled")
+            }
         }
         
         try {
+            // Request updates from GPS
             locationManager?.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 5000L,  // 5 seconds
@@ -381,13 +391,33 @@ class MapCardView @JvmOverloads constructor(
                 locationListener!!
             )
             
+            // Also try network provider as fallback
+            try {
+                locationManager?.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    5000L,
+                    10f,
+                    locationListener!!
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("MapCardView", "Network location provider not available")
+            }
+            
             // Try to get last known location immediately
             currentLocation = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            currentLocation?.let { updateMapCenter(it) }
+                ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            
+            if (currentLocation != null) {
+                android.util.Log.d("MapCardView", "Got last known location: ${currentLocation!!.latitude},${currentLocation!!.longitude}")
+                updateMapCenter(currentLocation!!)
+            } else {
+                android.util.Log.w("MapCardView", "No last known location available")
+            }
             
             isTrackingLocation = true
+            android.util.Log.d("MapCardView", "Location tracking started")
         } catch (e: SecurityException) {
-            // Permission denied
+            android.util.Log.e("MapCardView", "SecurityException starting location tracking", e)
         }
     }
     
@@ -518,7 +548,13 @@ class MapCardView @JvmOverloads constructor(
      * Add a new reading at the current location.
      */
     fun addReading(uSvPerHour: Float, cps: Float) {
-        val location = currentLocation ?: return
+        val location = currentLocation
+        if (location == null) {
+            android.util.Log.w("MapCardView", "addReading: No location available, skipping reading ($uSvPerHour μSv/h)")
+            return
+        }
+        
+        android.util.Log.d("MapCardView", "addReading: Adding $uSvPerHour μSv/h at ${location.latitude},${location.longitude}")
         
         val point = Prefs.MapDataPoint(
             latitude = location.latitude,

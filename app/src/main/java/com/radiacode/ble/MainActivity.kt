@@ -251,6 +251,7 @@ class MainActivity : AppCompatActivity() {
 
     private var uiRunnable: Runnable? = null
     private var lastReadingTimestampMs: Long = 0L
+    private var lastMapReadingTimestampMs: Long = 0L  // Separate tracker for map readings
     private var sessionStartMs: Long = System.currentTimeMillis()
     private var sampleCount: Int = 0
 
@@ -1829,16 +1830,36 @@ class MainActivity : AppCompatActivity() {
                     updateMetricCards(last)
                 }
 
-                // Only add to history if we have a specific device selected (not all-devices mode)
+                // Only add to chart history if we have a specific device selected (not all-devices mode)
                 if (last != null && !paused && !isAllDevicesMode && last.timestampMs != lastReadingTimestampMs) {
                     lastReadingTimestampMs = last.timestampMs
                     ensureHistoryCapacity()
                     doseHistory.add(last.timestampMs, last.uSvPerHour)
                     cpsHistory.add(last.timestampMs, last.cps)
                     sampleCount++
+                }
+                
+                // ALWAYS add readings to map regardless of device mode
+                // The map cares about location + radiation, not which device produced it
+                if (!paused) {
+                    // Get the latest reading from ANY enabled device
+                    val latestMapReading = if (last != null) {
+                        last
+                    } else {
+                        // In all-devices mode, get the most recent reading from all devices
+                        devices.filter { it.enabled }
+                            .mapNotNull { device ->
+                                Prefs.getDeviceRecentReadings(this@MainActivity, device.id, 1)
+                                    .firstOrNull()
+                            }
+                            .maxByOrNull { it.timestampMs }
+                            ?.let { r -> Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs) }
+                    }
                     
-                    // Add reading to map
-                    mapCard.addReading(last.uSvPerHour, last.cps)
+                    if (latestMapReading != null && latestMapReading.timestampMs != lastMapReadingTimestampMs) {
+                        lastMapReadingTimestampMs = latestMapReading.timestampMs
+                        mapCard.addReading(latestMapReading.uSvPerHour, latestMapReading.cps)
+                    }
                 }
 
                 if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {

@@ -55,6 +55,11 @@ class FullscreenMapActivity : AppCompatActivity() {
     private var selectedMetric = MetricType.DOSE_RATE
     private val hexagonData = mutableMapOf<String, MutableList<HexReading>>()
     
+    // Live updates
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var updateRunnable: Runnable? = null
+    private var lastProcessedTimestampMs: Long = 0L
+    
     // Overlays
     private var hexagonOverlay: HexagonOverlay? = null
     private var positionOverlay: PositionOverlay? = null
@@ -109,6 +114,7 @@ class FullscreenMapActivity : AppCompatActivity() {
         setupControls()
         loadSavedData()
         startLocationTracking()
+        startLiveUpdates()
     }
     
     private fun setupViews() {
@@ -212,6 +218,10 @@ class FullscreenMapActivity : AppCompatActivity() {
             val hexId = latLngToHexId(point.latitude, point.longitude)
             val reading = HexReading(point.uSvPerHour, point.cps, point.timestampMs)
             hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+            // Track the latest timestamp we've processed
+            if (point.timestampMs > lastProcessedTimestampMs) {
+                lastProcessedTimestampMs = point.timestampMs
+            }
         }
         
         // Center on data if available
@@ -220,6 +230,46 @@ class FullscreenMapActivity : AppCompatActivity() {
             val avgLng = savedPoints.map { it.longitude }.average()
             mapView.controller.setCenter(GeoPoint(avgLat, avgLng))
         }
+    }
+    
+    /**
+     * Start polling for new readings while the map is active.
+     */
+    private fun startLiveUpdates() {
+        updateRunnable = object : Runnable {
+            override fun run() {
+                refreshNewReadings()
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.postDelayed(updateRunnable!!, 1000)
+    }
+    
+    private fun stopLiveUpdates() {
+        updateRunnable?.let { handler.removeCallbacks(it) }
+        updateRunnable = null
+    }
+    
+    /**
+     * Check for new map data points and add them to hexagon grid.
+     */
+    private fun refreshNewReadings() {
+        val allPoints = Prefs.getMapDataPoints(this)
+        val newPoints = allPoints.filter { it.timestampMs > lastProcessedTimestampMs }
+        
+        if (newPoints.isEmpty()) return
+        
+        newPoints.forEach { point ->
+            val hexId = latLngToHexId(point.latitude, point.longitude)
+            val reading = HexReading(point.uSvPerHour, point.cps, point.timestampMs)
+            hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+            if (point.timestampMs > lastProcessedTimestampMs) {
+                lastProcessedTimestampMs = point.timestampMs
+            }
+        }
+        
+        // Redraw map with new hexagons
+        mapView.invalidate()
     }
     
     private fun startLocationTracking() {
@@ -292,6 +342,7 @@ class FullscreenMapActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        stopLiveUpdates()
         stopLocationTracking()
         mapView.onDetach()
     }
