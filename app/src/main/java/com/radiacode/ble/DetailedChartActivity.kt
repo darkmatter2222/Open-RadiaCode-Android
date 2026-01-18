@@ -316,58 +316,82 @@ class DetailedChartActivity : AppCompatActivity() {
         val chartHistory = Prefs.getChartHistory(this)
         if (chartHistory.isEmpty()) return
         
-        val windowSeconds = Prefs.getWindowSeconds(this, 60)
-        val cutoffMs = System.currentTimeMillis() - (windowSeconds * 1000L)
+        // Find last timestamp we have to only get truly NEW readings
+        val lastKnownTs = timestampsMs.lastOrNull() ?: 0L
         
-        val filteredHistory = chartHistory.filter { it.timestampMs >= cutoffMs }
+        // Get NEW readings only (after our last known timestamp)
+        val newReadings = chartHistory.filter { it.timestampMs > lastKnownTs }
         
-        val newTs = filteredHistory.map { it.timestampMs }
-        val newValues = if (kind == "cps") {
-            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-            filteredHistory.map { 
-                when (cu) {
-                    Prefs.CountUnit.CPS -> it.cps
-                    Prefs.CountUnit.CPM -> it.cps * 60f
-                }
-            }
-        } else {
-            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-            filteredHistory.map {
-                when (du) {
-                    Prefs.DoseUnit.USV_H -> it.uSvPerHour
-                    Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
-                }
-            }
-        }
-        
-        // Also get secondary values for comparison
-        val newSecondary = if (isCompareMode) {
-            if (kind == "cps") {
-                val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-                filteredHistory.map {
-                    when (du) {
-                        Prefs.DoseUnit.USV_H -> it.uSvPerHour
-                        Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
-                    }
-                }
-            } else {
+        if (newReadings.isNotEmpty()) {
+            // Convert new readings to display values
+            val newTs = newReadings.map { it.timestampMs }
+            val newVals = if (kind == "cps") {
                 val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-                filteredHistory.map {
+                newReadings.map { 
                     when (cu) {
                         Prefs.CountUnit.CPS -> it.cps
                         Prefs.CountUnit.CPM -> it.cps * 60f
                     }
                 }
+            } else {
+                val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+                newReadings.map {
+                    when (du) {
+                        Prefs.DoseUnit.USV_H -> it.uSvPerHour
+                        Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
+                    }
+                }
             }
-        } else {
-            emptyList()
+            
+            // Also get secondary values for comparison
+            val newSecondaryVals = if (isCompareMode) {
+                if (kind == "cps") {
+                    val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+                    newReadings.map {
+                        when (du) {
+                            Prefs.DoseUnit.USV_H -> it.uSvPerHour
+                            Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
+                        }
+                    }
+                } else {
+                    val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+                    newReadings.map {
+                        when (cu) {
+                            Prefs.CountUnit.CPS -> it.cps
+                            Prefs.CountUnit.CPM -> it.cps * 60f
+                        }
+                    }
+                }
+            } else {
+                emptyList()
+            }
+            
+            // Append new readings to existing data
+            timestampsMs = timestampsMs + newTs
+            values = values + newVals
+            if (isCompareMode) {
+                secondaryValues = secondaryValues + newSecondaryVals
+            }
         }
         
-        if (newTs.isNotEmpty() && newValues.isNotEmpty()) {
-            timestampsMs = newTs
-            values = newValues
-            secondaryValues = newSecondary
-            
+        // Trim old data outside the time window
+        val windowSeconds = Prefs.getWindowSeconds(this, 60)
+        val cutoffMs = System.currentTimeMillis() - (windowSeconds * 1000L)
+        
+        if (timestampsMs.isNotEmpty() && timestampsMs.first() < cutoffMs) {
+            // Find first index within window
+            val firstValidIdx = timestampsMs.indexOfFirst { it >= cutoffMs }.takeIf { it >= 0 } ?: 0
+            if (firstValidIdx > 0) {
+                timestampsMs = timestampsMs.drop(firstValidIdx)
+                values = values.drop(firstValidIdx)
+                if (isCompareMode && secondaryValues.isNotEmpty()) {
+                    secondaryValues = secondaryValues.drop(firstValidIdx)
+                }
+            }
+        }
+        
+        // Update chart if we have data
+        if (timestampsMs.isNotEmpty() && values.isNotEmpty()) {
             detailChart.setSeries(timestampsMs, values)
             
             if (isCompareMode && secondaryValues.isNotEmpty()) {
