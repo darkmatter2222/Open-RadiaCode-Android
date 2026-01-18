@@ -312,86 +312,64 @@ class DetailedChartActivity : AppCompatActivity() {
     }
     
     private fun refreshData() {
-        // Get fresh data from chart history
+        // Get fresh data from chart history - process it EXACTLY like MainActivity does
         val chartHistory = Prefs.getChartHistory(this)
         if (chartHistory.isEmpty()) return
         
-        // Find last timestamp we have to only get truly NEW readings
-        val lastKnownTs = timestampsMs.lastOrNull() ?: 0L
-        
-        // Get NEW readings only (after our last known timestamp)
-        val newReadings = chartHistory.filter { it.timestampMs > lastKnownTs }
-        
-        if (newReadings.isNotEmpty()) {
-            // Convert new readings to display values
-            val newTs = newReadings.map { it.timestampMs }
-            val newVals = if (kind == "cps") {
-                val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-                newReadings.map { 
-                    when (cu) {
-                        Prefs.CountUnit.CPS -> it.cps
-                        Prefs.CountUnit.CPM -> it.cps * 60f
-                    }
-                }
-            } else {
-                val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-                newReadings.map {
-                    when (du) {
-                        Prefs.DoseUnit.USV_H -> it.uSvPerHour
-                        Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
-                    }
-                }
-            }
-            
-            // Also get secondary values for comparison
-            val newSecondaryVals = if (isCompareMode) {
-                if (kind == "cps") {
-                    val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-                    newReadings.map {
-                        when (du) {
-                            Prefs.DoseUnit.USV_H -> it.uSvPerHour
-                            Prefs.DoseUnit.NSV_H -> it.uSvPerHour * 1000f
-                        }
-                    }
-                } else {
-                    val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-                    newReadings.map {
-                        when (cu) {
-                            Prefs.CountUnit.CPS -> it.cps
-                            Prefs.CountUnit.CPM -> it.cps * 60f
-                        }
-                    }
-                }
-            } else {
-                emptyList()
-            }
-            
-            // Append new readings to existing data
-            timestampsMs = timestampsMs + newTs
-            values = values + newVals
-            if (isCompareMode) {
-                secondaryValues = secondaryValues + newSecondaryVals
-            }
-        }
-        
-        // Trim old data outside the time window
+        // Filter by time window (same as MainActivity's currentWindowSeries)
         val windowSeconds = Prefs.getWindowSeconds(this, 60)
         val cutoffMs = System.currentTimeMillis() - (windowSeconds * 1000L)
+        val filteredHistory = chartHistory.filter { it.timestampMs >= cutoffMs }
         
-        if (timestampsMs.isNotEmpty() && timestampsMs.first() < cutoffMs) {
-            // Find first index within window
-            val firstValidIdx = timestampsMs.indexOfFirst { it >= cutoffMs }.takeIf { it >= 0 } ?: 0
-            if (firstValidIdx > 0) {
-                timestampsMs = timestampsMs.drop(firstValidIdx)
-                values = values.drop(firstValidIdx)
-                if (isCompareMode && secondaryValues.isNotEmpty()) {
-                    secondaryValues = secondaryValues.drop(firstValidIdx)
-                }
+        if (filteredHistory.isEmpty()) return
+        
+        // Get smoothing parameters (same as MainActivity)
+        val smoothSeconds = Prefs.getSmoothSeconds(this, 0)
+        val pollMs = Prefs.getPollIntervalMs(this, 1000L)
+        val smoothSamples = if (smoothSeconds <= 0) 0 else max(1, ((smoothSeconds * 1000L) / max(1L, pollMs)).toInt())
+        
+        // Extract raw values
+        val rawTs = filteredHistory.map { it.timestampMs }
+        val rawDose = filteredHistory.map { it.uSvPerHour }
+        val rawCps = filteredHistory.map { it.cps }
+        
+        // Apply smoothing, unit conversion, and decimation - EXACTLY like MainActivity
+        val (newTs, newValues) = if (kind == "cps") {
+            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+            val smoothed = applySmoothing(rawCps, smoothSamples)
+            val converted = convertCount(smoothed, cu)
+            decimate(rawTs, converted)
+        } else {
+            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+            val smoothed = applySmoothing(rawDose, smoothSamples)
+            val converted = convertDose(smoothed, du)
+            decimate(rawTs, converted)
+        }
+        
+        // Also process secondary values for comparison mode
+        val newSecondary = if (isCompareMode) {
+            val (_, secVals) = if (kind == "cps") {
+                val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
+                val smoothed = applySmoothing(rawDose, smoothSamples)
+                val converted = convertDose(smoothed, du)
+                decimate(rawTs, converted)
+            } else {
+                val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
+                val smoothed = applySmoothing(rawCps, smoothSamples)
+                val converted = convertCount(smoothed, cu)
+                decimate(rawTs, converted)
             }
+            secVals
+        } else {
+            emptyList()
         }
         
         // Update chart if we have data
-        if (timestampsMs.isNotEmpty() && values.isNotEmpty()) {
+        if (newTs.isNotEmpty() && newValues.isNotEmpty()) {
+            timestampsMs = newTs
+            values = newValues
+            secondaryValues = newSecondary
+            
             detailChart.setSeries(timestampsMs, values)
             
             if (isCompareMode && secondaryValues.isNotEmpty()) {
@@ -408,6 +386,56 @@ class DetailedChartActivity : AppCompatActivity() {
             updateStats(values)
             updateChartOverlays()
         }
+    }
+    
+    // ========== Data Processing Helpers (same as MainActivity) ==========
+    
+    private fun applySmoothing(values: List<Float>, windowSamples: Int): List<Float> {
+        if (windowSamples <= 1 || values.size < 3) return values
+        val out = ArrayList<Float>(values.size)
+        var sum = 0.0f
+        val q = ArrayDeque<Float>(windowSamples)
+        for (v in values) {
+            q.addLast(v)
+            sum += v
+            if (q.size > windowSamples) {
+                sum -= q.removeFirst()
+            }
+            out.add(sum / q.size)
+        }
+        return out
+    }
+    
+    private fun convertDose(values: List<Float>, unit: Prefs.DoseUnit): List<Float> {
+        if (unit == Prefs.DoseUnit.USV_H) return values
+        return values.map { it * 1000.0f }
+    }
+    
+    private fun convertCount(values: List<Float>, unit: Prefs.CountUnit): List<Float> {
+        if (unit == Prefs.CountUnit.CPS) return values
+        return values.map { it * 60.0f }
+    }
+    
+    private fun decimate(timestamps: List<Long>, values: List<Float>): Pair<List<Long>, List<Float>> {
+        val maxPoints = 500 // Same as MainActivity's MAX_CHART_POINTS
+        if (timestamps.isEmpty() || values.isEmpty() || timestamps.size != values.size) return emptyList<Long>() to emptyList()
+        if (values.size <= maxPoints) return timestamps to values
+        val step = max(1, values.size / maxPoints)
+        val outT = ArrayList<Long>(values.size / step + 1)
+        val outV = ArrayList<Float>(values.size / step + 1)
+        var i = 0
+        while (i < values.size) {
+            outT.add(timestamps[i])
+            outV.add(values[i])
+            i += step
+        }
+        // Always include the last point so the visible time range is stable
+        val lastIdx = values.lastIndex
+        if (outT.isEmpty() || outT.last() != timestamps[lastIdx]) {
+            outT.add(timestamps[lastIdx])
+            outV.add(values[lastIdx])
+        }
+        return outT to outV
     }
     
     private fun updateStats(data: List<Float>) {
