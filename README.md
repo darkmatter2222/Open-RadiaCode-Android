@@ -93,6 +93,12 @@ Key goal: appliance-style operation — once a preferred device is set, a foregr
 - **Spike detection** with configurable markers and percentage annotations
 - **Statistical analysis** with z-score highlighting and trend indicators
 - **Tap charts to focus** - full-screen chart view with enhanced detail
+- **Live map view** with GPS tracking showing radiation levels at each location
+  - Color-coded markers based on dose/count rate readings
+  - Metric selector to view dose rate or count rate on map
+  - Dynamic scale bar showing min/max values
+  - Reset button to clear all map markers
+  - Automatic location tracking when permissions granted
 
 ### Smart Alerts
 - Configure up to **10 custom alerts**

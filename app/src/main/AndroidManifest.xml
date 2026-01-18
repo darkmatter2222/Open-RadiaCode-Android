@@ -6,7 +6,14 @@
     <!-- Legacy (Android 11 and below) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    
+    <!-- Location permissions for BLE scanning (legacy) and map feature (all versions) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Map tile caching -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <!-- Android 12+ -->
     <uses-permission
@@ -53,6 +60,13 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape"
             android:label="Detailed Analysis" />
+
+        <activity
+            android:name=".FullscreenMapActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.RadiaCode.Fullscreen"
+            android:label="Radiation Map" />
 
         <activity
             android:name=".AlertConfigActivity"
@@ -121,6 +135,30 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_unified_info" />
         </receiver>
+
+        <!-- Map Widget - radiation map visualization -->
+        <receiver
+            android:name=".MapWidgetProvider"
+            android:exported="true"
+            android:label="Open RadiaCode Maps">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_map_info" />
+        </receiver>
+
+        <activity
+            android:name=".MapWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Configure Map Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"

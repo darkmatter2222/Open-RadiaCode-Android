@@ -48,9 +48,27 @@ object Prefs {
     private const val KEY_DEVICE_CHART_HISTORY_PREFIX = "device_chart_history_"
     private const val KEY_DEVICE_METADATA_PREFIX = "device_metadata_"
     private const val MAX_DEVICES = 8
+    
+    // Map tracking keys
+    private const val KEY_MAP_DATA_POINTS = "map_data_points"
+    private const val KEY_MAP_THEME = "map_theme"
+    private const val MAX_MAP_POINTS = 500  // Limit to prevent excessive memory use
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
+    
+    /**
+     * Map theme options for the radiation map display.
+     */
+    enum class MapTheme(val displayName: String) {
+        HOME("Home"),                    // Custom theme matching app's card background
+        DARK_MATTER("Dark Matter"),      // CartoDB Dark Matter - darkest with labels
+        DARK_GRAY("Dark Gray"),          // CartoDB Dark Gray - dark without labels
+        VOYAGER("Voyager"),              // CartoDB Voyager - muted colors, good contrast
+        POSITRON("Positron"),            // CartoDB Positron - light gray, minimal
+        TONER("Toner"),                  // Stamen Toner - high contrast B&W
+        STANDARD("Standard")             // OpenStreetMap standard - colorful
+    }
     
     /**
      * Notification style - controls what appears in the persistent notification
@@ -1290,5 +1308,177 @@ object Prefs {
             .edit()
             .putBoolean(KEY_ISOTOPE_HIDE_BACKGROUND, hide)
             .apply()
+    }
+    
+    // ========== Map Data Points ==========
+    
+    /**
+     * A single map data point containing location and radiation reading.
+     */
+    data class MapDataPoint(
+        val latitude: Double,
+        val longitude: Double,
+        val uSvPerHour: Float,
+        val cps: Float,
+        val timestampMs: Long
+    )
+    
+    /**
+     * Add a new map data point. Automatically limits to MAX_MAP_POINTS.
+     */
+    fun addMapDataPoint(context: Context, latitude: Double, longitude: Double, uSvPerHour: Float, cps: Float) {
+        val points = getMapDataPoints(context).toMutableList()
+        points.add(MapDataPoint(latitude, longitude, uSvPerHour, cps, System.currentTimeMillis()))
+        
+        // Limit to MAX_MAP_POINTS by removing oldest
+        while (points.size > MAX_MAP_POINTS) {
+            points.removeAt(0)
+        }
+        
+        // Serialize to JSON
+        val json = points.joinToString(separator = "\n") { point ->
+            "${point.latitude},${point.longitude},${point.uSvPerHour},${point.cps},${point.timestampMs}"
+        }
+        
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_DATA_POINTS, json)
+            .apply()
+    }
+    
+    /**
+     * Get all map data points.
+     */
+    fun getMapDataPoints(context: Context): List<MapDataPoint> {
+        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_MAP_DATA_POINTS, "") ?: ""
+        
+        if (json.isEmpty()) return emptyList()
+        
+        return json.lines()
+            .filter { it.isNotEmpty() }
+            .mapNotNull { line ->
+                val parts = line.split(",")
+                if (parts.size == 5) {
+                    try {
+                        MapDataPoint(
+                            latitude = parts[0].toDouble(),
+                            longitude = parts[1].toDouble(),
+                            uSvPerHour = parts[2].toFloat(),
+                            cps = parts[3].toFloat(),
+                            timestampMs = parts[4].toLong()
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+    }
+    
+    /**
+     * Clear all map data points.
+     */
+    fun clearMapDataPoints(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_MAP_DATA_POINTS)
+            .apply()
+    }
+    
+    /**
+     * Get the current map theme.
+     */
+    fun getMapTheme(context: Context): MapTheme {
+        val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_MAP_THEME, MapTheme.DARK_MATTER.name)
+        return try {
+            MapTheme.valueOf(name ?: MapTheme.DARK_MATTER.name)
+        } catch (e: Exception) {
+            MapTheme.DARK_MATTER
+        }
+    }
+    
+    /**
+     * Set the map theme.
+     */
+    fun setMapTheme(context: Context, theme: MapTheme) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_THEME, theme.name)
+            .apply()
+    }
+    
+    // ========== Map Widget Configuration ==========
+    
+    private const val KEY_MAP_WIDGET_CONFIG_PREFIX = "map_widget_config_"
+    private const val KEY_MAP_WIDGET_IDS = "map_widget_ids_json"
+    
+    /**
+     * Get configuration for a specific map widget instance.
+     */
+    fun getMapWidgetConfig(context: Context, widgetId: Int): MapWidgetConfig? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_MAP_WIDGET_CONFIG_PREFIX + widgetId, null) ?: return null
+        return MapWidgetConfig.fromJson(json)
+    }
+    
+    /**
+     * Save configuration for a specific map widget instance.
+     */
+    fun setMapWidgetConfig(context: Context, config: MapWidgetConfig) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_WIDGET_CONFIG_PREFIX + config.widgetId, config.toJson())
+            .apply()
+        
+        // Also update the master list of map widget IDs
+        val widgetIds = getMapWidgetIds(context).toMutableSet()
+        widgetIds.add(config.widgetId)
+        saveMapWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Delete configuration for a map widget instance (when widget is removed).
+     */
+    fun deleteMapWidgetConfig(context: Context, widgetId: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_MAP_WIDGET_CONFIG_PREFIX + widgetId)
+            .apply()
+        
+        val widgetIds = getMapWidgetIds(context).toMutableSet()
+        widgetIds.remove(widgetId)
+        saveMapWidgetIds(context, widgetIds)
+    }
+    
+    /**
+     * Get all configured map widget IDs.
+     */
+    fun getMapWidgetIds(context: Context): Set<Int> {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_MAP_WIDGET_IDS, "[]") ?: "[]"
+        return json.removeSurrounding("[", "]")
+            .split(",")
+            .filter { it.isNotBlank() }
+            .mapNotNull { it.trim().toIntOrNull() }
+            .toSet()
+    }
+    
+    private fun saveMapWidgetIds(context: Context, ids: Set<Int>) {
+        val json = "[${ids.joinToString(",")}]"
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MAP_WIDGET_IDS, json)
+            .apply()
+    }
+    
+    /**
+     * Get all map widget configurations.
+     */
+    fun getAllMapWidgetConfigs(context: Context): List<MapWidgetConfig> {
+        return getMapWidgetIds(context)
+            .mapNotNull { getMapWidgetConfig(context, it) }
     }
 }

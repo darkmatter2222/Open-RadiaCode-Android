@@ -90,6 +90,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cpsChartReset: android.widget.ImageButton
     private lateinit var cpsChartGoRealtime: android.widget.ImageButton
     private lateinit var cpsStats: StatRowView
+    
+    // Live Map Card
+    private lateinit var mapCard: com.radiacode.ble.ui.MapCardView
 
     // Isotope detection panel
     private lateinit var isotopePanel: LinearLayout
@@ -193,6 +196,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionDisplayHeader: View
     private lateinit var sectionDisplayContent: View
     private lateinit var sectionDisplayArrow: android.widget.ImageView
+    private lateinit var sectionMapHeader: View
+    private lateinit var sectionMapContent: View
+    private lateinit var sectionMapArrow: android.widget.ImageView
     private lateinit var sectionAlertsHeader: View
     private lateinit var sectionAlertsContent: View
     private lateinit var sectionAlertsArrow: android.widget.ImageView
@@ -202,6 +208,11 @@ class MainActivity : AppCompatActivity() {
     
     // Application settings rows
     private lateinit var rowNotificationSettings: View
+    
+    // Map settings rows
+    private lateinit var rowMapTheme: View
+    private lateinit var valueMapTheme: android.widget.TextView
+    private lateinit var rowClearMapData: View
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -321,11 +332,15 @@ class MainActivity : AppCompatActivity() {
 
     private val requiredPermissions: Array<String>
         get() {
-            val perms = ArrayList<String>(3)
+            val perms = ArrayList<String>(4)
             if (Build.VERSION.SDK_INT >= 31) {
                 perms += Manifest.permission.BLUETOOTH_SCAN
                 perms += Manifest.permission.BLUETOOTH_CONNECT
             } else {
+                perms += Manifest.permission.ACCESS_FINE_LOCATION
+            }
+            // Always request location for map feature
+            if (Build.VERSION.SDK_INT >= 31) {
                 perms += Manifest.permission.ACCESS_FINE_LOCATION
             }
             if (Build.VERSION.SDK_INT >= 33) {
@@ -348,6 +363,7 @@ class MainActivity : AppCompatActivity() {
         setupLogsPanel()
         setupMetricCards()
         setupCharts()
+        setupMapCard()
         setupIsotopePanel()
         setupToolbarDeviceSelector()
 
@@ -398,6 +414,9 @@ class MainActivity : AppCompatActivity() {
         cpsChartReset = findViewById(R.id.cpsChartReset)
         cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
         cpsStats = findViewById(R.id.cpsStats)
+        
+        // Map card
+        mapCard = findViewById(R.id.mapCard)
 
         // Isotope detection panel
         isotopePanel = findViewById(R.id.isotopePanel)
@@ -490,6 +509,9 @@ class MainActivity : AppCompatActivity() {
         sectionDisplayHeader = findViewById(R.id.sectionDisplayHeader)
         sectionDisplayContent = findViewById(R.id.sectionDisplayContent)
         sectionDisplayArrow = findViewById(R.id.sectionDisplayArrow)
+        sectionMapHeader = findViewById(R.id.sectionMapHeader)
+        sectionMapContent = findViewById(R.id.sectionMapContent)
+        sectionMapArrow = findViewById(R.id.sectionMapArrow)
         sectionAlertsHeader = findViewById(R.id.sectionAlertsHeader)
         sectionAlertsContent = findViewById(R.id.sectionAlertsContent)
         sectionAlertsArrow = findViewById(R.id.sectionAlertsArrow)
@@ -499,6 +521,11 @@ class MainActivity : AppCompatActivity() {
         
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
+        
+        // Map settings rows
+        rowMapTheme = findViewById(R.id.rowMapTheme)
+        valueMapTheme = findViewById(R.id.valueMapTheme)
+        rowClearMapData = findViewById(R.id.rowClearMapData)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -569,12 +596,22 @@ class MainActivity : AppCompatActivity() {
         setupExpandableSection(sectionAppHeader, sectionAppContent, sectionAppArrow, expanded = true)
         setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
         setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
+        setupExpandableSection(sectionMapHeader, sectionMapContent, sectionMapArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
         setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
         
         // Application settings
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
+        
+        // Map settings
+        rowMapTheme.setOnClickListener {
+            showMapThemeDialog()
+        }
+        
+        rowClearMapData.setOnClickListener {
+            showClearMapDataDialog()
         }
         
         rowWindow.setOnClickListener {
@@ -776,6 +813,16 @@ class MainActivity : AppCompatActivity() {
             }
         })
     }
+    
+    private fun setupMapCard() {
+        // Load existing data points
+        mapCard.loadDataPoints()
+        
+        // Start location tracking if permission is granted
+        if (hasAllPermissions()) {
+            mapCard.startLocationTracking()
+        }
+    }
 
     private fun setupIsotopePanel() {
         // Initialize the isotope detector with enabled isotopes
@@ -933,6 +980,37 @@ class MainActivity : AppCompatActivity() {
                 updateIsotopeChartMode(mode)
                 refreshIsotopeCharts()
                 dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showMapThemeDialog() {
+        val themes = Prefs.MapTheme.values()
+        val themeNames = themes.map { it.displayName }.toTypedArray()
+        val current = themes.indexOf(Prefs.getMapTheme(this))
+        
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Map Theme")
+            .setSingleChoiceItems(themeNames, current) { dialog, which ->
+                val selected = themes[which]
+                Prefs.setMapTheme(this, selected)
+                refreshSettingsRows()
+                mapCard.setMapTheme(selected)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun showClearMapDataDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
+            .setTitle("Clear Map Data")
+            .setMessage("This will permanently delete all hexagon readings from the radiation map. This action cannot be undone.\n\nContinue?")
+            .setPositiveButton("Clear Data") { _, _ ->
+                Prefs.clearMapDataPoints(this)
+                mapCard.clearMapData()
+                android.widget.Toast.makeText(this, "Map data cleared", android.widget.Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1398,6 +1476,8 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE && hasAllPermissions()) {
             startServiceIfConfigured()
+            // Start location tracking for map
+            mapCard.startLocationTracking()
         } else {
             updateStatus(false, "Permissions")
         }
@@ -1629,6 +1709,9 @@ class MainActivity : AppCompatActivity() {
                     doseHistory.add(last.timestampMs, last.uSvPerHour)
                     cpsHistory.add(last.timestampMs, last.cps)
                     sampleCount++
+                    
+                    // Add reading to map
+                    mapCard.addReading(last.uSvPerHour, last.cps)
                 }
 
                 if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
@@ -2096,6 +2179,9 @@ class MainActivity : AppCompatActivity() {
             Prefs.NotificationStyle.READINGS -> "Readings"
             Prefs.NotificationStyle.DETAILED -> "Detailed"
         }
+        
+        // Map theme
+        valueMapTheme.text = Prefs.getMapTheme(this).displayName
         
         // Isotope settings
         val enabledIsotopes = Prefs.getEnabledIsotopes(this)
