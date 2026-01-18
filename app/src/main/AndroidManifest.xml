@@ -113,6 +113,22 @@
             android:exported="false"
             android:label="Notification Settings" />
 
+        <!-- Dashboard Enhancement Activities -->
+        <activity
+            android:name=".SessionListActivity"
+            android:exported="false"
+            android:label="Recording Sessions" />
+
+        <activity
+            android:name=".HelpCenterActivity"
+            android:exported="false"
+            android:label="Help Center" />
+
+        <activity
+            android:name=".WidgetGalleryActivity"
+            android:exported="false"
+            android:label="Widget Gallery" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

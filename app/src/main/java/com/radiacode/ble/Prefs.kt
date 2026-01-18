@@ -60,6 +60,17 @@ object Prefs {
     // Intro/Welcome keys
     private const val KEY_INTRO_SEEN_VERSION = "intro_seen_version"
     private const val CURRENT_INTRO_VERSION = 1  // Increment this when intro content changes
+    
+    // Dashboard Enhancement keys (v0.XX)
+    private const val KEY_DASHBOARD_TUTORIAL_SEEN = "dashboard_tutorial_seen"
+    private const val KEY_EXPERT_MODE = "expert_mode"  // true = expert, false = simple
+    private const val KEY_SHOW_SAFETY_CARD = "show_safety_card"
+    private const val KEY_SHOW_QUICK_ACTIONS = "show_quick_actions"
+    private const val KEY_SHOW_DATA_SCIENCE_PANEL = "show_data_science_panel"
+    private const val KEY_SHOW_ISOTOPE_INFO_CARDS = "show_isotope_info_cards"
+    private const val KEY_CHART_ANNOTATIONS_JSON = "chart_annotations_json"
+    private const val KEY_SESSIONS_JSON = "sessions_json"
+    private const val KEY_CURRENT_SESSION_ID = "current_session_id"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -294,6 +305,143 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_SHOW_TREND_ARROWS, enabled)
+            .apply()
+    }
+    
+    // ========== Dashboard Enhancement Settings ==========
+    
+    /**
+     * Whether the user has seen the dashboard tutorial
+     */
+    fun hasDashboardTutorialSeen(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DASHBOARD_TUTORIAL_SEEN, false)
+    }
+    
+    fun setDashboardTutorialSeen(context: Context, seen: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DASHBOARD_TUTORIAL_SEEN, seen)
+            .apply()
+    }
+    
+    /**
+     * Expert mode toggle (true = expert/advanced view, false = simple view)
+     */
+    fun isExpertMode(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_EXPERT_MODE, true)  // Default to expert mode for existing users
+    }
+    
+    fun setExpertMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_EXPERT_MODE, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show the safety context card on the dashboard
+     */
+    fun isShowSafetyCard(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_SAFETY_CARD, true)  // Default ON
+    }
+    
+    fun setShowSafetyCard(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_SAFETY_CARD, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show the quick actions FAB
+     */
+    fun isShowQuickActions(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_QUICK_ACTIONS, true)  // Default ON
+    }
+    
+    fun setShowQuickActions(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_QUICK_ACTIONS, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show the data science analytics panel
+     */
+    fun isShowDataSciencePanel(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_DATA_SCIENCE_PANEL, false)  // Default OFF - advanced feature
+    }
+    
+    fun setShowDataSciencePanel(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_DATA_SCIENCE_PANEL, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to show isotope info cards when detected
+     */
+    fun isShowIsotopeInfoCards(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_ISOTOPE_INFO_CARDS, true)  // Default ON
+    }
+    
+    fun setShowIsotopeInfoCards(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_ISOTOPE_INFO_CARDS, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get chart annotations JSON
+     */
+    fun getChartAnnotationsJson(context: Context): String? {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_CHART_ANNOTATIONS_JSON, null)
+    }
+    
+    fun setChartAnnotationsJson(context: Context, json: String?) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_CHART_ANNOTATIONS_JSON, json)
+            .apply()
+    }
+    
+    /**
+     * Get sessions JSON
+     */
+    fun getSessionsJson(context: Context): String? {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_SESSIONS_JSON, null)
+    }
+    
+    fun setSessionsJson(context: Context, json: String?) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SESSIONS_JSON, json)
+            .apply()
+    }
+    
+    /**
+     * Current recording session ID (null if not recording)
+     */
+    fun getCurrentSessionId(context: Context): String? {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_CURRENT_SESSION_ID, null)
+    }
+    
+    fun setCurrentSessionId(context: Context, sessionId: String?) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_CURRENT_SESSION_ID, sessionId)
             .apply()
     }
     
