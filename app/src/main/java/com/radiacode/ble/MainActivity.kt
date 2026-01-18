@@ -1525,6 +1525,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         registerReadingReceiver()
         reloadChartHistoryForSelectedDevice()
+        // Reload map data to pick up points collected in background
+        mapCard.loadDataPoints()
         startUiLoop()
         refreshSettingsRows()
     }

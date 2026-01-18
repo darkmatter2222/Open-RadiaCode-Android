@@ -55,7 +55,7 @@ object Prefs {
     // Map tracking keys
     private const val KEY_MAP_DATA_POINTS = "map_data_points"
     private const val KEY_MAP_THEME = "map_theme"
-    private const val MAX_MAP_POINTS = 10000  // ~3 hours at 1 reading/sec, enough for long drives
+    private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
     
     // Intro/Welcome keys
     private const val KEY_INTRO_SEEN_VERSION = "intro_seen_version"

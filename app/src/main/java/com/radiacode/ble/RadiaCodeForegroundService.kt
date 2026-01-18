@@ -13,7 +13,11 @@ import android.content.Context
 import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -114,6 +118,11 @@ class RadiaCodeForegroundService : Service() {
     
     // Track last CSV timestamp per device
     private val lastCsvTimestamps = mutableMapOf<String, Long>()
+    
+    // Background location tracking for map data
+    private var locationManager: LocationManager? = null
+    private var locationListener: LocationListener? = null
+    private var currentLocation: Location? = null
 
     private val btStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -149,6 +158,76 @@ class RadiaCodeForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG, "registerReceiver failed", t)
         }
+        
+        // Start background location tracking for map data
+        startBackgroundLocationTracking()
+    }
+    
+    @SuppressLint("MissingPermission")
+    private fun startBackgroundLocationTracking() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "startBackgroundLocationTracking: No location permission")
+            return
+        }
+        
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        
+        locationListener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                currentLocation = location
+                Log.d(TAG, "Background location: ${location.latitude},${location.longitude}")
+            }
+            
+            @Deprecated("Deprecated in Java")
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+            override fun onProviderEnabled(provider: String) {}
+            override fun onProviderDisabled(provider: String) {}
+        }
+        
+        try {
+            // Request GPS updates
+            locationManager?.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                5000L,  // 5 seconds
+                10f,    // 10 meters
+                locationListener!!
+            )
+            
+            // Also try network provider as fallback
+            try {
+                locationManager?.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    5000L,
+                    10f,
+                    locationListener!!
+                )
+            } catch (_: Exception) {}
+            
+            // Get last known location as initial value
+            val lastGps = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            val lastNetwork = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            currentLocation = when {
+                lastGps != null && lastNetwork != null -> 
+                    if (lastGps.time > lastNetwork.time) lastGps else lastNetwork
+                lastGps != null -> lastGps
+                else -> lastNetwork
+            }
+            
+            Log.d(TAG, "Background location tracking started, initial: ${currentLocation?.latitude},${currentLocation?.longitude}")
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException starting background location tracking", e)
+        }
+    }
+    
+    private fun stopBackgroundLocationTracking() {
+        locationListener?.let { listener ->
+            try {
+                locationManager?.removeUpdates(listener)
+            } catch (_: Exception) {}
+        }
+        locationListener = null
+        locationManager = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -241,6 +320,7 @@ class RadiaCodeForegroundService : Service() {
 
     override fun onDestroy() {
         stopInternal("Service destroyed")
+        stopBackgroundLocationTracking()
         try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
         try { scheduler.shutdownNow() } catch (_: Throwable) {}
         try { executor.shutdownNow() } catch (_: Throwable) {}
@@ -336,6 +416,11 @@ class RadiaCodeForegroundService : Service() {
         
         // Append to device-specific CSV
         appendReadingCsvIfNew(deviceId, device.displayName, timestampMs, uSvPerHour, cps)
+        
+        // Save map data point if we have a location (background collection)
+        currentLocation?.let { location ->
+            Prefs.addMapDataPoint(this, location.latitude, location.longitude, uSvPerHour, cps)
+        }
         
         // Evaluate smart alerts (using combined recent readings)
         try {

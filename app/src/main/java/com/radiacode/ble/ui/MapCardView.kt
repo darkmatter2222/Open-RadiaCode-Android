@@ -489,6 +489,7 @@ class MapCardView @JvmOverloads constructor(
     
     /**
      * Get the center point of a hexagon in lat/lng.
+     * Uses a fixed reference latitude to avoid hexagons "drifting" as you move.
      */
     private fun hexIdToLatLng(hexId: String): Pair<Double, Double>? {
         val parts = hexId.split(",")
@@ -503,19 +504,22 @@ class MapCardView @JvmOverloads constructor(
         val x = size * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
         val y = size * (3.0 / 2.0 * r)
         
-        // Convert meters back to lat/lng (use approximate center lat for correction)
-        val centerLat = currentLocation?.latitude ?: 0.0
+        // Convert meters back to lat/lng
+        // Use the latitude from the y-coordinate itself (self-consistent projection)
+        // This ensures hexagons stay fixed in position regardless of where you are
         val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
-        
-        val lng = x / metersPerDegreeLng
         val lat = y / metersPerDegreeLat
+        
+        // Use the calculated lat for longitude correction (self-consistent)
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
+        val lng = x / metersPerDegreeLng
         
         return Pair(lat, lng)
     }
     
     /**
      * Get the 6 corner points of a hexagon for drawing.
+     * Uses the hexagon's own center for projection consistency.
      */
     private fun getHexCorners(hexId: String): List<GeoPoint>? {
         val center = hexIdToLatLng(hexId) ?: return null
@@ -525,7 +529,8 @@ class MapCardView @JvmOverloads constructor(
         val centerLng = center.second
         
         val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(currentLocation?.latitude ?: centerLat))
+        // Use the hexagon's center latitude for consistent projection
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
         
         // 6 corners for pointy-top hexagon
         for (i in 0 until 6) {
