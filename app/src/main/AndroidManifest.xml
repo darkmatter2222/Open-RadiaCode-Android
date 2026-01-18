@@ -27,6 +27,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -119,6 +120,22 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Widget Quick Actions Receiver -->
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.radiacode.ble.widget.ACTION_START" />
+                <action android:name="com.radiacode.ble.widget.ACTION_STOP" />
+                <action android:name="com.radiacode.ble.widget.ACTION_TOGGLE" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SHARE" />
+                <action android:name="com.radiacode.ble.widget.ACTION_MAP" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SPECTRUM" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SETTINGS" />
+                <action android:name="com.radiacode.ble.widget.ACTION_REFRESH" />
             </intent-filter>
         </receiver>
 

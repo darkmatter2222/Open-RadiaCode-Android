@@ -11,8 +11,8 @@ android {
         applicationId = "com.radiacode.ble"
         minSdk = 26
         targetSdk = 34
-        versionCode = 61
-        versionName = "0.72"
+        versionCode = 62
+        versionName = "0.73"
     }
 
     buildTypes {
@@ -42,4 +42,7 @@ dependencies {
     
     // Map library for live location tracking
     implementation("org.osmdroid:osmdroid-android:6.1.18")
+    
+    // EXIF interface for photo geotagging
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

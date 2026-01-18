@@ -200,6 +200,143 @@ object StatisticsCalculator {
         val trend = calculateTrend(values)
         return trend.slope * values.size + trend.intercept
     }
+    
+    /**
+     * Calculate Pearson correlation coefficient between two series.
+     * Returns value from -1 (perfect negative) to +1 (perfect positive).
+     */
+    fun calculateCorrelation(xValues: List<Float>, yValues: List<Float>): Float {
+        if (xValues.size < 2 || yValues.size < 2) return 0f
+        
+        val n = minOf(xValues.size, yValues.size)
+        if (n < 2) return 0f
+        
+        val xMean = xValues.take(n).average().toFloat()
+        val yMean = yValues.take(n).average().toFloat()
+        
+        var numerator = 0f
+        var xSumSq = 0f
+        var ySumSq = 0f
+        
+        for (i in 0 until n) {
+            val xDiff = xValues[i] - xMean
+            val yDiff = yValues[i] - yMean
+            numerator += xDiff * yDiff
+            xSumSq += xDiff * xDiff
+            ySumSq += yDiff * yDiff
+        }
+        
+        val denominator = sqrt(xSumSq * ySumSq)
+        return if (denominator > 0.0001f) numerator / denominator else 0f
+    }
+    
+    /**
+     * Calculate Poisson goodness-of-fit chi-squared statistic.
+     * For radiation counting, values should follow Poisson distribution.
+     * Returns chi-squared value and p-value approximation.
+     */
+    fun calculatePoissonGoodnessOfFit(counts: List<Float>): PoissonFitResult {
+        if (counts.size < 10) return PoissonFitResult(0f, 1f, FitQuality.INSUFFICIENT_DATA)
+        
+        val mean = counts.average().toFloat()
+        val variance = counts.map { (it - mean).pow(2) }.average().toFloat()
+        
+        // For Poisson, variance should equal mean
+        // Chi-squared = (n-1) * variance / mean
+        val n = counts.size
+        val chiSquared = (n - 1) * variance / mean
+        
+        // Degrees of freedom = n - 1
+        val df = n - 1
+        
+        // Simplified p-value approximation using normal approximation to chi-squared
+        // For large df, chi-squared is approximately normal with mean=df, variance=2*df
+        val zScore = (chiSquared - df) / sqrt(2.0 * df).toFloat()
+        
+        // Determine fit quality
+        val fitQuality = when {
+            kotlin.math.abs(zScore) < 1.0f -> FitQuality.EXCELLENT  // Within 1 sigma
+            kotlin.math.abs(zScore) < 2.0f -> FitQuality.GOOD      // Within 2 sigma
+            kotlin.math.abs(zScore) < 3.0f -> FitQuality.FAIR      // Within 3 sigma
+            else -> FitQuality.POOR                                  // Beyond 3 sigma
+        }
+        
+        // Variance-to-mean ratio (should be ~1 for Poisson)
+        val dispersionIndex = variance / mean
+        
+        return PoissonFitResult(chiSquared, dispersionIndex, fitQuality, zScore)
+    }
+    
+    /**
+     * Calculate confidence interval for the mean.
+     * Uses t-distribution approximation for small samples.
+     * @param values Data points
+     * @param confidenceLevel 0.90, 0.95, or 0.99
+     * @return ConfidenceInterval with lower, upper bounds and margin of error
+     */
+    fun calculateConfidenceInterval(values: List<Float>, confidenceLevel: Float = 0.95f): ConfidenceInterval {
+        if (values.size < 2) {
+            val value = values.firstOrNull() ?: 0f
+            return ConfidenceInterval(value, value, 0f, confidenceLevel)
+        }
+        
+        val stats = calculateStatistics(values)
+        val n = values.size
+        
+        // t-values for common confidence levels (approximations for n > 30)
+        // For smaller samples, these are conservative estimates
+        val tValue = when {
+            confidenceLevel >= 0.99f -> if (n > 30) 2.576f else 2.8f + 0.5f / n
+            confidenceLevel >= 0.95f -> if (n > 30) 1.96f else 2.0f + 0.3f / n
+            else -> if (n > 30) 1.645f else 1.7f + 0.2f / n  // 90%
+        }
+        
+        // Standard error of the mean
+        val standardError = stats.stdDev / sqrt(n.toFloat())
+        
+        // Margin of error
+        val marginOfError = tValue * standardError
+        
+        return ConfidenceInterval(
+            lower = stats.mean - marginOfError,
+            upper = stats.mean + marginOfError,
+            marginOfError = marginOfError,
+            confidenceLevel = confidenceLevel
+        )
+    }
+    
+    /**
+     * Calculate confidence interval for count rate (Poisson-based).
+     * For radiation counting, this uses the Poisson distribution.
+     */
+    fun calculateCountRateCI(counts: List<Float>, confidenceLevel: Float = 0.95f): ConfidenceInterval {
+        if (counts.isEmpty()) return ConfidenceInterval(0f, 0f, 0f, confidenceLevel)
+        
+        val totalCounts = counts.sum()
+        val n = counts.size
+        val meanRate = totalCounts / n
+        
+        // For Poisson, CI based on chi-squared distribution
+        // Simplified using normal approximation for sqrt(counts)
+        val sqrtCounts = sqrt(totalCounts)
+        
+        val zValue = when {
+            confidenceLevel >= 0.99f -> 2.576f
+            confidenceLevel >= 0.95f -> 1.96f
+            else -> 1.645f
+        }
+        
+        // Variance of mean is lambda/n for Poisson
+        val standardError = sqrt(meanRate / n)
+        val marginOfError = zValue * standardError
+        
+        return ConfidenceInterval(
+            lower = maxOf(0f, meanRate - marginOfError),
+            upper = meanRate + marginOfError,
+            marginOfError = marginOfError,
+            confidenceLevel = confidenceLevel
+        )
+    }
 
     /**
      * Calculate Bollinger Bands.
@@ -319,4 +456,50 @@ data class BollingerBands(
     val lower: List<Float>    // Lower band (SMA - k*stdDev)
 ) {
     fun isEmpty() = middle.isEmpty()
+}
+
+/**
+ * Poisson goodness-of-fit test result.
+ */
+data class PoissonFitResult(
+    val chiSquared: Float,
+    val dispersionIndex: Float,  // variance/mean, should be ~1 for Poisson
+    val fitQuality: FitQuality,
+    val zScore: Float = 0f
+) {
+    fun getDescription(): String = when (fitQuality) {
+        FitQuality.EXCELLENT -> "Excellent Poisson fit (dispersion: %.2f)".format(dispersionIndex)
+        FitQuality.GOOD -> "Good Poisson fit (dispersion: %.2f)".format(dispersionIndex)
+        FitQuality.FAIR -> "Fair fit - some deviation (dispersion: %.2f)".format(dispersionIndex)
+        FitQuality.POOR -> "Poor fit - non-Poisson behavior (dispersion: %.2f)".format(dispersionIndex)
+        FitQuality.INSUFFICIENT_DATA -> "Insufficient data for test"
+    }
+    
+    fun isPoissonLike(): Boolean = fitQuality in listOf(FitQuality.EXCELLENT, FitQuality.GOOD)
+}
+
+enum class FitQuality {
+    EXCELLENT, GOOD, FAIR, POOR, INSUFFICIENT_DATA
+}
+
+/**
+ * Confidence interval result.
+ */
+data class ConfidenceInterval(
+    val lower: Float,
+    val upper: Float,
+    val marginOfError: Float,
+    val confidenceLevel: Float
+) {
+    fun contains(value: Float) = value in lower..upper
+    
+    fun getWidth() = upper - lower
+    
+    fun format(unit: String = ""): String {
+        return "%.3f - %.3f %s (±%.3f)".format(lower, upper, unit, marginOfError)
+    }
+    
+    fun formatPercent(): String {
+        return "%.0f%% CI: ±%.1f%%".format(confidenceLevel * 100, marginOfError / ((upper + lower) / 2) * 100)
+    }
 }
