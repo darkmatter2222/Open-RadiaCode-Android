@@ -61,4 +61,13 @@
         <item name="android:textColorSecondary">@color/pro_text_secondary</item>
     </style>
 
+    <!-- Fullscreen dialog theme for Vega intro -->
+    <style name="Theme.RadiaCode.Dialog.FullScreen" parent="Theme.RadiaCode">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@color/pro_background</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+
 </resources>

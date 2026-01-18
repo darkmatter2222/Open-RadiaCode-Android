@@ -39,6 +39,7 @@ import com.radiacode.ble.dashboard.DashboardGridLayout
 import com.radiacode.ble.dashboard.DashboardLayout
 import com.radiacode.ble.dashboard.DashboardReorderHelper
 import com.radiacode.ble.dashboard.PanelType
+import com.radiacode.ble.ui.VegaIntroDialog
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
@@ -223,6 +224,7 @@ class MainActivity : AppCompatActivity() {
     
     // Application settings rows
     private lateinit var rowNotificationSettings: View
+    private lateinit var rowPlayIntro: View
     
     // Map settings rows
     private lateinit var rowMapTheme: View
@@ -404,6 +406,35 @@ class MainActivity : AppCompatActivity() {
         } else {
             startServiceIfConfigured()
         }
+        
+        // Check for first-run intro
+        checkAndShowIntro()
+    }
+    
+    /**
+     * Check if this is first launch or app update, and show the Vega intro if needed.
+     */
+    private fun checkAndShowIntro() {
+        if (Prefs.shouldShowIntro(this)) {
+            // Delay slightly to let the UI settle
+            mainHandler.postDelayed({
+                showVegaIntro(isFirstRun = true)
+            }, 500)
+        }
+    }
+    
+    /**
+     * Show the Vega introduction dialog.
+     * @param isFirstRun If true, marks the intro as seen after dismissal.
+     */
+    private fun showVegaIntro(isFirstRun: Boolean = false) {
+        val dialog = VegaIntroDialog(this) {
+            // Callback when dismissed
+            if (isFirstRun) {
+                Prefs.markIntroSeen(this)
+            }
+        }
+        dialog.show()
     }
 
     private fun bindViews() {
@@ -563,6 +594,7 @@ class MainActivity : AppCompatActivity() {
         
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
+        rowPlayIntro = findViewById(R.id.rowPlayIntro)
         
         // Map settings rows
         rowMapTheme = findViewById(R.id.rowMapTheme)
@@ -653,6 +685,10 @@ class MainActivity : AppCompatActivity() {
         // Application settings
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
+        
+        rowPlayIntro.setOnClickListener {
+            showVegaIntro()
         }
         
         // Map settings

@@ -56,6 +56,10 @@ object Prefs {
     private const val KEY_MAP_DATA_POINTS = "map_data_points"
     private const val KEY_MAP_THEME = "map_theme"
     private const val MAX_MAP_POINTS = 500  // Limit to prevent excessive memory use
+    
+    // Intro/Welcome keys
+    private const val KEY_INTRO_SEEN_VERSION = "intro_seen_version"
+    private const val CURRENT_INTRO_VERSION = 1  // Increment this when intro content changes
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -1864,5 +1868,48 @@ object Prefs {
             .edit()
             .putString(KEY_DASHBOARD_ORDER, json)
             .apply()
+    }
+    
+    // ==================== Vega Intro ====================
+    
+    /**
+     * Check if the intro should be shown.
+     * Returns true if:
+     * - User has never seen the intro, OR
+     * - Intro content has been updated since they last saw it
+     */
+    fun shouldShowIntro(context: Context): Boolean {
+        val seenVersion = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_INTRO_SEEN_VERSION, 0)
+        return seenVersion < CURRENT_INTRO_VERSION
+    }
+    
+    /**
+     * Mark the intro as seen for the current version.
+     */
+    fun markIntroSeen(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_INTRO_SEEN_VERSION, CURRENT_INTRO_VERSION)
+            .apply()
+    }
+    
+    /**
+     * Reset intro seen status (for testing or to replay intro).
+     */
+    fun resetIntroSeen(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_INTRO_SEEN_VERSION, 0)
+            .apply()
+    }
+    
+    /**
+     * Get the intro version the user has seen.
+     * Returns 0 if never seen.
+     */
+    fun getIntroSeenVersion(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_INTRO_SEEN_VERSION, 0)
     }
 }
