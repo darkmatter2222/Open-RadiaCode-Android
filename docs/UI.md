@@ -170,6 +170,52 @@ Located below the count rate chart on the dashboard:
 | Industrial | Co-60, Am-241, Ir-192, Ba-133, Eu-152 |
 | Fission | Cs-137, Cs-134, Na-22 |
 
+### Configurable Dashboard
+
+The dashboard uses a **2-column grid system** that allows users to drag and resize panels. This creates a flexible, Grafana/Home Assistant-style customization experience.
+
+#### Grid System
+
+- **2 columns maximum** width
+- **80dp cell height** per row
+- **6dp padding** between cells
+- Panels snap to grid cells on drag/resize
+
+#### Panel Types
+
+| Panel | Default Size | Min | Max |
+|-------|-------------|-----|-----|
+| Delta Dose Rate | 1×2 | 1×1 | 2×4 |
+| Delta Count Rate | 1×2 | 1×1 | 2×4 |
+| Intelligence Report | 2×2 | 1×2 | 2×4 |
+| Dose Rate Chart | 2×3 | 1×2 | 2×6 |
+| Count Rate Chart | 2×3 | 1×2 | 2×6 |
+| Isotope ID | 2×4 | 2×2 | 2×6 |
+
+#### Edit Mode
+
+Access via:
+1. FAB button in bottom-right of dashboard
+2. Settings → Dashboard → Edit Dashboard Layout
+
+**When editing:**
+- Grid lines overlay appears
+- Drag handles (6-dot icon) show on each panel
+- Resize handles (corner, edge) become visible
+- Long-press and drag to reposition
+- Drag handles to resize
+
+**Rules:**
+- Side-by-side panels must have equal height (auto-synced)
+- Charts hide stats bar when colSpan=1 (compact mode)
+- Panels cannot overlap
+
+#### Reset Dashboard
+
+Settings → Dashboard → Reset Dashboard Layout
+
+Restores the default panel arrangement with confirmation dialog.
+
 ### Charts (deep analysis)
 
 - Larger charts (200dp height each)

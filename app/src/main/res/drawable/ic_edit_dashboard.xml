@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Edit dashboard layout icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    
+    <!-- Grid squares -->
+    <path
+        android:pathData="M3,3 h7 v7 H3 V3 Z M14,3 h7 v7 H14 V3 Z M3,14 h7 v7 H3 V14 Z M14,14 h7 v7 H14 V14 Z"
+        android:strokeColor="@color/pro_text_muted"
+        android:strokeWidth="1.5"
+        android:fillColor="@android:color/transparent" />
+    
+    <!-- Move arrows in center -->
+    <path
+        android:pathData="M12,8 L12,16 M8,12 L16,12"
+        android:strokeColor="@color/pro_cyan"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    
+    <path
+        android:pathData="M12,8 L10,10 M12,8 L14,10"
+        android:strokeColor="@color/pro_cyan"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    
+    <path
+        android:pathData="M12,16 L10,14 M12,16 L14,14"
+        android:strokeColor="@color/pro_cyan"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    
+</vector>

@@ -90,6 +90,7 @@
 
                     <!-- Metric Cards Row -->
                     <LinearLayout
+                        android:id="@+id/metricsCardsRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal">
@@ -935,6 +936,66 @@
                         
                 </LinearLayout>
                 
+                <!-- Edit Dashboard FAB -->
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/fabEditDashboard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="16dp"
+                    android:contentDescription="Edit dashboard layout"
+                    android:src="@drawable/ic_edit_dashboard"
+                    app:fabSize="mini"
+                    app:backgroundTint="@color/pro_surface"
+                    app:tint="@color/pro_cyan"
+                    app:elevation="4dp"
+                    app:borderWidth="1dp" />
+                
+                <!-- Edit Mode Toolbar (shown when editing) -->
+                <LinearLayout
+                    android:id="@+id/editModeToolbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_gravity="bottom"
+                    android:background="@color/pro_surface"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone"
+                    android:elevation="8dp">
+                    
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Editing Layout"
+                        android:textColor="@color/pro_cyan"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnResetDashboard"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Reset"
+                        android:textColor="@color/pro_text_muted"
+                        app:icon="@android:drawable/ic_menu_revert"
+                        app:iconTint="@color/pro_text_muted"
+                        app:rippleColor="@color/pro_border" />
+                    
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDoneEditing"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Done"
+                        android:textColor="@color/pro_green"
+                        app:icon="@android:drawable/ic_menu_save"
+                        app:iconTint="@color/pro_green"
+                        app:rippleColor="@color/pro_green" />
+                </LinearLayout>
+                
                 </FrameLayout>
 
                 <!-- ==================== DEVICE PANEL ==================== -->
@@ -1192,6 +1253,154 @@
                                     android:layout_height="20dp"
                                     android:layout_marginStart="8dp"
                                     android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DASHBOARD SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Dashboard -->
+                        <LinearLayout
+                            android:id="@+id/sectionDashboardHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="DASHBOARD"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionDashboardArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionDashboardContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Edit Dashboard Layout -->
+                            <LinearLayout
+                                android:id="@+id/rowEditDashboard"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Edit Dashboard Layout"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Drag and resize panels to customize"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@drawable/ic_edit_dashboard"
+                                    app:tint="@color/pro_magenta" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.3" />
+
+                            <!-- Reset Dashboard Layout -->
+                            <LinearLayout
+                                android:id="@+id/rowResetDashboard"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Reset Dashboard Layout"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Restore default panel arrangement"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_revert"
                                     app:tint="@color/pro_text_muted" />
                             </LinearLayout>
 
@@ -1746,6 +1955,54 @@
                                     app:tint="@color/pro_text_muted" />
                             </LinearLayout>
 
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DETECTION SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Detection -->
+                        <LinearLayout
+                            android:id="@+id/sectionDetectionHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="DETECTION"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionDetectionArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionDetectionContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
                             <View
                                 android:layout_width="match_parent"
                                 android:layout_height="1dp"
@@ -1775,7 +2032,7 @@
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:text="Isotope Detection"
+                                        android:text="Isotope Identification"
                                         android:textColor="@color/pro_text_primary"
                                         android:textSize="15sp" />
 

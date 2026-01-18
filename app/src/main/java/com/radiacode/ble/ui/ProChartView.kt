@@ -64,6 +64,17 @@ class ProChartView @JvmOverloads constructor(
     // Sigma bands (statistical bands)
     private var sigmaBandLevel: Int = 0  // 0 = off, 1/2/3 = ±1σ/2σ/3σ
     private var showMeanLine: Boolean = false
+    
+    // Alert markers (from triggered alerts)
+    data class AlertMarker(
+        val triggerTimestampMs: Long,        // When the alert notification fired
+        val durationWindowStartMs: Long,     // When the condition first became true
+        val cooldownEndMs: Long,             // When the cooldown period ends
+        val color: String,                   // Color hex string like "#FF5252"
+        val icon: String,                    // Emoji icon
+        val name: String                     // Alert name for tooltip
+    )
+    private var alertMarkers: List<AlertMarker> = emptyList()
 
     // Zoom and Pan state
     private var zoomLevel: Float = 1f           // 1.0 = no zoom, 2.0 = 2x zoom
@@ -216,6 +227,36 @@ class ProChartView @JvmOverloads constructor(
         strokeWidth = density * 1.5f
         color = ContextCompat.getColor(context, R.color.pro_cyan)
         alpha = 200
+    }
+    
+    // Alert marker paints
+    private val alertLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 2f
+        pathEffect = DashPathEffect(floatArrayOf(density * 6f, density * 4f), 0f)
+    }
+    
+    private val alertRangePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        alpha = 40
+    }
+    
+    private val alertIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = scaledDensity * 14f
+        textAlign = Paint.Align.CENTER
+    }
+    
+    private val alertLabelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = ContextCompat.getColor(context, R.color.pro_surface_elevated)
+        alpha = 220
+    }
+    
+    private val alertLabelTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = scaledDensity * 9f
+        color = Color.WHITE
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
     }
 
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm:ss").withLocale(Locale.US)
@@ -801,6 +842,37 @@ class ProChartView @JvmOverloads constructor(
         requestLayout() // Recalculate layout for right axis
         invalidate()
     }
+    
+    /**
+     * Set alert markers to display on the chart.
+     * These appear as dashed vertical lines with optional shaded duration regions.
+     */
+    fun setAlertMarkers(markers: List<AlertMarker>) {
+        this.alertMarkers = markers
+        if (markers.isNotEmpty()) {
+            android.util.Log.d("ProChartView", "setAlertMarkers: received ${markers.size} markers")
+            markers.forEach { m ->
+                android.util.Log.d("ProChartView", "  Marker: trigger=${m.triggerTimestampMs}, durationStart=${m.durationWindowStartMs}, cooldownEnd=${m.cooldownEndMs}, name=${m.name}")
+            }
+        }
+        invalidate()
+    }
+    
+    /**
+     * Add a single alert marker.
+     */
+    fun addAlertMarker(marker: AlertMarker) {
+        this.alertMarkers = this.alertMarkers + marker
+        invalidate()
+    }
+    
+    /**
+     * Clear all alert markers.
+     */
+    fun clearAlertMarkers() {
+        this.alertMarkers = emptyList()
+        invalidate()
+    }
 
     fun clearSecondarySeries() {
         this.secondarySamples = emptyList()
@@ -832,7 +904,15 @@ class ProChartView @JvmOverloads constructor(
         // Get visible range based on zoom/pan
         val (visibleStart, visibleEnd) = getVisibleRange()
         val visibleSamples = samples.subList(visibleStart, visibleEnd + 1)
-        val visibleTimestamps = if (timestampsMs.size > visibleEnd) timestampsMs.subList(visibleStart, visibleEnd + 1) else emptyList()
+
+        // IMPORTANT: Keep X mapping consistent everywhere.
+        // The chart curve and alert overlays must both map X using timestamps, otherwise overlays drift
+        // (e.g., "half-speed" movement then a snap when ranges realign).
+        val hasAlignedTimestamps = timestampsMs.size == samples.size && timestampsMs.size > visibleEnd
+        val visibleStartTime = if (hasAlignedTimestamps) timestampsMs[visibleStart] else 0L
+        val visibleEndTime = if (hasAlignedTimestamps) timestampsMs[visibleEnd] else 0L
+        val timeRangeMs = (visibleEndTime - visibleStartTime).toFloat()
+        val useTimeAxis = hasAlignedTimestamps && timeRangeMs > 0f
 
         var minV = Float.POSITIVE_INFINITY
         var maxV = Float.NEGATIVE_INFINITY
@@ -895,8 +975,19 @@ class ProChartView @JvmOverloads constructor(
         val fillPath = Path()
         val n = visibleSamples.size
 
+        fun xForLocalIndex(localIdx: Int): Float {
+            if (n <= 1) return chartLeft
+            return if (useTimeAxis) {
+                val ts = timestampsMs[visibleStart + localIdx]
+                val frac = ((ts - visibleStartTime).toFloat() / timeRangeMs).coerceIn(0f, 1f)
+                chartLeft + chartWidth * frac
+            } else {
+                chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+            }
+        }
+
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(i)
             val yNorm = (visibleSamples[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
@@ -920,19 +1011,22 @@ class ProChartView @JvmOverloads constructor(
         // Draw rolling average line (dotted) for visible portion
         if (rollingAvgSamples.size >= samples.size && visibleSamples.isNotEmpty()) {
             val visibleAvg = rollingAvgSamples.subList(visibleStart, visibleEnd + 1)
-            drawRollingAverageLine(canvas, chartWidth, chartHeight, yMin, yRange, visibleAvg)
+            drawRollingAverageLine(canvas, chartHeight, yMin, yRange, visibleAvg, ::xForLocalIndex)
         }
 
         // Threshold line removed - now using Smart Alerts system instead
 
         // Draw delta spike markers for visible portion (if enabled)
         if (showSpikeMarkers) {
-            drawSpikeMarkers(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples, visibleStart)
+            drawSpikeMarkers(canvas, chartHeight, yMin, yRange, visibleSamples, visibleStart, ::xForLocalIndex)
         }
+
+        // Draw alert markers (dashed lines + icon; shading clipped under the curve)
+        drawAlertMarkers(canvas, chartWidth, visibleStart, visibleEnd, fillPath)
 
         // Draw peak marker
         if (n > 0) {
-            val x = chartLeft + chartWidth * (peakIndex.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(peakIndex)
             val yNorm = (visibleSamples[peakIndex] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             canvas.drawCircle(x, y, density * 5f, peakPaint)
@@ -954,7 +1048,7 @@ class ProChartView @JvmOverloads constructor(
             // Convert global index to visible index
             if (idx in visibleStart..visibleEnd) {
                 val localIdx = idx - visibleStart
-                val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+                val x = xForLocalIndex(localIdx)
                 val yNorm = (samples[idx] - yMin) / yRange
                 val y = chartBottom - chartHeight * yNorm
 
@@ -996,16 +1090,16 @@ class ProChartView @JvmOverloads constructor(
     /** Draw rolling average as a dotted line */
     private fun drawRollingAverageLine(
         canvas: Canvas,
-        chartWidth: Float,
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
-        visibleAvg: List<Float>
+        visibleAvg: List<Float>,
+        xForLocalIndex: (Int) -> Float
     ) {
         val avgPath = Path()
         val n = visibleAvg.size
         for (i in 0 until n) {
-            val x = chartLeft + chartWidth * (i.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(i)
             val yNorm = (visibleAvg[i] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
 
@@ -1090,12 +1184,12 @@ class ProChartView @JvmOverloads constructor(
     /** Draw vertical spike markers at significant delta points */
     private fun drawSpikeMarkers(
         canvas: Canvas,
-        chartWidth: Float,
         chartHeight: Float,
         yMin: Float,
         yRange: Float,
         visibleSamples: List<Float>,
-        visibleStart: Int
+        visibleStart: Int,
+        xForLocalIndex: (Int) -> Float
     ) {
         val n = visibleSamples.size
         for (spikeIdx in spikeIndices) {
@@ -1106,7 +1200,7 @@ class ProChartView @JvmOverloads constructor(
             
             // Convert to local index within visible range
             val localIdx = spikeIdx - visibleStart
-            val x = chartLeft + chartWidth * (localIdx.toFloat() / max(1, n - 1))
+            val x = xForLocalIndex(localIdx)
             val yNorm = (samples[spikeIdx] - yMin) / yRange
             val y = chartBottom - chartHeight * yNorm
             
@@ -1194,6 +1288,164 @@ class ProChartView @JvmOverloads constructor(
                 ContextCompat.getColor(context, R.color.pro_red)
         }
         canvas.drawPath(trianglePath, fillPaint)
+    }
+
+    /**
+     * Draw alert markers on the chart showing when alerts were triggered.
+     * Shows:
+     * - Duration window: solid shaded region BEFORE the trigger (when condition was met)
+     * - Trigger line: dashed vertical line at the exact moment the alert fired
+     * - Cooldown window: gradient fade-out AFTER the trigger (when alert won't fire again)
+     * - Severity icon at top of trigger line
+     */
+    private fun drawAlertMarkers(
+        canvas: Canvas,
+        chartWidth: Float,
+        visibleStart: Int,
+        visibleEnd: Int,
+        fillPath: Path
+    ) {
+        if (alertMarkers.isEmpty() || timestampsMs.isEmpty()) {
+            if (alertMarkers.isNotEmpty()) {
+                android.util.Log.d("ProChartView", "drawAlertMarkers: have ${alertMarkers.size} markers but timestampsMs is empty (${timestampsMs.size})")
+            }
+            return
+        }
+        
+        val n = visibleEnd - visibleStart + 1
+        if (n < 2) return
+        
+        // Get visible time range
+        val visibleStartTime = timestampsMs.getOrNull(visibleStart) ?: return
+        val visibleEndTime = timestampsMs.getOrNull(visibleEnd) ?: return
+        val timeRange = (visibleEndTime - visibleStartTime).toFloat()
+        if (timeRange <= 0) return
+        
+        android.util.Log.d("ProChartView", "drawAlertMarkers: visible time range $visibleStartTime to $visibleEndTime, checking ${alertMarkers.size} markers")
+        
+        for (marker in alertMarkers) {
+            // Check if any part of the alert (duration window to cooldown end) overlaps visible range
+            val markerStart = marker.durationWindowStartMs
+            val markerEnd = marker.cooldownEndMs
+            
+            android.util.Log.d("ProChartView", "  Marker '${marker.name}': range $markerStart to $markerEnd vs visible $visibleStartTime to $visibleEndTime")
+            
+            // Skip if completely outside visible range
+            if (markerEnd < visibleStartTime || markerStart > visibleEndTime) {
+                android.util.Log.d("ProChartView", "  -> SKIPPED (outside visible range)")
+                continue
+            }
+            
+            android.util.Log.d("ProChartView", "  -> DRAWING marker")
+            
+            // Parse color
+            val markerColor = try {
+                Color.parseColor(marker.color)
+            } catch (e: Exception) {
+                ContextCompat.getColor(context, R.color.pro_cyan)
+            }
+            
+            // Helper to convert timestamp to X position
+            fun timestampToX(timestamp: Long): Float {
+                return when {
+                    timestamp < visibleStartTime -> chartLeft
+                    timestamp > visibleEndTime -> chartRight
+                    else -> chartLeft + chartWidth * ((timestamp - visibleStartTime).toFloat() / timeRange)
+                }
+            }
+            
+            // Calculate X positions
+            val durationStartX = timestampToX(marker.durationWindowStartMs)
+            val triggerX = timestampToX(marker.triggerTimestampMs)
+            val cooldownEndX = timestampToX(marker.cooldownEndMs)
+
+            // 1-2. Shading: clip to the under-curve fill so it only appears below the line
+            canvas.save()
+            canvas.clipPath(fillPath)
+
+            // 1. Duration window (solid semi-transparent before trigger)
+            if (durationStartX < triggerX && marker.durationWindowStartMs < marker.triggerTimestampMs) {
+                alertRangePaint.color = Color.argb(45, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                alertRangePaint.shader = null
+                canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, alertRangePaint)
+
+                val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = density * 1f
+                    color = Color.argb(90, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+                }
+                canvas.drawRect(durationStartX, chartTop, triggerX, chartBottom, borderPaint)
+            }
+
+            // 2. Cooldown window (gradient fade-out after trigger)
+            if (triggerX < cooldownEndX && marker.triggerTimestampMs < marker.cooldownEndMs) {
+                val cooldownGradient = LinearGradient(
+                    triggerX, 0f, cooldownEndX, 0f,
+                    Color.argb(35, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
+                    Color.argb(0, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor)),
+                    Shader.TileMode.CLAMP
+                )
+                alertRangePaint.shader = cooldownGradient
+                canvas.drawRect(triggerX, chartTop, cooldownEndX, chartBottom, alertRangePaint)
+                alertRangePaint.shader = null
+            }
+
+            canvas.restore()
+            
+            // 3. Draw dashed vertical line at trigger point
+            alertLinePaint.color = markerColor
+            canvas.drawLine(triggerX, chartTop, triggerX, chartBottom, alertLinePaint)
+            
+            // 4. Draw small glow effect behind the trigger line
+            val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = density * 4f
+                color = Color.argb(22, Color.red(markerColor), Color.green(markerColor), Color.blue(markerColor))
+            }
+            canvas.drawLine(triggerX, chartTop, triggerX, chartBottom, glowPaint)
+            
+            // 5. Draw severity icon at top of trigger line
+            val iconSize = scaledDensity * 16f
+            val iconY = chartTop + density * 14f
+
+            // Icon text (no circular badge)
+            alertIconPaint.color = Color.WHITE
+            alertIconPaint.textSize = iconSize
+            alertIconPaint.textAlign = Paint.Align.CENTER
+            val iconBounds = Rect()
+            alertIconPaint.getTextBounds(marker.icon, 0, marker.icon.length, iconBounds)
+            alertIconPaint.setShadowLayer(density * 2f, 0f, density * 1f, Color.argb(160, 0, 0, 0))
+            canvas.drawText(marker.icon, triggerX, iconY + iconSize / 2 + iconBounds.height() / 2, alertIconPaint)
+            alertIconPaint.clearShadowLayer()
+            
+            // 6. Draw alert name label below icon
+            if (marker.name.isNotEmpty()) {
+                alertLabelTextPaint.color = Color.WHITE
+                alertLabelTextPaint.textSize = scaledDensity * 9f
+                alertLabelTextPaint.textAlign = Paint.Align.CENTER
+                alertLabelTextPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                
+                val labelY = iconY + iconSize + density * 16f
+                val textWidth = alertLabelTextPaint.measureText(marker.name)
+                
+                // Only draw if it fits reasonably
+                if (textWidth < chartWidth * 0.4f) {
+                    // Background pill with alert color
+                    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        style = Paint.Style.FILL
+                        color = markerColor
+                    }
+                    val bgRect = RectF(
+                        triggerX - textWidth / 2 - density * 6f,
+                        labelY - scaledDensity * 9f,
+                        triggerX + textWidth / 2 + density * 6f,
+                        labelY + density * 4f
+                    )
+                    canvas.drawRoundRect(bgRect, density * 6f, density * 6f, bgPaint)
+                    canvas.drawText(marker.name, triggerX, labelY, alertLabelTextPaint)
+                }
+            }
+        }
     }
 
     /** Draw sticky marker with pin indicator and persistent tooltip */

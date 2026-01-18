@@ -37,30 +37,58 @@ class AlertEvaluator(private val context: Context) {
      */
     fun evaluate(currentDose: Float, currentCps: Float, recentReadings: List<Prefs.LastReading>) {
         val alerts = Prefs.getSmartAlerts(context).filter { it.enabled }
-        if (alerts.isEmpty()) return
+        if (alerts.isEmpty()) {
+            Log.d(TAG, "No enabled alerts to evaluate")
+            return
+        }
 
         val now = System.currentTimeMillis()
+        Log.d(TAG, "Evaluating ${alerts.size} alerts. Dose=$currentDose, CPS=$currentCps")
 
         for (alert in alerts) {
             val isTriggered = evaluateAlert(alert, currentDose, currentCps, recentReadings)
+            Log.d(TAG, "Alert '${alert.name}': metric=${alert.metric}, condition=${alert.condition}, threshold=${alert.threshold}, triggered=$isTriggered")
             
             if (isTriggered) {
                 // Track start time for duration check
                 if (!alertStartTimes.containsKey(alert.id)) {
                     alertStartTimes[alert.id] = now
+                    Log.d(TAG, "Alert '${alert.name}' condition first met, starting duration timer")
                 }
                 
                 val startTime = alertStartTimes[alert.id] ?: now
+
+                // Persist active state so UI can render immediately (even before duration requirement is met)
+                try {
+                    Prefs.upsertActiveAlert(
+                        context,
+                        Prefs.ActiveAlertState(
+                            alertId = alert.id,
+                            alertName = alert.name,
+                            metric = alert.metric,
+                            color = alert.color,
+                            severity = alert.severity,
+                            windowStartMs = startTime,
+                            lastSeenMs = now
+                        )
+                    )
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Failed to persist active alert state", t)
+                }
+
                 val durationMs = now - startTime
                 val requiredDurationMs = alert.durationSeconds * 1000L
+                Log.d(TAG, "Alert '${alert.name}': duration ${durationMs}ms / ${requiredDurationMs}ms required")
                 
                 // Check if duration requirement is met
                 if (durationMs >= requiredDurationMs) {
                     // Check cooldown
                     val timeSinceLastTrigger = now - alert.lastTriggeredMs
+                    Log.d(TAG, "Alert '${alert.name}': cooldown check - ${timeSinceLastTrigger}ms since last, need ${alert.cooldownMs}ms")
                     if (timeSinceLastTrigger >= alert.cooldownMs) {
-                        // Fire the alert!
-                        fireAlert(alert, currentDose, currentCps)
+                        // Fire the alert! Pass in the duration window start time
+                        Log.d(TAG, "FIRING ALERT '${alert.name}'!")
+                        fireAlert(alert, currentDose, currentCps, startTime)
                         
                         // Update last triggered time
                         val updatedAlert = alert.copy(lastTriggeredMs = now)
@@ -69,7 +97,16 @@ class AlertEvaluator(private val context: Context) {
                 }
             } else {
                 // Condition no longer met, reset start time
+                if (alertStartTimes.containsKey(alert.id)) {
+                    Log.d(TAG, "Alert '${alert.name}' condition no longer met, resetting timer")
+                }
                 alertStartTimes.remove(alert.id)
+
+                // Clear persisted active state
+                try {
+                    Prefs.removeActiveAlert(context, alert.id)
+                } catch (_: Throwable) {
+                }
             }
         }
     }
@@ -117,8 +154,28 @@ class AlertEvaluator(private val context: Context) {
         }
     }
 
-    private fun fireAlert(alert: Prefs.SmartAlert, currentDose: Float, currentCps: Float) {
+    private fun fireAlert(alert: Prefs.SmartAlert, currentDose: Float, currentCps: Float, durationWindowStartMs: Long) {
+        val now = System.currentTimeMillis()
         Log.d(TAG, "Firing alert: ${alert.name}")
+
+        // Record the alert event for chart visualization
+        // durationWindowStartMs = when the condition first became true
+        // now = when the alert fires (notification sent)
+        // cooldownEndMs = when the cooldown period ends
+        val alertEvent = Prefs.AlertEvent(
+            alertId = alert.id,
+            alertName = alert.name,
+            triggerTimestampMs = now,
+            durationWindowStartMs = durationWindowStartMs,
+            cooldownEndMs = now + alert.cooldownMs,
+            metric = alert.metric,
+            color = alert.color,  // Already a string like "amber"
+            severity = alert.severity,  // Already a string like "medium"
+            thresholdValue = alert.threshold,
+            thresholdUnit = alert.thresholdUnit  // Already a string like "usv_h"
+        )
+        Prefs.addAlertEvent(context, alertEvent)
+        Log.d(TAG, "Alert event recorded: trigger=${now}, durationStart=${durationWindowStartMs}, cooldownEnd=${now + alert.cooldownMs}")
 
         // Check notification permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -146,7 +203,7 @@ class AlertEvaluator(private val context: Context) {
             else -> alert.condition
         }
 
-        val title = "⚠️ ${alert.name}"
+        val title = "${alert.getSeverityEnum().icon} ${alert.name}"
         val text = "$metricLabel $conditionText for ${alert.durationSeconds}s\nCurrent: $currentValueText"
 
         // Create intent to open app

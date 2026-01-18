@@ -35,6 +35,11 @@ import com.radiacode.ble.ui.StatRowView
 import com.radiacode.ble.ui.IsotopeChartView
 import com.radiacode.ble.ui.StackedAreaChartView
 import com.radiacode.ble.ui.IsotopeBarChartView
+import com.radiacode.ble.dashboard.DashboardGridLayout
+import com.radiacode.ble.dashboard.DashboardLayout
+import com.radiacode.ble.dashboard.DashboardReorderHelper
+import com.radiacode.ble.dashboard.PanelType
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -202,9 +207,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionAlertsHeader: View
     private lateinit var sectionAlertsContent: View
     private lateinit var sectionAlertsArrow: android.widget.ImageView
+    private lateinit var sectionDetectionHeader: View
+    private lateinit var sectionDetectionContent: View
+    private lateinit var sectionDetectionArrow: android.widget.ImageView
     private lateinit var sectionAdvancedHeader: View
     private lateinit var sectionAdvancedContent: View
     private lateinit var sectionAdvancedArrow: android.widget.ImageView
+    
+    // Dashboard settings section
+    private lateinit var sectionDashboardHeader: View
+    private lateinit var sectionDashboardContent: View
+    private lateinit var sectionDashboardArrow: android.widget.ImageView
+    private lateinit var rowEditDashboard: View
+    private lateinit var rowResetDashboard: View
     
     // Application settings rows
     private lateinit var rowNotificationSettings: View
@@ -213,6 +228,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowMapTheme: View
     private lateinit var valueMapTheme: android.widget.TextView
     private lateinit var rowClearMapData: View
+    
+    // Dashboard edit mode
+    private lateinit var fabEditDashboard: FloatingActionButton
+    private lateinit var editModeToolbar: LinearLayout
+    private lateinit var btnResetDashboard: MaterialButton
+    private lateinit var btnDoneEditing: MaterialButton
+    private var isDashboardEditMode: Boolean = false
+    private var dashboardReorderHelper: DashboardReorderHelper? = null
+    
+    // Dashboard section wrappers for drag reordering
+    private lateinit var metricsCardsRow: LinearLayout
+    private lateinit var dashboardContainer: LinearLayout
 
     // Logs panel
     private lateinit var shareCsvButton: MaterialButton
@@ -366,6 +393,7 @@ class MainActivity : AppCompatActivity() {
         setupMapCard()
         setupIsotopePanel()
         setupToolbarDeviceSelector()
+        setupDashboardEditMode()
 
         refreshSettingsRows()
         updateChartTitles()
@@ -388,6 +416,10 @@ class MainActivity : AppCompatActivity() {
         panelDevice = findViewById(R.id.panelDevice)
         panelSettings = findViewById(R.id.panelSettings)
         panelLogs = findViewById(R.id.panelLogs)
+        
+        // Dashboard container for reordering
+        dashboardContainer = panelDashboard as LinearLayout
+        metricsCardsRow = findViewById(R.id.metricsCardsRow)
 
         statusDot = findViewById(R.id.statusDot)
         statusLabel = findViewById(R.id.statusLabel)
@@ -515,9 +547,19 @@ class MainActivity : AppCompatActivity() {
         sectionAlertsHeader = findViewById(R.id.sectionAlertsHeader)
         sectionAlertsContent = findViewById(R.id.sectionAlertsContent)
         sectionAlertsArrow = findViewById(R.id.sectionAlertsArrow)
+        sectionDetectionHeader = findViewById(R.id.sectionDetectionHeader)
+        sectionDetectionContent = findViewById(R.id.sectionDetectionContent)
+        sectionDetectionArrow = findViewById(R.id.sectionDetectionArrow)
         sectionAdvancedHeader = findViewById(R.id.sectionAdvancedHeader)
         sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
         sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
+        
+        // Dashboard settings section
+        sectionDashboardHeader = findViewById(R.id.sectionDashboardHeader)
+        sectionDashboardContent = findViewById(R.id.sectionDashboardContent)
+        sectionDashboardArrow = findViewById(R.id.sectionDashboardArrow)
+        rowEditDashboard = findViewById(R.id.rowEditDashboard)
+        rowResetDashboard = findViewById(R.id.rowResetDashboard)
         
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
@@ -526,6 +568,12 @@ class MainActivity : AppCompatActivity() {
         rowMapTheme = findViewById(R.id.rowMapTheme)
         valueMapTheme = findViewById(R.id.valueMapTheme)
         rowClearMapData = findViewById(R.id.rowClearMapData)
+        
+        // Dashboard edit mode
+        fabEditDashboard = findViewById(R.id.fabEditDashboard)
+        editModeToolbar = findViewById(R.id.editModeToolbar)
+        btnResetDashboard = findViewById(R.id.btnResetDashboard)
+        btnDoneEditing = findViewById(R.id.btnDoneEditing)
 
         shareCsvButton = findViewById(R.id.shareCsvButton)
     }
@@ -594,10 +642,12 @@ class MainActivity : AppCompatActivity() {
     private fun setupSettingsPanel() {
         // Setup expandable sections
         setupExpandableSection(sectionAppHeader, sectionAppContent, sectionAppArrow, expanded = true)
+        setupExpandableSection(sectionDashboardHeader, sectionDashboardContent, sectionDashboardArrow, expanded = true)
         setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
         setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
         setupExpandableSection(sectionMapHeader, sectionMapContent, sectionMapArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
+        setupExpandableSection(sectionDetectionHeader, sectionDetectionContent, sectionDetectionArrow, expanded = true)
         setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
         
         // Application settings
@@ -612,6 +662,16 @@ class MainActivity : AppCompatActivity() {
         
         rowClearMapData.setOnClickListener {
             showClearMapDataDialog()
+        }
+        
+        // Dashboard settings
+        rowEditDashboard.setOnClickListener {
+            setPanel(Panel.Dashboard)
+            mainHandler.postDelayed({ enterDashboardEditMode() }, 300)
+        }
+        
+        rowResetDashboard.setOnClickListener {
+            showResetDashboardConfirmation()
         }
         
         rowWindow.setOnClickListener {
@@ -1832,9 +1892,169 @@ class MainActivity : AppCompatActivity() {
         val doseDec = decimate(doseT, doseV)
         val cpsDec = decimate(cpsT, cpsV)
 
+        // Build chart markers directly from current series + configured alerts.
+        // This makes the visualization reliable even if notifications are blocked or events weren't persisted.
+        fun buildMarkersForMetric(
+            metric: String,
+            timestamps: List<Long>,
+            values: List<Float>,
+            displayDoseUnit: Prefs.DoseUnit,
+            displayCountUnit: Prefs.CountUnit,
+        ): List<ProChartView.AlertMarker> {
+            if (timestamps.size < 2 || timestamps.size != values.size) return emptyList()
+
+            val enabledAlerts = Prefs.getSmartAlerts(this)
+                .filter { it.enabled }
+                .filter { it.metric == metric }
+                .filter { it.condition == "above" || it.condition == "below" }
+
+            if (enabledAlerts.isEmpty()) return emptyList()
+
+            val out = ArrayList<ProChartView.AlertMarker>()
+
+            for (alert in enabledAlerts) {
+                val colorHex = "#${alert.getColorEnum().hexColor}"
+                val icon = alert.getSeverityEnum().icon
+
+                val thresholdDisplayed = when (metric) {
+                    "dose" -> {
+                        // Alerts store dose thresholds as usv_h; convert to chart display units.
+                        val base = alert.threshold
+                        if (displayDoseUnit == Prefs.DoseUnit.NSV_H) (base * 1000.0) else base
+                    }
+                    "count" -> {
+                        // Alerts store count thresholds as cps; convert to chart display units.
+                        val base = alert.threshold
+                        if (displayCountUnit == Prefs.CountUnit.CPM) (base * 60.0) else base
+                    }
+                    else -> alert.threshold
+                }
+
+                val requiredDurationMs = (alert.durationSeconds.coerceAtLeast(0) * 1000L)
+
+                var inSegment = false
+                var segStartIdx = 0
+
+                fun conditionTrue(v: Float): Boolean {
+                    return if (alert.condition == "above") v.toDouble() >= thresholdDisplayed else v.toDouble() <= thresholdDisplayed
+                }
+
+                for (i in values.indices) {
+                    val ok = conditionTrue(values[i])
+                    if (ok && !inSegment) {
+                        inSegment = true
+                        segStartIdx = i
+                    } else if (!ok && inSegment) {
+                        val segEndIdx = (i - 1).coerceAtLeast(segStartIdx)
+                        val startTs = timestamps[segStartIdx]
+                        val endTs = timestamps[segEndIdx]
+                        // Active region (thick translucent bar): start -> end
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = endTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+
+                        // Fired marker (dashed line + icon) once duration satisfied.
+                        if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
+                            val fireTs = startTs + requiredDurationMs
+                            out.add(
+                                ProChartView.AlertMarker(
+                                    triggerTimestampMs = fireTs,
+                                    durationWindowStartMs = startTs,
+                                    // Use segment end as a fade window to visually separate "trigger" moment.
+                                    cooldownEndMs = endTs,
+                                    color = colorHex,
+                                    icon = icon,
+                                    name = alert.name
+                                )
+                            )
+                        } else if (requiredDurationMs == 0L) {
+                            // Instant trigger: show dashed marker at the segment start.
+                            out.add(
+                                ProChartView.AlertMarker(
+                                    triggerTimestampMs = startTs,
+                                    durationWindowStartMs = startTs,
+                                    cooldownEndMs = endTs,
+                                    color = colorHex,
+                                    icon = icon,
+                                    name = alert.name
+                                )
+                            )
+                        }
+
+                        inSegment = false
+                    }
+                }
+
+                if (inSegment) {
+                    val startTs = timestamps[segStartIdx]
+                    val endTs = timestamps.last()
+                    out.add(
+                        ProChartView.AlertMarker(
+                            triggerTimestampMs = endTs,
+                            durationWindowStartMs = startTs,
+                            cooldownEndMs = endTs,
+                            color = colorHex,
+                            icon = icon,
+                            name = alert.name
+                        )
+                    )
+                    if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
+                        val fireTs = startTs + requiredDurationMs
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = fireTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+                    } else if (requiredDurationMs == 0L) {
+                        out.add(
+                            ProChartView.AlertMarker(
+                                triggerTimestampMs = startTs,
+                                durationWindowStartMs = startTs,
+                                cooldownEndMs = endTs,
+                                color = colorHex,
+                                icon = icon,
+                                name = alert.name
+                            )
+                        )
+                    }
+                }
+            }
+
+            return out
+        }
+
         mainHandler.post {
             doseChart.setSeries(doseDec.first, doseDec.second)
             cpsChart.setSeries(cpsDec.first, cpsDec.second)
+
+            val doseMarkers = buildMarkersForMetric(
+                metric = "dose",
+                timestamps = doseT,
+                values = doseV,
+                displayDoseUnit = du,
+                displayCountUnit = cu,
+            )
+            val countMarkers = buildMarkersForMetric(
+                metric = "count",
+                timestamps = cpsT,
+                values = cpsV,
+                displayDoseUnit = du,
+                displayCountUnit = cu,
+            )
+            doseChart.setAlertMarkers(doseMarkers)
+            cpsChart.setAlertMarkers(countMarkers)
 
             val sparkDose = doseDec.second.takeLast(20)
             val sparkCps = cpsDec.second.takeLast(20)
@@ -2197,6 +2417,20 @@ class MainActivity : AppCompatActivity() {
         panelDevice.visibility = if (panel == Panel.Device) View.VISIBLE else View.GONE
         panelSettings.visibility = if (panel == Panel.Settings) View.VISIBLE else View.GONE
         panelLogs.visibility = if (panel == Panel.Logs) View.VISIBLE else View.GONE
+        
+        // Only show edit dashboard FAB on dashboard panel
+        if (panel == Panel.Dashboard) {
+            if (!isDashboardEditMode) {
+                fabEditDashboard.visibility = View.VISIBLE
+            }
+        } else {
+            fabEditDashboard.visibility = View.GONE
+            editModeToolbar.visibility = View.GONE
+            // Exit edit mode if switching away from dashboard
+            if (isDashboardEditMode) {
+                isDashboardEditMode = false
+            }
+        }
     }
 
     private fun doseUnitLabel(du: Prefs.DoseUnit): String = when (du) {
@@ -2267,6 +2501,12 @@ class MainActivity : AppCompatActivity() {
             outT.add(timestamps[i])
             outV.add(values[i])
             i += step
+        }
+        // Always include the last point so the visible time range is stable (prevents jitter).
+        val lastIdx = values.lastIndex
+        if (outT.isEmpty() || outT.last() != timestamps[lastIdx]) {
+            outT.add(timestamps[lastIdx])
+            outV.add(values[lastIdx])
         }
         return outT to outV
     }
@@ -2368,5 +2608,98 @@ class MainActivity : AppCompatActivity() {
         val devices = Prefs.getDevices(this)
         val statesMap = buildDeviceStatesMap(devices)
         deviceSelector.updateStates(statesMap)
+    }
+    
+    // ==================== DASHBOARD EDIT MODE ====================
+    
+    private fun setupDashboardEditMode() {
+        // FAB to enter edit mode
+        fabEditDashboard.setOnClickListener {
+            enterDashboardEditMode()
+        }
+        
+        // Done button exits edit mode
+        btnDoneEditing.setOnClickListener {
+            exitDashboardEditMode()
+        }
+        
+        // Reset button in toolbar
+        btnResetDashboard.setOnClickListener {
+            showResetDashboardConfirmation()
+        }
+        
+        // Setup the reorder helper
+        dashboardReorderHelper = DashboardReorderHelper(dashboardContainer) { newOrder ->
+            Prefs.setDashboardOrder(this, newOrder)
+        }
+        
+        // Register sections for reordering
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_METRICS, metricsCardsRow)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_INTELLIGENCE, intelligenceCard)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_DOSE_CHART, doseChartPanel)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_COUNT_CHART, cpsChartPanel)
+        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_ISOTOPE, isotopePanel)
+        
+        // Apply saved order
+        val savedOrder = Prefs.getDashboardOrder(this)
+        dashboardReorderHelper?.applyOrder(savedOrder)
+    }
+    
+    private fun enterDashboardEditMode() {
+        isDashboardEditMode = true
+        
+        // Hide FAB, show toolbar
+        fabEditDashboard.visibility = View.GONE
+        editModeToolbar.visibility = View.VISIBLE
+        
+        // Enable edit mode on reorder helper
+        dashboardReorderHelper?.isEditMode = true
+        
+        // Show toast with instructions
+        android.widget.Toast.makeText(
+            this, 
+            "Long-press and drag panels to reorder them", 
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+    
+    private fun exitDashboardEditMode() {
+        isDashboardEditMode = false
+        
+        // Show FAB, hide toolbar
+        fabEditDashboard.visibility = View.VISIBLE
+        editModeToolbar.visibility = View.GONE
+        
+        // Disable edit mode on reorder helper
+        dashboardReorderHelper?.isEditMode = false
+    }
+    
+    private fun showResetDashboardConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Reset Dashboard Layout")
+            .setMessage("This will restore the default panel arrangement. Your data will not be affected.")
+            .setPositiveButton("Reset") { _, _ ->
+                resetDashboardLayout()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun resetDashboardLayout() {
+        Prefs.resetDashboardLayout(this)
+        
+        // Reset reorder helper to default
+        dashboardReorderHelper?.resetToDefault()
+        
+        android.widget.Toast.makeText(
+            this,
+            "Dashboard layout reset to default",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+        
+        // Exit edit mode if active
+        if (isDashboardEditMode) {
+            exitDashboardEditMode()
+        }
     }
 }

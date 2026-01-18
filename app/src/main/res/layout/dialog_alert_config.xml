@@ -66,26 +66,57 @@
             android:padding="8dp"
             android:popupBackground="@color/pro_bg_card" />
 
-        <!-- Threshold Input (for above/below) -->
-        <com.google.android.material.textfield.TextInputLayout
+        <!-- Threshold Input with Unit Selector (for above/below) -->
+        <LinearLayout
             android:id="@+id/layoutThreshold"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:hint="Threshold Value"
-            app:boxStrokeColor="@color/pro_cyan"
-            app:hintTextColor="@color/pro_cyan"
-            app:helperText="For dose: µSv/h, for count: CPS"
-            app:helperTextTextColor="@color/pro_text_muted">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/inputThreshold"
+            android:orientation="vertical">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Threshold"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="12sp" />
+            
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="numberDecimal"
-                android:textColor="@color/pro_text_primary" />
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Value"
+                    app:boxStrokeColor="@color/pro_cyan"
+                    app:hintTextColor="@color/pro_cyan">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/inputThreshold"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberDecimal"
+                        android:textColor="@color/pro_text_primary" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+                
+                <Spinner
+                    android:id="@+id/spinnerUnit"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="8dp"
+                    android:minWidth="100dp"
+                    android:background="@drawable/spinner_background"
+                    android:padding="8dp"
+                    android:popupBackground="@color/pro_bg_card" />
+            </LinearLayout>
+            
+        </LinearLayout>
 
         <!-- Sigma Selection (for outside_sigma) -->
         <com.google.android.material.textfield.TextInputLayout
@@ -150,25 +181,7 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Color Selection -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Alert Color"
-            android:textColor="@color/pro_text_muted"
-            android:textSize="12sp" />
-
-        <Spinner
-            android:id="@+id/spinnerColor"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="4dp"
-            android:background="@drawable/spinner_background"
-            android:padding="8dp"
-            android:popupBackground="@color/pro_bg_card" />
-
-        <!-- Severity Selection -->
+        <!-- Severity Selection with Icon Preview -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -179,6 +192,24 @@
 
         <Spinner
             android:id="@+id/spinnerSeverity"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/spinner_background"
+            android:padding="8dp"
+            android:popupBackground="@color/pro_bg_card" />
+
+        <!-- Color Selection with Dot Preview -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Alert Color"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spinnerColor"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:layout_marginTop="4dp"
@@ -206,7 +237,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
                 android:layout_weight="1"
-                android:text="Statistical alerts (σ) use running mean and standard deviation to detect anomalies. This is more adaptive than fixed thresholds."
+                android:text="Triggered alerts are visualized on charts as dashed vertical lines with colored regions showing the alert duration."
                 android:textColor="@color/pro_text_muted"
                 android:textSize="12sp" />
 
