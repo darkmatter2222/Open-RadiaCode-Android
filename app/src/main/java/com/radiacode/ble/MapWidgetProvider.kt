@@ -16,8 +16,8 @@ import kotlin.math.*
 /**
  * Map Widget Provider
  * 
- * Displays a radiation map widget with hexagonal grid overlay on OSM tiles.
- * The widget shows collected radiation data points over a map background.
+ * Displays a radiation map widget with hexagonal grid overlay on real OSM tiles.
+ * The widget shows collected radiation data points over an actual map background.
  */
 class MapWidgetProvider : AppWidgetProvider() {
 
@@ -54,6 +54,7 @@ class MapWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val HEX_SIZE_METERS = 25.0
+        private const val DEFAULT_ZOOM = 17  // Higher zoom for better detail
         
         /**
          * Update all map widgets.
@@ -95,18 +96,29 @@ class MapWidgetProvider : AppWidgetProvider() {
             // Get config (or create default)
             val config = Prefs.getMapWidgetConfig(context, widgetId) ?: MapWidgetConfig.createDefault(widgetId)
             
-            // Get widget dimensions
+            // Get widget dimensions - use MAX values for actual size when resized
+            // MIN values are the minimum guaranteed size, MAX gives us actual rendered size
             val density = context.resources.displayMetrics.density
-            val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 200) ?: 200
-            val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 200) ?: 200
-            val widgetWidth = (minWidth * density).toInt()
-            val widgetHeight = (minHeight * density).toInt()
+            val maxWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0) ?: 0
+            val maxHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0) ?: 0
+            val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250) ?: 250
+            val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 250) ?: 250
+            
+            // Use max dimensions if available (actual size), otherwise fall back to min
+            val widthDp = if (maxWidth > 0) maxWidth else minWidth
+            val heightDp = if (maxHeight > 0) maxHeight else minHeight
+            
+            // Convert dp to pixels - multiply by density for crisp rendering
+            val widgetWidth = (widthDp * density).toInt().coerceAtLeast(300)
+            val widgetHeight = (heightDp * density).toInt().coerceAtLeast(300)
+            
+            android.util.Log.d("RadiaCode", "MapWidget dimensions: ${widthDp}dp x ${heightDp}dp -> ${widgetWidth}px x ${widgetHeight}px (density=$density)")
             
             // Apply background based on opacity AND border settings
             val bgDrawable = getBackgroundDrawable(config.backgroundOpacity, config.showBorder)
             views.setInt(R.id.mapWidgetRoot, "setBackgroundResource", bgDrawable)
             
-            // Render the map as a bitmap
+            // Render the map as a bitmap at full resolution
             val mapBitmap = renderMapBitmap(context, config, widgetWidth, widgetHeight, density)
             views.setImageViewBitmap(R.id.mapImage, mapBitmap)
             
@@ -162,7 +174,7 @@ class MapWidgetProvider : AppWidgetProvider() {
         }
         
         /**
-         * Render the map visualization as a bitmap.
+         * Render the map visualization as a bitmap with real map tiles.
          */
         private fun renderMapBitmap(
             context: Context,
@@ -171,65 +183,65 @@ class MapWidgetProvider : AppWidgetProvider() {
             height: Int,
             density: Float
         ): Bitmap {
-            val bitmap = Bitmap.createBitmap(width.coerceAtLeast(100), height.coerceAtLeast(100), Bitmap.Config.ARGB_8888)
+            val actualWidth = width.coerceAtLeast(200)
+            val actualHeight = height.coerceAtLeast(200)
+            
+            val bitmap = Bitmap.createBitmap(actualWidth, actualHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             
             // Get map data points
             val dataPoints = Prefs.getMapDataPoints(context)
             
-            // Calculate bounds
-            val bounds = if (dataPoints.isNotEmpty()) {
-                val minLat = dataPoints.minOf { it.latitude }
-                val maxLat = dataPoints.maxOf { it.latitude }
-                val minLng = dataPoints.minOf { it.longitude }
-                val maxLng = dataPoints.maxOf { it.longitude }
-                MapBounds(minLat, maxLat, minLng, maxLng)
-            } else {
-                // Default bounds (somewhere neutral)
-                MapBounds(0.0, 0.001, 0.0, 0.001)
-            }
-            
-            // Background (map-like dark gradient)
-            val bgPaint = Paint().apply {
-                shader = LinearGradient(
-                    0f, 0f, 0f, height.toFloat(),
-                    getThemeBackgroundColor(config.mapTheme),
-                    darkenColor(getThemeBackgroundColor(config.mapTheme), 0.8f),
-                    Shader.TileMode.CLAMP
-                )
-            }
-            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
-            
-            // Draw grid lines (subtle)
-            val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = getThemeGridColor(config.mapTheme)
-                strokeWidth = 1f * density
-                style = Paint.Style.STROKE
-            }
-            
-            val gridSpacing = width / 6f
-            for (i in 1..5) {
-                canvas.drawLine(gridSpacing * i, 0f, gridSpacing * i, height.toFloat(), gridPaint)
-                canvas.drawLine(0f, gridSpacing * i, width.toFloat(), gridSpacing * i, gridPaint)
-            }
-            
-            if (dataPoints.isEmpty()) {
-                // Draw "No data" message
-                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#9E9EA8")
-                    textSize = 14f * density
-                    textAlign = Paint.Align.CENTER
+            // Determine center and zoom
+            val center = if (dataPoints.isNotEmpty()) {
+                val latest = dataPoints.maxByOrNull { it.timestampMs }
+                if (latest != null) {
+                    Pair(latest.latitude, latest.longitude)
+                } else {
+                    MapTileLoader.getLastKnownCenter(context)
                 }
-                canvas.drawText("No map data", width / 2f, height / 2f, textPaint)
+            } else {
+                MapTileLoader.getLastKnownCenter(context)
+            }
+            
+            if (center == null) {
+                // No location data - show placeholder
+                drawNoLocationPlaceholder(canvas, actualWidth, actualHeight, density, config)
                 return bitmap
             }
             
-            // Group data into hexagons
-            val hexagonData = mutableMapOf<String, MutableList<Prefs.MapDataPoint>>()
-            dataPoints.forEach { point ->
-                val hexId = latLngToHexId(point.latitude, point.longitude, bounds)
-                hexagonData.getOrPut(hexId) { mutableListOf() }.add(point)
+            // Try to load actual map tiles
+            val mapBackground = try {
+                MapTileLoader.loadMapBitmapSync(
+                    context,
+                    center.first,
+                    center.second,
+                    DEFAULT_ZOOM,
+                    actualWidth,
+                    actualHeight,
+                    config.mapTheme
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("RadiaCode", "Failed to load map tiles", e)
+                null
             }
+            
+            if (mapBackground != null) {
+                canvas.drawBitmap(mapBackground, 0f, 0f, null)
+                mapBackground.recycle()
+            } else {
+                // Draw fallback background
+                drawFallbackBackground(canvas, actualWidth, actualHeight, config)
+            }
+            
+            if (dataPoints.isEmpty()) {
+                // Draw "No data" message overlay
+                drawNoDataOverlay(canvas, actualWidth, actualHeight, density)
+                return bitmap
+            }
+            
+            // Calculate bounds for data overlay
+            val bounds = calculateBounds(dataPoints, center.first, center.second, actualWidth, actualHeight, DEFAULT_ZOOM)
             
             // Calculate min/max values for color scaling
             val values = when (config.metricType) {
@@ -239,80 +251,280 @@ class MapWidgetProvider : AppWidgetProvider() {
             val minVal = values.minOrNull() ?: 0f
             val maxVal = values.maxOrNull() ?: 1f
             
-            // Draw hexagons
-            val hexFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-            }
-            val hexStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
-                strokeWidth = 1.5f * density
-                color = Color.argb(60, 255, 255, 255)
-            }
-            
+            // Draw radiation overlay
             if (config.showHexagonGrid) {
-                hexagonData.forEach { (hexId, points) ->
-                    val avgValue = when (config.metricType) {
-                        MapMetricType.DOSE_RATE -> points.map { it.uSvPerHour }.average().toFloat()
-                        MapMetricType.COUNT_RATE -> points.map { it.cps }.average().toFloat()
-                    }
-                    
-                    val normalized = if (maxVal > minVal) {
-                        ((avgValue - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
-                    } else {
-                        0.5f
-                    }
-                    
-                    val color = interpolateRadiationColor(normalized)
-                    hexFillPaint.color = Color.argb(140, Color.red(color), Color.green(color), Color.blue(color))
-                    
-                    // Get hex center and draw
-                    val hexCenter = hexIdToScreenPos(hexId, bounds, width, height)
-                    if (hexCenter != null) {
-                        val hexPath = createHexagonPath(hexCenter.first, hexCenter.second, 15f * density)
-                        canvas.drawPath(hexPath, hexFillPaint)
-                        canvas.drawPath(hexPath, hexStrokePaint)
-                    }
-                }
+                drawHexagonOverlay(canvas, dataPoints, bounds, config, minVal, maxVal, density)
             } else {
-                // Draw as circles instead
-                val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.FILL
-                }
-                
-                dataPoints.forEach { point ->
-                    val value = when (config.metricType) {
-                        MapMetricType.DOSE_RATE -> point.uSvPerHour
-                        MapMetricType.COUNT_RATE -> point.cps
-                    }
-                    
-                    val normalized = if (maxVal > minVal) {
-                        ((value - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
-                    } else {
-                        0.5f
-                    }
-                    
-                    val color = interpolateRadiationColor(normalized)
-                    circlePaint.color = Color.argb(180, Color.red(color), Color.green(color), Color.blue(color))
-                    
-                    val screenPos = latLngToScreenPos(point.latitude, point.longitude, bounds, width, height)
-                    canvas.drawCircle(screenPos.first, screenPos.second, 6f * density, circlePaint)
-                }
+                drawCircleOverlay(canvas, dataPoints, bounds, config, minVal, maxVal, density)
             }
             
-            // Draw scale indicator in corner
-            drawScaleIndicator(canvas, width, height, density, minVal, maxVal, config.metricType)
+            // Draw scale indicator
+            drawScaleIndicator(canvas, actualWidth, actualHeight, density, minVal, maxVal, config.metricType)
+            
+            // Draw current position marker
+            drawPositionMarker(canvas, center.first, center.second, bounds, density)
             
             return bitmap
         }
         
         private data class MapBounds(
-            val minLat: Double,
-            val maxLat: Double,
-            val minLng: Double,
-            val maxLng: Double
+            val centerLat: Double,
+            val centerLng: Double,
+            val latPerPixel: Double,
+            val lngPerPixel: Double,
+            val width: Int,
+            val height: Int
         )
         
-        private fun latLngToHexId(lat: Double, lng: Double, bounds: MapBounds): String {
+        private fun calculateBounds(
+            dataPoints: List<Prefs.MapDataPoint>,
+            centerLat: Double,
+            centerLng: Double,
+            width: Int,
+            height: Int,
+            zoom: Int
+        ): MapBounds {
+            // Calculate degrees per pixel at this zoom level
+            val metersPerPixel = MapTileLoader.metersPerPixel(centerLat, zoom)
+            val metersPerDegreeLat = 111320.0
+            val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
+            
+            val latPerPixel = metersPerPixel / metersPerDegreeLat
+            val lngPerPixel = metersPerPixel / metersPerDegreeLng
+            
+            return MapBounds(centerLat, centerLng, latPerPixel, lngPerPixel, width, height)
+        }
+        
+        private fun latLngToScreen(lat: Double, lng: Double, bounds: MapBounds): Pair<Float, Float> {
+            val dx = (lng - bounds.centerLng) / bounds.lngPerPixel
+            val dy = (bounds.centerLat - lat) / bounds.latPerPixel  // Y is inverted
+            
+            val x = bounds.width / 2 + dx
+            val y = bounds.height / 2 + dy
+            
+            return Pair(x.toFloat(), y.toFloat())
+        }
+        
+        private fun drawNoLocationPlaceholder(
+            canvas: Canvas,
+            width: Int,
+            height: Int,
+            density: Float,
+            config: MapWidgetConfig
+        ) {
+            // Draw themed background
+            val bgColor = getThemeBackgroundColor(config.mapTheme)
+            canvas.drawColor(bgColor)
+            
+            // Draw subtle grid
+            drawSubtleGrid(canvas, width, height, density, config)
+            
+            // Draw message
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#9E9EA8")
+                textSize = 14f * density
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("📍 No location data", width / 2f, height / 2f - 10 * density, textPaint)
+            
+            textPaint.textSize = 11f * density
+            canvas.drawText("Open the app to start mapping", width / 2f, height / 2f + 15 * density, textPaint)
+        }
+        
+        private fun drawFallbackBackground(canvas: Canvas, width: Int, height: Int, config: MapWidgetConfig) {
+            val bgColor = getThemeBackgroundColor(config.mapTheme)
+            val darkBgColor = darkenColor(bgColor, 0.85f)
+            
+            val bgPaint = Paint().apply {
+                shader = LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    bgColor, darkBgColor,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+            
+            // Subtle grid
+            drawSubtleGrid(canvas, width, height, 1f, config)
+        }
+        
+        private fun drawSubtleGrid(canvas: Canvas, width: Int, height: Int, density: Float, config: MapWidgetConfig) {
+            val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = getThemeGridColor(config.mapTheme)
+                strokeWidth = 1f
+                style = Paint.Style.STROKE
+            }
+            
+            val gridSpacing = 40f * density
+            var x = gridSpacing
+            while (x < width) {
+                canvas.drawLine(x, 0f, x, height.toFloat(), gridPaint)
+                x += gridSpacing
+            }
+            var y = gridSpacing
+            while (y < height) {
+                canvas.drawLine(0f, y, width.toFloat(), y, gridPaint)
+                y += gridSpacing
+            }
+        }
+        
+        private fun drawNoDataOverlay(canvas: Canvas, width: Int, height: Int, density: Float) {
+            // Semi-transparent overlay
+            val overlayPaint = Paint().apply {
+                color = Color.argb(100, 0, 0, 0)
+            }
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), overlayPaint)
+            
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                textSize = 13f * density
+                textAlign = Paint.Align.CENTER
+                setShadowLayer(3f, 1f, 1f, Color.BLACK)
+            }
+            canvas.drawText("No radiation data", width / 2f, height / 2f, textPaint)
+        }
+        
+        private fun drawHexagonOverlay(
+            canvas: Canvas,
+            dataPoints: List<Prefs.MapDataPoint>,
+            bounds: MapBounds,
+            config: MapWidgetConfig,
+            minVal: Float,
+            maxVal: Float,
+            density: Float
+        ) {
+            // Group data into hexagons
+            val hexagonData = mutableMapOf<String, MutableList<Prefs.MapDataPoint>>()
+            dataPoints.forEach { point ->
+                val hexId = latLngToHexId(point.latitude, point.longitude)
+                hexagonData.getOrPut(hexId) { mutableListOf() }.add(point)
+            }
+            
+            val hexFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                isFilterBitmap = true
+            }
+            val hexStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * density
+                color = Color.argb(120, 255, 255, 255)
+            }
+            
+            // Calculate hex size in pixels based on zoom - use larger size for visibility
+            val metersPerPixel = MapTileLoader.metersPerPixel(bounds.centerLat, DEFAULT_ZOOM)
+            // Don't multiply by density again - metersPerPixel already gives us the right scale
+            // Use a larger minimum for better visibility on high-DPI screens
+            val hexSizePixels = (HEX_SIZE_METERS / metersPerPixel).toFloat().coerceIn(12f * density, 40f * density)
+            
+            hexagonData.forEach { (_, points) ->
+                val avgValue = when (config.metricType) {
+                    MapMetricType.DOSE_RATE -> points.map { it.uSvPerHour }.average().toFloat()
+                    MapMetricType.COUNT_RATE -> points.map { it.cps }.average().toFloat()
+                }
+                
+                val normalized = if (maxVal > minVal) {
+                    ((avgValue - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
+                } else {
+                    0.5f
+                }
+                
+                val color = interpolateRadiationColor(normalized)
+                hexFillPaint.color = Color.argb(160, Color.red(color), Color.green(color), Color.blue(color))
+                
+                // Use the first point's location for hex center
+                val centerPoint = points.first()
+                val screenPos = latLngToScreen(centerPoint.latitude, centerPoint.longitude, bounds)
+                
+                // Only draw if on screen
+                if (screenPos.first >= -hexSizePixels && screenPos.first <= bounds.width + hexSizePixels &&
+                    screenPos.second >= -hexSizePixels && screenPos.second <= bounds.height + hexSizePixels) {
+                    
+                    val hexPath = createHexagonPath(screenPos.first, screenPos.second, hexSizePixels)
+                    canvas.drawPath(hexPath, hexFillPaint)
+                    canvas.drawPath(hexPath, hexStrokePaint)
+                }
+            }
+        }
+        
+        private fun drawCircleOverlay(
+            canvas: Canvas,
+            dataPoints: List<Prefs.MapDataPoint>,
+            bounds: MapBounds,
+            @Suppress("UNUSED_PARAMETER") config: MapWidgetConfig,
+            minVal: Float,
+            maxVal: Float,
+            density: Float
+        ) {
+            val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                isFilterBitmap = true
+            }
+            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * density
+                color = Color.argb(150, 255, 255, 255)
+            }
+            
+            // Larger radius for better visibility
+            val radius = 10f * density
+            
+            dataPoints.forEach { point ->
+                val value = when (config.metricType) {
+                    MapMetricType.DOSE_RATE -> point.uSvPerHour
+                    MapMetricType.COUNT_RATE -> point.cps
+                }
+                
+                val normalized = if (maxVal > minVal) {
+                    ((value - minVal) / (maxVal - minVal)).coerceIn(0f, 1f)
+                } else {
+                    0.5f
+                }
+                
+                val color = interpolateRadiationColor(normalized)
+                circlePaint.color = Color.argb(220, Color.red(color), Color.green(color), Color.blue(color))
+                
+                val screenPos = latLngToScreen(point.latitude, point.longitude, bounds)
+                
+                // Only draw if on screen
+                if (screenPos.first >= -radius && screenPos.first <= bounds.width + radius &&
+                    screenPos.second >= -radius && screenPos.second <= bounds.height + radius) {
+                    canvas.drawCircle(screenPos.first, screenPos.second, radius, circlePaint)
+                    canvas.drawCircle(screenPos.first, screenPos.second, radius, strokePaint)
+                }
+            }
+        }
+        
+        private fun drawPositionMarker(
+            canvas: Canvas,
+            lat: Double,
+            lng: Double,
+            bounds: MapBounds,
+            density: Float
+        ) {
+            val screenPos = latLngToScreen(lat, lng, bounds)
+            
+            // Draw position dot with glow - larger for visibility
+            val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#5000E5FF")
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(screenPos.first, screenPos.second, 20f * density, glowPaint)
+            
+            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#00E5FF")
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(screenPos.first, screenPos.second, 6f * density, dotPaint)
+            
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = 2f * density
+            }
+            canvas.drawCircle(screenPos.first, screenPos.second, 6f * density, borderPaint)
+        }
+        
+        private fun latLngToHexId(lat: Double, lng: Double): String {
             val metersPerDegreeLat = 111320.0
             val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
             
@@ -344,41 +556,6 @@ class MapWidgetProvider : AppWidgetProvider() {
             }
             
             return Pair(rq, rr)
-        }
-        
-        private fun hexIdToScreenPos(hexId: String, bounds: MapBounds, width: Int, height: Int): Pair<Float, Float>? {
-            val parts = hexId.split(",")
-            if (parts.size != 2) return null
-            
-            val q = parts[0].toIntOrNull() ?: return null
-            val r = parts[1].toIntOrNull() ?: return null
-            
-            val size = HEX_SIZE_METERS
-            
-            // Convert axial to meters
-            val x = size * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
-            val y = size * (3.0 / 2.0 * r)
-            
-            // Convert meters back to lat/lng
-            val centerLat = (bounds.minLat + bounds.maxLat) / 2
-            val metersPerDegreeLat = 111320.0
-            val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
-            
-            val lng = x / metersPerDegreeLng
-            val lat = y / metersPerDegreeLat
-            
-            return latLngToScreenPos(lat, lng, bounds, width, height)
-        }
-        
-        private fun latLngToScreenPos(lat: Double, lng: Double, bounds: MapBounds, width: Int, height: Int): Pair<Float, Float> {
-            val padding = 0.1f  // 10% padding
-            val latRange = (bounds.maxLat - bounds.minLat).let { if (it < 0.0001) 0.001 else it }
-            val lngRange = (bounds.maxLng - bounds.minLng).let { if (it < 0.0001) 0.001 else it }
-            
-            val x = ((lng - bounds.minLng) / lngRange * (1 - 2 * padding) + padding) * width
-            val y = ((bounds.maxLat - lat) / latRange * (1 - 2 * padding) + padding) * height
-            
-            return Pair(x.toFloat(), y.toFloat())
         }
         
         private fun createHexagonPath(centerX: Float, centerY: Float, size: Float): Path {
@@ -434,12 +611,12 @@ class MapWidgetProvider : AppWidgetProvider() {
         private fun getThemeBackgroundColor(theme: Prefs.MapTheme): Int {
             return when (theme) {
                 Prefs.MapTheme.HOME -> Color.parseColor("#1A1A1E")
-                Prefs.MapTheme.DARK_MATTER -> Color.parseColor("#1A1A1E")
-                Prefs.MapTheme.DARK_GRAY -> Color.parseColor("#2A2A2E")
-                Prefs.MapTheme.VOYAGER -> Color.parseColor("#F2F2F2")
-                Prefs.MapTheme.POSITRON -> Color.parseColor("#F2F0E6")
-                Prefs.MapTheme.TONER -> Color.parseColor("#000000")
-                Prefs.MapTheme.STANDARD -> Color.parseColor("#E8E4D9")
+                Prefs.MapTheme.DARK_MATTER -> Color.parseColor("#262626")
+                Prefs.MapTheme.DARK_GRAY -> Color.parseColor("#1A1A1A")
+                Prefs.MapTheme.VOYAGER -> Color.parseColor("#F5F3F2")
+                Prefs.MapTheme.POSITRON -> Color.parseColor("#E5E5E5")
+                Prefs.MapTheme.TONER -> Color.parseColor("#FFFFFF")
+                Prefs.MapTheme.STANDARD -> Color.parseColor("#F2EFE9")
             }
         }
         
@@ -448,8 +625,8 @@ class MapWidgetProvider : AppWidgetProvider() {
                 Prefs.MapTheme.HOME,
                 Prefs.MapTheme.DARK_MATTER,
                 Prefs.MapTheme.DARK_GRAY,
-                Prefs.MapTheme.TONER -> Color.argb(40, 255, 255, 255)
-                else -> Color.argb(30, 0, 0, 0)
+                Prefs.MapTheme.TONER -> Color.argb(25, 255, 255, 255)
+                else -> Color.argb(20, 0, 0, 0)
             }
         }
         
@@ -462,9 +639,21 @@ class MapWidgetProvider : AppWidgetProvider() {
             maxVal: Float,
             metricType: MapMetricType
         ) {
-            val padding = 8f * density
-            val barWidth = 60f * density
-            val barHeight = 8f * density
+            val padding = 10f * density
+            val barWidth = 70f * density
+            val barHeight = 10f * density
+            
+            // Background for scale
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(150, 0, 0, 0)
+            }
+            val bgRect = RectF(
+                width - padding - barWidth - 8 * density,
+                height - padding - barHeight - 22 * density,
+                width - padding + 4 * density,
+                height - padding + 4 * density
+            )
+            canvas.drawRoundRect(bgRect, 6 * density, 6 * density, bgPaint)
             
             // Gradient bar
             val barLeft = width - padding - barWidth
@@ -479,19 +668,13 @@ class MapWidgetProvider : AppWidgetProvider() {
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawRoundRect(barLeft, barTop, barLeft + barWidth, barTop + barHeight, 4f * density, 4f * density, gradientPaint)
+            canvas.drawRoundRect(barLeft, barTop, barLeft + barWidth, barTop + barHeight, 3f * density, 3f * density, gradientPaint)
             
             // Labels
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
                 textSize = 9f * density
-                textAlign = Paint.Align.CENTER
-                setShadowLayer(2f, 1f, 1f, Color.BLACK)
-            }
-            
-            val unit = when (metricType) {
-                MapMetricType.DOSE_RATE -> "µSv/h"
-                MapMetricType.COUNT_RATE -> "CPS"
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
             
             val minText = if (minVal < 0.01f) "%.3f".format(minVal) else "%.2f".format(minVal)

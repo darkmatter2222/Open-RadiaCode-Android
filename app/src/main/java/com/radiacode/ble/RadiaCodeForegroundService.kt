@@ -233,6 +233,9 @@ class RadiaCodeForegroundService : Service() {
         updateForeground("Connecting", "${devices.size} device(s)")
         deviceManager?.start()
         
+        // Prefetch map tiles in background for widget
+        MapTileLoader.prefetchTilesForWidget(this)
+        
         return START_STICKY
     }
 
