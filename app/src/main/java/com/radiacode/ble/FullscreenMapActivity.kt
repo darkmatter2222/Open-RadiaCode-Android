@@ -45,6 +45,14 @@ class FullscreenMapActivity : AppCompatActivity() {
     private lateinit var zoomInButton: View
     private lateinit var zoomOutButton: View
     
+    // Statistics panel views
+    private lateinit var statsHexagonCount: TextView
+    private lateinit var statsReadingCount: TextView
+    private lateinit var statsAvgDose: TextView
+    private lateinit var statsMaxDose: TextView
+    private lateinit var statsStdDev: TextView
+    private lateinit var statsAreaCovered: TextView
+    
     // Location
     private var locationManager: LocationManager? = null
     private var locationListener: LocationListener? = null
@@ -124,12 +132,21 @@ class FullscreenMapActivity : AppCompatActivity() {
         metricSelector = findViewById(R.id.metricSelector)
         zoomInButton = findViewById(R.id.zoomInButton)
         zoomOutButton = findViewById(R.id.zoomOutButton)
+        
+        // Statistics panel
+        statsHexagonCount = findViewById(R.id.statsHexagonCount)
+        statsReadingCount = findViewById(R.id.statsReadingCount)
+        statsAvgDose = findViewById(R.id.statsAvgDose)
+        statsMaxDose = findViewById(R.id.statsMaxDose)
+        statsStdDev = findViewById(R.id.statsStdDev)
+        statsAreaCovered = findViewById(R.id.statsAreaCovered)
     }
     
     private fun setupMap() {
         val theme = Prefs.getMapTheme(this)
         mapView.setTileSource(createTileSource(theme))
         mapView.setMultiTouchControls(true)
+        mapView.setBuiltInZoomControls(false)  // Use our custom zoom buttons only
         mapView.controller.setZoom(17.0)
 
         // Home theme is composed from two raster layers:
@@ -230,6 +247,9 @@ class FullscreenMapActivity : AppCompatActivity() {
             val avgLng = savedPoints.map { it.longitude }.average()
             mapView.controller.setCenter(GeoPoint(avgLat, avgLng))
         }
+        
+        // Update statistics panel with loaded data
+        updateStatisticsPanel()
     }
     
     /**
@@ -270,6 +290,61 @@ class FullscreenMapActivity : AppCompatActivity() {
         
         // Redraw map with new hexagons
         mapView.invalidate()
+        
+        // Update statistics panel
+        updateStatisticsPanel()
+    }
+    
+    /**
+     * Update the statistics panel with current data science metrics.
+     */
+    private fun updateStatisticsPanel() {
+        if (hexagonData.isEmpty()) {
+            statsHexagonCount.text = "0"
+            statsReadingCount.text = "0"
+            statsAvgDose.text = "--"
+            statsMaxDose.text = "--"
+            statsStdDev.text = "--"
+            statsAreaCovered.text = "--"
+            return
+        }
+        
+        val hexCount = hexagonData.size
+        val totalReadings = hexagonData.values.sumOf { it.size }
+        val allDoseValues = hexagonData.values.flatten().map { it.uSvPerHour.toDouble() }
+        
+        // Calculate statistics
+        val avgDose = allDoseValues.average()
+        val maxDose = allDoseValues.maxOrNull() ?: 0.0
+        val minDose = allDoseValues.minOrNull() ?: 0.0
+        
+        // Standard deviation
+        val variance = if (allDoseValues.size > 1) {
+            allDoseValues.map { (it - avgDose).pow(2) }.average()
+        } else {
+            0.0
+        }
+        val stdDev = sqrt(variance)
+        
+        // Calculate area covered (each hexagon is approximately 1625 m² for 25m edge)
+        // Area of regular hexagon = (3 * sqrt(3) / 2) * s²
+        val hexAreaM2 = (3.0 * sqrt(3.0) / 2.0) * HEX_SIZE_METERS * HEX_SIZE_METERS
+        val totalAreaM2 = hexCount * hexAreaM2
+        
+        // Format area appropriately
+        val areaStr = when {
+            totalAreaM2 >= 1_000_000 -> String.format("%.2f km²", totalAreaM2 / 1_000_000)
+            totalAreaM2 >= 10_000 -> String.format("%.1f ha", totalAreaM2 / 10_000)
+            else -> String.format("%.0f m²", totalAreaM2)
+        }
+        
+        // Update UI
+        statsHexagonCount.text = hexCount.toString()
+        statsReadingCount.text = totalReadings.toString()
+        statsAvgDose.text = String.format("%.4f", avgDose)
+        statsMaxDose.text = String.format("%.4f", maxDose)
+        statsStdDev.text = String.format("%.4f", stdDev)
+        statsAreaCovered.text = areaStr
     }
     
     private fun startLocationTracking() {
@@ -492,6 +567,7 @@ class FullscreenMapActivity : AppCompatActivity() {
     
     /**
      * Get the center point of a hexagon in lat/lng.
+     * Uses a self-consistent projection to avoid hexagon drift.
      */
     private fun hexIdToLatLng(hexId: String): Pair<Double, Double>? {
         val parts = hexId.split(",")
@@ -506,19 +582,22 @@ class FullscreenMapActivity : AppCompatActivity() {
         val x = size * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
         val y = size * (3.0 / 2.0 * r)
         
-        // Convert meters back to lat/lng (use approximate center lat for correction)
-        val centerLat = currentLocation?.latitude ?: 0.0
+        // Convert meters back to lat/lng
+        // Use the latitude from the y-coordinate itself (self-consistent projection)
+        // This ensures hexagons stay fixed in position regardless of where you are
         val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
-        
-        val lng = x / metersPerDegreeLng
         val lat = y / metersPerDegreeLat
+        
+        // Use the calculated lat for longitude correction (self-consistent)
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
+        val lng = x / metersPerDegreeLng
         
         return Pair(lat, lng)
     }
     
     /**
      * Get the 6 corner points of a hexagon for drawing.
+     * Uses the hexagon's own center for projection consistency.
      */
     private fun getHexCorners(hexId: String): List<GeoPoint>? {
         val center = hexIdToLatLng(hexId) ?: return null
@@ -528,7 +607,8 @@ class FullscreenMapActivity : AppCompatActivity() {
         val centerLng = center.second
         
         val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(currentLocation?.latitude ?: centerLat))
+        // Use the hexagon's center latitude for consistent projection
+        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
         
         // 6 corners for pointy-top hexagon
         for (i in 0 until 6) {

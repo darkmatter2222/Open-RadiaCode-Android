@@ -114,24 +114,197 @@
             android:contentDescription="Zoom out" />
     </LinearLayout>
 
-    <!-- Bottom Info Bar (optional - for scale/coordinates) -->
+    <!-- Bottom Left Statistics Panel -->
     <LinearLayout
+        android:id="@+id/statsPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
         android:layout_margin="16dp"
         android:background="@drawable/card_background"
-        android:padding="8dp"
-        android:orientation="horizontal">
+        android:padding="12dp"
+        android:orientation="vertical"
+        android:minWidth="200dp">
 
+        <!-- Header -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="RADIATION MAP"
+            android:text="📊 SESSION STATS"
             android:textColor="@color/pro_cyan"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold"
-            android:letterSpacing="0.1" />
+            android:letterSpacing="0.15"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Hexagon Count Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Hexagons"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsHexagonCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="@color/pro_magenta"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Readings Count Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Readings"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsReadingCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="@color/pro_cyan"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/pro_border"
+            android:layout_marginVertical="6dp" />
+
+        <!-- Average Dose Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Avg Dose"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsAvgDose"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="@color/pro_green"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Max Dose Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Peak"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsMaxDose"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="@color/pro_red"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Std Dev Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Std Dev"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsStdDev"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="@color/pro_yellow"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/pro_border"
+            android:layout_marginVertical="6dp" />
+
+        <!-- Area Covered Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Coverage"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp" />
+            
+            <TextView
+                android:id="@+id/statsAreaCovered"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--"
+                android:textColor="@color/pro_text_primary"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+        </LinearLayout>
     </LinearLayout>
 
 </FrameLayout>
