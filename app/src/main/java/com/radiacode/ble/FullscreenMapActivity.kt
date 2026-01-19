@@ -58,6 +58,10 @@ class FullscreenMapActivity : AppCompatActivity() {
     private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
     private var isTrackingLocation = false
+
+    // Follow-mode: keep map centered after tapping recenter; disable when user drags.
+    private var isFollowingLocation = false
+    private var isUserInteractingWithMap = false
     
     // Data
     private var selectedMetric = MetricType.DOSE_RATE
@@ -149,6 +153,22 @@ class FullscreenMapActivity : AppCompatActivity() {
         mapView.setBuiltInZoomControls(false)  // Use our custom zoom buttons only
         mapView.controller.setZoom(17.0)
 
+        // Disable follow-mode as soon as the user drags the map.
+        mapView.setOnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    isUserInteractingWithMap = true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (isFollowingLocation) isFollowingLocation = false
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isUserInteractingWithMap = false
+                }
+            }
+            false
+        }
+
         // Home theme is composed from two raster layers:
         // - base: dark_nolabels (roads/features)
         // - labels: dark_only_labels (text with baked-in halo)
@@ -197,6 +217,7 @@ class FullscreenMapActivity : AppCompatActivity() {
         
         centerButton.setOnClickListener {
             currentLocation?.let { location ->
+                isFollowingLocation = true
                 val geoPoint = GeoPoint(location.latitude, location.longitude)
                 mapView.controller.animateTo(geoPoint)
                 mapView.controller.setZoom(17.0)
@@ -360,6 +381,9 @@ class FullscreenMapActivity : AppCompatActivity() {
         locationListener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 currentLocation = location
+                if (isFollowingLocation && !isUserInteractingWithMap) {
+                    mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+                }
                 mapView.invalidate()
             }
             @Deprecated("Deprecated in Java")

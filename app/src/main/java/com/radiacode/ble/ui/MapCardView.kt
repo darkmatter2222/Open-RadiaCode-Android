@@ -66,6 +66,11 @@ class MapCardView @JvmOverloads constructor(
     private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
     private var isTrackingLocation = false
+
+    // Map follow-mode: when enabled, keep the map centered on the user's location.
+    // Disabled automatically when the user drags the map.
+    private var isFollowingLocation = false
+    private var isUserInteractingWithMap = false
     
     // Data
     private var selectedMetric = MetricType.DOSE_RATE
@@ -214,10 +219,16 @@ class MapCardView @JvmOverloads constructor(
                 MotionEvent.ACTION_DOWN -> {
                     // Request parent to not intercept touch events
                     v.parent?.requestDisallowInterceptTouchEvent(true)
+                    isUserInteractingWithMap = true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // User is panning/dragging: stop follow-mode so we never fight gestures.
+                    if (isFollowingLocation) isFollowingLocation = false
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     // Allow parent to intercept again
                     v.parent?.requestDisallowInterceptTouchEvent(false)
+                    isUserInteractingWithMap = false
                 }
             }
             false  // Let the map handle the touch
@@ -265,6 +276,7 @@ class MapCardView @JvmOverloads constructor(
     private fun setupCenterButton() {
         centerButton.setOnClickListener {
             currentLocation?.let { location ->
+                isFollowingLocation = true
                 val geoPoint = GeoPoint(location.latitude, location.longitude)
                 mapView.controller.animateTo(geoPoint)
                 mapView.controller.setZoom(17.0)
@@ -368,8 +380,10 @@ class MapCardView @JvmOverloads constructor(
             override fun onLocationChanged(location: Location) {
                 android.util.Log.d("MapCardView", "onLocationChanged: ${location.latitude},${location.longitude}")
                 currentLocation = location
-                updateMapCenter(location)
-                // Invalidate to redraw position marker
+                if (isFollowingLocation && !isUserInteractingWithMap) {
+                    updateMapCenter(location)
+                }
+                // Redraw position marker (and overlays) on location changes.
                 mapView.invalidate()
             }
             
@@ -439,7 +453,8 @@ class MapCardView @JvmOverloads constructor(
     
     private fun updateMapCenter(location: Location) {
         val geoPoint = GeoPoint(location.latitude, location.longitude)
-        mapView.controller.animateTo(geoPoint)
+        // When following, keep the map centered without triggering extra animation work.
+        mapView.controller.setCenter(geoPoint)
     }
     
     // ========== HEXAGON GRID SYSTEM ==========

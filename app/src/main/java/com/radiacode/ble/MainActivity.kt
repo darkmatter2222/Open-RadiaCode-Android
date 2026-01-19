@@ -255,6 +255,17 @@ class MainActivity : AppCompatActivity() {
     private var sessionStartMs: Long = System.currentTimeMillis()
     private var sampleCount: Int = 0
 
+    // Cache selection state to avoid frequent Prefs reads on the UI thread.
+    private var selectedDeviceIdCache: String? = null
+    private var isAllDevicesModeCache: Boolean = false
+
+    // Coalesce expensive redraws (charts/intelligence) to at most once per second.
+    @Volatile private var uiDirty: Boolean = true
+
+    private var lastDeviceRefreshMs: Long = 0L
+    private var lastMetadataRefreshMs: Long = 0L
+    private var lastDeviceListSignature: String? = null
+
     private val doseHistory = SampleHistory(4000)
     private val cpsHistory = SampleHistory(4000)
 
@@ -275,7 +286,41 @@ class MainActivity : AppCompatActivity() {
             if (intent?.action != RadiaCodeForegroundService.ACTION_READING) return
             val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
             if (paused) return
-            lastReadingTimestampMs = 0L
+
+            val ts = intent.getLongExtra(RadiaCodeForegroundService.EXTRA_TS_MS, 0L)
+            val uSvH = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_USV_H, 0f)
+            val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
+            val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
+
+            // Always feed the map (map cares about location + radiation, not device identity).
+            if (ts > 0L && ts != lastMapReadingTimestampMs) {
+                lastMapReadingTimestampMs = ts
+                mapCard.addReading(uSvH, cps)
+            }
+
+            // In all-devices mode, keep charts/metrics quiet (overlay explains why).
+            if (isAllDevicesModeCache) {
+                uiDirty = true
+                return
+            }
+
+            // If a device is selected, ignore readings from other devices for charts/metrics.
+            val selectedId = selectedDeviceIdCache
+            if (selectedId != null && deviceId != selectedId) return
+
+            // Update metric cards and histories immediately without hitting SharedPreferences.
+            if (ts > 0L && ts != lastReadingTimestampMs) {
+                lastReadingTimestampMs = ts
+                val last = Prefs.LastReading(uSvPerHour = uSvH, cps = cps, timestampMs = ts)
+                lastShownReading = last
+                updateMetricCards(last)
+
+                ensureHistoryCapacity()
+                doseHistory.add(ts, uSvH)
+                cpsHistory.add(ts, cps)
+                sampleCount++
+                uiDirty = true
+            }
         }
     }
     
@@ -1673,11 +1718,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun startUiLoop() {
         if (uiRunnable != null) return
+
+        // Initialize caches and populate device selector once.
+        refreshDevicesAndSelection(force = true)
+        refreshDeviceMetadataIfNeeded(force = true)
         
         // Setup device selector callback
         deviceSelector.setOnDeviceSelectedListener(object : com.radiacode.ble.ui.DeviceSelectorView.OnDeviceSelectedListener {
             override fun onDeviceSelected(deviceId: String?) {
                 android.util.Log.d("RadiaCode", "Device selected: $deviceId")
+
+                selectedDeviceIdCache = deviceId
                 
                 // Clear history and reload for selected device
                 doseHistory.clear()
@@ -1696,6 +1747,10 @@ class MainActivity : AppCompatActivity() {
                         allDevicesOverlay.visibility = View.GONE
                     }
                 }
+
+                val devices = Prefs.getDevices(this@MainActivity)
+                isAllDevicesModeCache = (deviceId == null && devices.size > 1)
+
                 if (deviceId != null) {
                     
                     val history = Prefs.getDeviceChartHistory(this@MainActivity, deviceId)
@@ -1706,6 +1761,8 @@ class MainActivity : AppCompatActivity() {
                         sampleCount++
                     }
                 }
+
+                uiDirty = true
             }
         })
         
@@ -1718,168 +1775,115 @@ class MainActivity : AppCompatActivity() {
         
         val r = object : Runnable {
             override fun run() {
-                val preferred = Prefs.getPreferredAddress(this@MainActivity)
+                val now = System.currentTimeMillis()
                 val auto = Prefs.isAutoConnectEnabled(this@MainActivity)
-                val svc = Prefs.getServiceStatus(this@MainActivity)
                 val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
+                val svc = Prefs.getServiceStatus(this@MainActivity)
 
-                // Get devices and selected device
-                val devices = Prefs.getDevices(this@MainActivity)
-                val enabledCount = devices.count { it.enabled }
-                val selectedDeviceId = Prefs.getSelectedDeviceId(this@MainActivity)
-                
-                // Update device selector with current connection states
-                val statesMap = buildDeviceStatesMap(devices)
-                deviceSelector.setDevices(devices, statesMap)
-                
-                // Check if in all-devices mode
-                val isAllDevicesMode = selectedDeviceId == null && devices.size > 1
-                
-                // Update overlay visibility based on selection (only when on Dashboard panel)
+                // Low-frequency device refresh to keep selector/device panel accurate.
+                if (now - lastDeviceRefreshMs >= 10_000L) {
+                    refreshDevicesAndSelection(force = false)
+                }
+
+                // Refresh metadata occasionally (RSSI/temp/battery) without polling everything.
+                if (now - lastMetadataRefreshMs >= 2_000L) {
+                    refreshDeviceMetadataIfNeeded(force = false)
+                }
+
+                // Keep overlay visibility correct (only when on Dashboard panel)
                 if (currentPanel == Panel.Dashboard) {
-                    if (isAllDevicesMode) {
-                        allDevicesOverlay.visibility = View.VISIBLE
-                    } else {
-                        allDevicesOverlay.visibility = View.GONE
-                    }
+                    allDevicesOverlay.visibility = if (isAllDevicesModeCache) View.VISIBLE else View.GONE
                 }
 
-                // Dashboard metadata row (signal / temp / battery) - now integrated into deviceSelector
-                val effectiveDeviceId = when {
-                    selectedDeviceId != null -> selectedDeviceId
-                    devices.size == 1 -> devices.first().id
-                    else -> null
-                }
-
-                val meta = if (effectiveDeviceId != null) {
-                    Prefs.getDeviceMetadata(this@MainActivity, effectiveDeviceId)
-                } else {
-                    null
-                }
-
-                // Update the integrated device metadata display in the selector
-                deviceSelector.updateDeviceMetadata(
-                    signalStrength = meta?.signalStrength,
-                    temperature = meta?.temperature,
-                    batteryLevel = meta?.batteryLevel
-                )
-                
-                // Get reading ONLY for selected device (no mixing!)
-                val last = if (selectedDeviceId != null) {
-                    val deviceReadings = Prefs.getDeviceRecentReadings(this@MainActivity, selectedDeviceId, 1)
-                    deviceReadings.firstOrNull()?.let { r ->
-                        Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs)
-                    }
-                } else if (devices.size == 1) {
-                    // Auto-select single device
-                    val singleDevice = devices.first()
-                    val deviceReadings = Prefs.getDeviceRecentReadings(this@MainActivity, singleDevice.id, 1)
-                    deviceReadings.firstOrNull()?.let { r ->
-                        Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs)
-                    }
-                } else {
-                    // All devices mode - no data
-                    null
-                }
-                
-                // Update device panel
-                preferredDeviceText.text = when {
-                    enabledCount > 1 -> "$enabledCount devices"
-                    enabledCount == 1 -> devices.first { it.enabled }.displayName
-                    !preferred.isNullOrBlank() -> preferred
-                    else -> "Not set"
-                }
-                
-                if (autoConnectSwitch.isChecked != auto) {
-                    autoConnectSwitch.isChecked = auto
-                }
-
-                val hasRecentData = last != null && (System.currentTimeMillis() - last.timestampMs) < 10000
+                // Status text: lightweight and stable.
                 val statusIndicatesConnected = svc?.message?.contains("connected", ignoreCase = true) == true
-                val statusIndicatesLiveData = svc?.message?.contains("μSv/h", ignoreCase = true) == true
-                val isConnected = hasRecentData || statusIndicatesConnected || statusIndicatesLiveData
-                
-                // Show device status on device panel
-                val deviceStatusMsg = when {
-                    svc?.message?.isNotBlank() == true -> svc.message
-                    enabledCount > 1 && isConnected -> "$enabledCount devices connected"
-                    enabledCount == 1 && isConnected -> "Connected"
-                    enabledCount > 0 -> "Connecting…"
-                    else -> "No devices configured"
-                }
-                updateConnectionStatus(isConnected, deviceStatusMsg)
+                val hasRecent = lastShownReading != null && (now - (lastShownReading?.timestampMs ?: 0L)) < 10_000
+                val isConnected = hasRecent || statusIndicatesConnected
 
                 val statusText = when {
                     !auto -> "OFF"
-                    enabledCount == 0 && preferred.isNullOrBlank() -> "NO DEVICE"
                     paused -> "PAUSED"
-                    isConnected && enabledCount > 1 -> "LIVE ($enabledCount)"
+                    isAllDevicesModeCache -> if (isConnected) "LIVE" else "CONNECTING"
                     isConnected -> "LIVE"
                     else -> "CONNECTING"
                 }
                 updateStatus(isConnected && !paused, statusText)
+                updateConnectionStatus(isConnected, svc?.message?.takeIf { it.isNotBlank() } ?: statusText)
 
-                val shouldUpdateReading = !paused && !isAllDevicesMode
-                if (!shouldUpdateReading) {
-                    val frozen = lastShownReading
-                    if (frozen != null) {
-                        updateMetricCards(frozen)
+                // Only redraw expensive parts when new data arrived.
+                if (uiDirty) {
+                    if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
+                        pausedSnapshotDose = currentWindowSeriesDose()
+                        pausedSnapshotCps = currentWindowSeriesCps()
                     }
-                } else if (last == null) {
-                    showEmptyMetrics()
-                } else {
-                    lastShownReading = last
-                    updateMetricCards(last)
+                    val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
+                    val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
+                    updateCharts(doseSeries, cpsSeries)
+                    updateSessionInfo()
+                    updateIntelligenceCard()
+                    uiDirty = false
                 }
-
-                // Only add to chart history if we have a specific device selected (not all-devices mode)
-                if (last != null && !paused && !isAllDevicesMode && last.timestampMs != lastReadingTimestampMs) {
-                    lastReadingTimestampMs = last.timestampMs
-                    ensureHistoryCapacity()
-                    doseHistory.add(last.timestampMs, last.uSvPerHour)
-                    cpsHistory.add(last.timestampMs, last.cps)
-                    sampleCount++
-                }
-                
-                // ALWAYS add readings to map regardless of device mode
-                // The map cares about location + radiation, not which device produced it
-                if (!paused) {
-                    // Get the latest reading from ANY enabled device
-                    val latestMapReading = if (last != null) {
-                        last
-                    } else {
-                        // In all-devices mode, get the most recent reading from all devices
-                        devices.filter { it.enabled }
-                            .mapNotNull { device ->
-                                Prefs.getDeviceRecentReadings(this@MainActivity, device.id, 1)
-                                    .firstOrNull()
-                            }
-                            .maxByOrNull { it.timestampMs }
-                            ?.let { r -> Prefs.LastReading(r.uSvPerHour, r.cps, r.timestampMs) }
-                    }
-                    
-                    if (latestMapReading != null && latestMapReading.timestampMs != lastMapReadingTimestampMs) {
-                        lastMapReadingTimestampMs = latestMapReading.timestampMs
-                        mapCard.addReading(latestMapReading.uSvPerHour, latestMapReading.cps)
-                    }
-                }
-
-                if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
-                    pausedSnapshotDose = currentWindowSeriesDose()
-                    pausedSnapshotCps = currentWindowSeriesCps()
-                }
-                val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
-                val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
-                updateCharts(doseSeries, cpsSeries)
-
-                updateSessionInfo()
-                updateIntelligenceCard()
 
                 mainHandler.postDelayed(this, 1000)
             }
         }
         uiRunnable = r
         mainHandler.post(r)
+    }
+
+    private fun refreshDevicesAndSelection(force: Boolean) {
+        val devices = Prefs.getDevices(this)
+        val selectedId = Prefs.getSelectedDeviceId(this)
+        selectedDeviceIdCache = selectedId
+        isAllDevicesModeCache = (selectedId == null && devices.size > 1)
+
+        val signature = devices.joinToString("|") { "${it.id}:${it.enabled}:${it.displayName}" }
+        if (force || signature != lastDeviceListSignature) {
+            val statesMap = buildDeviceStatesMap(devices)
+            deviceSelector.setDevices(devices, statesMap)
+            lastDeviceListSignature = signature
+        } else {
+            // Still update state dots from tracked connection states.
+            updateDeviceSelectorStates()
+        }
+
+        // Device panel name: keep this cheap and stable.
+        val enabledCount = devices.count { it.enabled }
+        val preferred = Prefs.getPreferredAddress(this)
+        preferredDeviceText.text = when {
+            enabledCount > 1 -> "$enabledCount devices"
+            enabledCount == 1 -> devices.first { it.enabled }.displayName
+            !preferred.isNullOrBlank() -> preferred
+            else -> "Not set"
+        }
+
+        lastDeviceRefreshMs = System.currentTimeMillis()
+    }
+
+    private fun refreshDeviceMetadataIfNeeded(force: Boolean) {
+        val devices = Prefs.getDevices(this)
+        val selectedId = selectedDeviceIdCache
+        val effectiveDeviceId = when {
+            selectedId != null -> selectedId
+            devices.size == 1 -> devices.first().id
+            else -> null
+        }
+
+        val meta = if (effectiveDeviceId != null) {
+            Prefs.getDeviceMetadata(this, effectiveDeviceId)
+        } else {
+            null
+        }
+
+        if (force || meta != null) {
+            deviceSelector.updateDeviceMetadata(
+                signalStrength = meta?.signalStrength,
+                temperature = meta?.temperature,
+                batteryLevel = meta?.batteryLevel
+            )
+        }
+
+        lastMetadataRefreshMs = System.currentTimeMillis()
     }
 
     private fun stopUiLoop() {

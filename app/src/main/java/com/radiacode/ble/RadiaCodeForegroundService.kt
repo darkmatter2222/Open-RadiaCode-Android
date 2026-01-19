@@ -110,6 +110,9 @@ class RadiaCodeForegroundService : Service() {
     private val executor = Executors.newSingleThreadExecutor()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
 
+    private var lastWidgetUpdateMs: Long = 0L
+    private var widgetUpdateFuture: ScheduledFuture<*>? = null
+
     // Multi-device manager
     private var deviceManager: MultiDeviceBleManager? = null
 
@@ -440,15 +443,47 @@ class RadiaCodeForegroundService : Service() {
                 .putExtra(EXTRA_DEVICE_ID, deviceId)
             sendBroadcast(i)
         } catch (_: Throwable) {}
-        
-        // Update all widget types (V2 unified + map + legacy for any remaining)
+
+        // Coalesce widget updates to reduce binder/RemoteViews churn.
+        requestWidgetUpdate()
+
+        updateNotificationFromState()
+    }
+
+    private fun requestWidgetUpdate() {
+        val now = System.currentTimeMillis()
+        val minIntervalMs = 1_000L
+        val elapsed = now - lastWidgetUpdateMs
+
+        if (elapsed >= minIntervalMs) {
+            lastWidgetUpdateMs = now
+            widgetUpdateFuture?.cancel(false)
+            widgetUpdateFuture = null
+            updateAllWidgetsNow()
+            return
+        }
+
+        // Already scheduled? Let it run.
+        if (widgetUpdateFuture?.isDone == false) return
+
+        val delayMs = (minIntervalMs - elapsed).coerceAtLeast(0L)
+        widgetUpdateFuture = scheduler.schedule({
+            try {
+                lastWidgetUpdateMs = System.currentTimeMillis()
+                updateAllWidgetsNow()
+            } catch (t: Throwable) {
+                Log.w(TAG, "Widget update failed", t)
+            }
+        }, delayMs, TimeUnit.MILLISECONDS)
+    }
+
+    private fun updateAllWidgetsNow() {
+        // V2 unified + map + legacy for any remaining
         UnifiedWidgetProvider.updateAll(this)
         MapWidgetProvider.updateAll(this)
         RadiaCodeWidgetProvider.updateAll(this)
         SimpleWidgetProvider.updateAll(this)
         ChartWidgetProvider.updateAll(this)
-        
-        updateNotificationFromState()
     }
     
     private fun updateNotificationFromState() {
