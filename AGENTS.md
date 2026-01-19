@@ -60,13 +60,18 @@ From repo root:
 # Install to connected device (do this EVERY build)
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
+# IMPORTANT: Restart the app after install to load new code
+adb shell am force-stop com.radiacode.ble
+adb shell monkey -p com.radiacode.ble -c android.intent.category.LAUNCHER 1
+
 # IMPORTANT: Copy APK to Installer folder (do this EVERY build)
 Copy-Item app/build/outputs/apk/debug/app-debug.apk -Destination Installer/OpenRadiaCode-v0.XX.apk
 ```
 
 **ALWAYS** after a successful build:
 1. Install the APK to the connected phone via `adb install -r`
-2. Copy the APK to the `Installer/` folder with the version number in the filename
+2. **Restart the app** - the install does NOT restart it automatically
+3. Copy the APK to the `Installer/` folder with the version number in the filename
 
 ## Installer Folder
 

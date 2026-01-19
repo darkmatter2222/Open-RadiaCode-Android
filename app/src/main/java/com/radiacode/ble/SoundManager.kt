@@ -1,6 +1,7 @@
 package com.radiacode.ble
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.SoundPool
@@ -8,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.CRC32
 
 /**
  * Centralized sound manager for all app audio feedback.
@@ -61,6 +63,8 @@ class SoundManager private constructor(private val context: Context) {
     }
     
     private val handler = Handler(Looper.getMainLooper())
+
+    private val debugLogs = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     
     // SoundPool for short sound effects (low latency)
     private var soundPool: SoundPool? = null
@@ -70,6 +74,9 @@ class SoundManager private constructor(private val context: Context) {
     private var alarmSoundId: Int = 0
     private var anomalySoundId: Int = 0
     private var soundsLoaded = AtomicBoolean(false)
+    
+    // Track which resource name was loaded into each soundId for debugging
+    private val soundIdToResourceName = mutableMapOf<Int, String>()
     
     // MediaPlayer for looping ambient audio
     private var ambientPlayer: MediaPlayer? = null
@@ -112,6 +119,34 @@ class SoundManager private constructor(private val context: Context) {
             Log.e(TAG, "Failed to initialize SoundPool", e)
         }
     }
+
+    private fun describeRawResource(resId: Int): String {
+        return try {
+            val entryName = context.resources.getResourceEntryName(resId)
+            val length = try {
+                context.resources.openRawResourceFd(resId)?.use { it.length } ?: -1L
+            } catch (_: Throwable) {
+                -1L
+            }
+
+            val crc32 = CRC32()
+            var total = 0
+            context.resources.openRawResource(resId).use { input ->
+                val buffer = ByteArray(4096)
+                while (total < 16 * 1024) {
+                    val remaining = 16 * 1024 - total
+                    val read = input.read(buffer, 0, minOf(buffer.size, remaining))
+                    if (read <= 0) break
+                    crc32.update(buffer, 0, read)
+                    total += read
+                }
+            }
+
+            "raw/$entryName len=$length crc32=${crc32.value} hashed=$total"
+        } catch (t: Throwable) {
+            "resId=$resId (describe failed: ${t.javaClass.simpleName})"
+        }
+    }
     
     private fun loadSounds() {
         try {
@@ -124,14 +159,66 @@ class SoundManager private constructor(private val context: Context) {
             // - sound_anomaly.wav
             // - ambient_drone.wav (already exists)
             soundPool?.let { pool ->
-                dataTickSoundId = tryLoadSound(pool, "sound_data_tick")
-                connectedSoundId = tryLoadSound(pool, "sound_connected")
-                disconnectedSoundId = tryLoadSound(pool, "sound_disconnected")
-                alarmSoundId = tryLoadSound(pool, "sound_alarm")
-                anomalySoundId = tryLoadSound(pool, "sound_anomaly")
+                // Clear the tracking map
+                soundIdToResourceName.clear()
+                
+                // Load sounds and track which file goes to which soundId
+                val dataTickResId = context.resources.getIdentifier("sound_data_tick", "raw", context.packageName)
+                val connectedResId = context.resources.getIdentifier("sound_connected", "raw", context.packageName)
+                val disconnectedResId = context.resources.getIdentifier("sound_disconnected", "raw", context.packageName)
+                val alarmResId = context.resources.getIdentifier("sound_alarm", "raw", context.packageName)
+                val anomalyResId = context.resources.getIdentifier("sound_anomaly", "raw", context.packageName)
+                
+                if (debugLogs) {
+                    Log.d(TAG, "=== LOADING SOUNDS ===")
+                    Log.d(TAG, "Resource IDs from getIdentifier: dataTick=$dataTickResId, connected=$connectedResId, disconnected=$disconnectedResId, alarm=$alarmResId, anomaly=$anomalyResId")
+                    if (dataTickResId != 0) Log.d(TAG, "sound_data_tick -> ${describeRawResource(dataTickResId)}")
+                    if (connectedResId != 0) Log.d(TAG, "sound_connected -> ${describeRawResource(connectedResId)}")
+                    if (disconnectedResId != 0) Log.d(TAG, "sound_disconnected -> ${describeRawResource(disconnectedResId)}")
+                    if (alarmResId != 0) Log.d(TAG, "sound_alarm -> ${describeRawResource(alarmResId)}")
+                    if (anomalyResId != 0) Log.d(TAG, "sound_anomaly -> ${describeRawResource(anomalyResId)}")
+                }
+                
+                if (dataTickResId != 0) {
+                    dataTickSoundId = pool.load(context, dataTickResId, 1)
+                    soundIdToResourceName[dataTickSoundId] = "sound_data_tick"
+                    if (debugLogs) Log.d(TAG, "Loaded sound_data_tick (resId=$dataTickResId) -> soundId=$dataTickSoundId")
+                }
+                if (connectedResId != 0) {
+                    connectedSoundId = pool.load(context, connectedResId, 1)
+                    soundIdToResourceName[connectedSoundId] = "sound_connected"
+                    if (debugLogs) Log.d(TAG, "Loaded sound_connected (resId=$connectedResId) -> soundId=$connectedSoundId")
+                }
+                if (disconnectedResId != 0) {
+                    disconnectedSoundId = pool.load(context, disconnectedResId, 1)
+                    soundIdToResourceName[disconnectedSoundId] = "sound_disconnected"
+                    if (debugLogs) Log.d(TAG, "Loaded sound_disconnected (resId=$disconnectedResId) -> soundId=$disconnectedSoundId")
+                }
+                if (alarmResId != 0) {
+                    alarmSoundId = pool.load(context, alarmResId, 1)
+                    soundIdToResourceName[alarmSoundId] = "sound_alarm"
+                    if (debugLogs) Log.d(TAG, "Loaded sound_alarm (resId=$alarmResId) -> soundId=$alarmSoundId")
+                }
+                if (anomalyResId != 0) {
+                    anomalySoundId = pool.load(context, anomalyResId, 1)
+                    soundIdToResourceName[anomalySoundId] = "sound_anomaly"
+                    if (debugLogs) Log.d(TAG, "Loaded sound_anomaly (resId=$anomalyResId) -> soundId=$anomalySoundId")
+                }
+
+                if (debugLogs) {
+                    Log.d(TAG, "=== SOUND ID ASSIGNMENTS ===")
+                    Log.d(TAG, "dataTickSoundId=$dataTickSoundId -> ${soundIdToResourceName[dataTickSoundId]}")
+                    Log.d(TAG, "connectedSoundId=$connectedSoundId -> ${soundIdToResourceName[connectedSoundId]}")
+                    Log.d(TAG, "disconnectedSoundId=$disconnectedSoundId -> ${soundIdToResourceName[disconnectedSoundId]}")
+                    Log.d(TAG, "alarmSoundId=$alarmSoundId -> ${soundIdToResourceName[alarmSoundId]}")
+                    Log.d(TAG, "anomalySoundId=$anomalySoundId -> ${soundIdToResourceName[anomalySoundId]}")
+                }
                 
                 // Mark sounds as loaded after a brief delay to ensure loading completes
-                handler.postDelayed({ soundsLoaded.set(true) }, 500)
+                handler.postDelayed({ 
+                    soundsLoaded.set(true)
+                    Log.d(TAG, "Sounds marked as loaded")
+                }, 500)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load sounds", e)
@@ -159,14 +246,23 @@ class SoundManager private constructor(private val context: Context) {
     /**
      * Play a sound effect based on the sound type.
      * Respects user preferences for enabled/disabled sounds and volume levels.
+     * @param forcePlay If true, bypasses enabled check and throttling (for test buttons)
      */
-    fun play(soundType: Prefs.SoundType) {
-        if (!Prefs.isSoundEnabled(context, soundType)) {
+    fun play(soundType: Prefs.SoundType, forcePlay: Boolean = false) {
+        if (!forcePlay && !Prefs.isSoundEnabled(context, soundType)) {
+            Log.d(TAG, "Sound ${soundType.name} is disabled, skipping")
             return
         }
         
         when (soundType) {
-            Prefs.SoundType.DATA_TICK -> playDataTick()
+            Prefs.SoundType.DATA_TICK -> {
+                if (forcePlay) {
+                    // Bypass throttle for test
+                    playShortSound(dataTickSoundId, soundType)
+                } else {
+                    playDataTick()
+                }
+            }
             Prefs.SoundType.CONNECTED -> playShortSound(connectedSoundId, soundType)
             Prefs.SoundType.DISCONNECTED -> playShortSound(disconnectedSoundId, soundType)
             Prefs.SoundType.ALARM -> playShortSound(alarmSoundId, soundType)
@@ -181,6 +277,7 @@ class SoundManager private constructor(private val context: Context) {
     private fun playDataTick() {
         val now = System.currentTimeMillis()
         if (now - lastDataTickTime < dataTickThrottleMs) {
+            Log.d(TAG, "Data tick throttled (last=$lastDataTickTime, now=$now, diff=${now - lastDataTickTime}ms)")
             return // Throttled
         }
         lastDataTickTime = now
@@ -188,15 +285,22 @@ class SoundManager private constructor(private val context: Context) {
     }
     
     private fun playShortSound(soundId: Int, soundType: Prefs.SoundType) {
-        if (!soundsLoaded.get() || soundId == 0) {
-            Log.d(TAG, "Sound not ready: soundId=$soundId, loaded=${soundsLoaded.get()}")
+        val actualFile = soundIdToResourceName[soundId] ?: "UNKNOWN"
+        Log.d(TAG, "playShortSound: type=${soundType.name}, soundId=$soundId, actualFile=$actualFile, soundsLoaded=${soundsLoaded.get()}")
+        if (!soundsLoaded.get()) {
+            Log.d(TAG, "Sound not ready: sounds not loaded yet")
+            return
+        }
+        if (soundId == 0) {
+            Log.d(TAG, "Sound not ready: soundId is 0 for ${soundType.name}")
             return
         }
         
         try {
             val volume = Prefs.getSoundVolume(context, soundType)
-            soundPool?.play(soundId, volume, volume, 1, 0, 1f)
-            Log.d(TAG, "Playing ${soundType.name} at volume $volume")
+            Log.d(TAG, ">>> PLAYING: ${soundType.name} -> soundId=$soundId -> FILE=$actualFile at volume $volume")
+            val streamId = soundPool?.play(soundId, volume, volume, 1, 0, 1f)
+            Log.d(TAG, "SoundPool.play returned streamId=$streamId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play sound", e)
         }

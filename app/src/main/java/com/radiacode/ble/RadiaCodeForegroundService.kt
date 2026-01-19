@@ -124,6 +124,9 @@ class RadiaCodeForegroundService : Service() {
     // Track last CSV timestamp per device
     private val lastCsvTimestamps = mutableMapOf<String, Long>()
     
+    // Track previous connection states to detect actual changes
+    private val previousConnectionStates = mutableMapOf<String, DeviceConnectionState>()
+    
     // Background location tracking for map data
     private var locationManager: LocationManager? = null
     private var locationListener: LocationListener? = null
@@ -350,11 +353,18 @@ class RadiaCodeForegroundService : Service() {
     }
 
     private fun handleDeviceStateChanged(state: DeviceState) {
-        // Play connection sounds
-        when (state.connectionState) {
-            DeviceConnectionState.CONNECTED -> SoundManager.play(this, Prefs.SoundType.CONNECTED)
-            DeviceConnectionState.DISCONNECTED -> SoundManager.play(this, Prefs.SoundType.DISCONNECTED)
-            else -> { /* No sound for other states */ }
+        val deviceId = state.config.id
+        val previousState = previousConnectionStates[deviceId]
+        val currentState = state.connectionState
+        
+        // Only play connection sounds when state actually changes
+        if (previousState != currentState) {
+            previousConnectionStates[deviceId] = currentState
+            when (currentState) {
+                DeviceConnectionState.CONNECTED -> SoundManager.play(this, Prefs.SoundType.CONNECTED)
+                DeviceConnectionState.DISCONNECTED -> SoundManager.play(this, Prefs.SoundType.DISCONNECTED)
+                else -> { /* No sound for other states */ }
+            }
         }
         
         // Broadcast state change for UI updates

@@ -189,15 +189,8 @@ class SoundSettingsActivity : AppCompatActivity() {
             soundType = Prefs.SoundType.DATA_TICK
         )
         testDataTick.setOnClickListener {
-            if (switchDataTick.isChecked) {
-                // Temporarily enable for test
-                val wasEnabled = Prefs.isSoundEnabled(this, Prefs.SoundType.DATA_TICK)
-                Prefs.setSoundEnabled(this, Prefs.SoundType.DATA_TICK, true)
-                soundManager?.play(Prefs.SoundType.DATA_TICK)
-                if (!wasEnabled) {
-                    Prefs.setSoundEnabled(this, Prefs.SoundType.DATA_TICK, false)
-                }
-            }
+            // Always play for test, regardless of switch state (use forcePlay)
+            soundManager?.play(Prefs.SoundType.DATA_TICK, forcePlay = true)
         }
         
         // Connected
