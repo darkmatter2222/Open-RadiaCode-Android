@@ -44,6 +44,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import kotlin.math.max
 import kotlin.math.min
 
@@ -248,6 +250,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shareCsvButton: MaterialButton
 
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private var chartLoadFuture: Future<*>? = null
+    private var mapLoadFuture: Future<*>? = null
+    private var chartLoadToken: Int = 0
 
     private var uiRunnable: Runnable? = null
     private var lastReadingTimestampMs: Long = 0L
@@ -1569,52 +1576,78 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         registerReadingReceiver()
-        reloadChartHistoryForSelectedDevice()
-        // Reload map data to pick up points collected in background
-        mapCard.loadDataPoints()
+        reloadChartHistoryForSelectedDeviceAsync()
+        // Reload map data to pick up points collected in background (off main thread)
+        reloadMapPointsAsync()
         startUiLoop()
         refreshSettingsRows()
     }
     
-    private fun reloadChartHistoryForSelectedDevice() {
-        val devices = Prefs.getDevices(this)
-        var selectedDeviceId = Prefs.getSelectedDeviceId(this)
-        
-        // Clear existing data
+    private fun reloadChartHistoryForSelectedDeviceAsync() {
+        val token = ++chartLoadToken
+        chartLoadFuture?.cancel(true)
+
+        // Clear immediately so we render fast.
         doseHistory.clear()
         cpsHistory.clear()
         sampleCount = 0
-        
-        // If only one device exists, auto-select it
-        if (selectedDeviceId == null && devices.size == 1) {
-            selectedDeviceId = devices.first().id
-        }
-        
-        if (selectedDeviceId == null) {
-            // All devices mode - no chart data, show overlay
-            android.util.Log.d("RadiaCode", "All devices mode - no chart data to load")
-            if (devices.size > 1 && currentPanel == Panel.Dashboard) {
-                allDevicesOverlay.visibility = View.VISIBLE
-            }
-            return
-        }
-        
-        // Single device mode - hide overlay
-        if (currentPanel == Panel.Dashboard) {
-            allDevicesOverlay.visibility = View.GONE
-        }
-        
-        // Load history for selected device only
-        val chartHistory = Prefs.getDeviceChartHistory(this, selectedDeviceId)
-        android.util.Log.d("RadiaCode", "Loading ${chartHistory.size} readings for device $selectedDeviceId")
-        
-        for (reading in chartHistory) {
-            doseHistory.add(reading.timestampMs, reading.uSvPerHour)
-            cpsHistory.add(reading.timestampMs, reading.cps)
-            sampleCount++
-        }
-        
         lastReadingTimestampMs = 0L
+        uiDirty = true
+
+        chartLoadFuture = ioExecutor.submit {
+            val devices = Prefs.getDevices(this)
+            var selectedDeviceId = Prefs.getSelectedDeviceId(this)
+
+            // If only one device exists, auto-select it.
+            if (selectedDeviceId == null && devices.size == 1) {
+                selectedDeviceId = devices.first().id
+            }
+
+            val isAllDevicesMode = (selectedDeviceId == null && devices.size > 1)
+            val history = if (selectedDeviceId != null) {
+                Prefs.getDeviceChartHistory(this, selectedDeviceId)
+            } else {
+                emptyList()
+            }
+
+            mainHandler.post {
+                if (token != chartLoadToken) return@post
+
+                selectedDeviceIdCache = selectedDeviceId
+                isAllDevicesModeCache = isAllDevicesMode
+
+                if (currentPanel == Panel.Dashboard) {
+                    allDevicesOverlay.visibility = if (isAllDevicesMode) View.VISIBLE else View.GONE
+                }
+
+                doseHistory.clear()
+                cpsHistory.clear()
+                sampleCount = 0
+
+                if (selectedDeviceId != null) {
+                    android.util.Log.d("RadiaCode", "Loading ${history.size} readings for device $selectedDeviceId")
+                    for (reading in history) {
+                        doseHistory.add(reading.timestampMs, reading.uSvPerHour)
+                        cpsHistory.add(reading.timestampMs, reading.cps)
+                        sampleCount++
+                    }
+                } else {
+                    android.util.Log.d("RadiaCode", "All devices mode - no chart data to load")
+                }
+
+                uiDirty = true
+            }
+        }
+    }
+
+    private fun reloadMapPointsAsync() {
+        mapLoadFuture?.cancel(true)
+        mapLoadFuture = ioExecutor.submit {
+            val points = Prefs.getMapDataPoints(this)
+            mainHandler.post {
+                mapCard.setDataPoints(points)
+            }
+        }
     }
 
     override fun onPause() {
@@ -1626,6 +1659,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopUiLoop()
+        chartLoadFuture?.cancel(true)
+        mapLoadFuture?.cancel(true)
+        ioExecutor.shutdownNow()
     }
 
     private fun hasAllPermissions(): Boolean {

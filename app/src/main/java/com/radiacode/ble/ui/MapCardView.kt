@@ -513,9 +513,9 @@ class MapCardView @JvmOverloads constructor(
         val hexId = latLngToHexId(location.latitude, location.longitude)
         val reading = HexReading(uSvPerHour, cps, System.currentTimeMillis())
         hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
-        
-        // Save to prefs
-        Prefs.addMapDataPoint(context, location.latitude, location.longitude, uSvPerHour, cps)
+
+        // Persistence happens in RadiaCodeForegroundService (background collection).
+        // Avoid SharedPreferences JSON writes on the UI thread.
         
         // Update map
         updateHexagonColors()
@@ -526,19 +526,25 @@ class MapCardView @JvmOverloads constructor(
      * Load existing data points from storage and rebuild hexagon grid.
      */
     fun loadDataPoints() {
+        setDataPoints(Prefs.getMapDataPoints(context))
+    }
+
+    /**
+     * Replace current map points (caller may have loaded them off the UI thread).
+     */
+    fun setDataPoints(points: List<Prefs.MapDataPoint>) {
         dataPoints.clear()
         hexagonData.clear()
-        
-        val points = Prefs.getMapDataPoints(context)
+
         dataPoints.addAll(points)
-        
+
         // Rebuild hexagon data from saved points
         points.forEach { point ->
             val hexId = latLngToHexId(point.latitude, point.longitude)
             val reading = HexReading(point.uSvPerHour, point.cps, point.timestampMs)
             hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
         }
-        
+
         updateHexagonColors()
         updateScaleBar()
     }
