@@ -3,6 +3,7 @@ package com.radiacode.ble
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.*
@@ -41,6 +42,7 @@ class FullscreenMapActivity : AppCompatActivity() {
     private lateinit var mapView: MapView
     private lateinit var closeButton: ImageButton
     private lateinit var centerButton: ImageButton
+    private lateinit var readingPulseDot: View
     private lateinit var metricSelector: Spinner
     private lateinit var zoomInButton: View
     private lateinit var zoomOutButton: View
@@ -71,6 +73,13 @@ class FullscreenMapActivity : AppCompatActivity() {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var updateRunnable: Runnable? = null
     private var lastProcessedTimestampMs: Long = 0L
+
+    private val readingPulseReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != RadiaCodeForegroundService.ACTION_READING) return
+            pulseReadingDot()
+        }
+    }
     
     // Overlays
     private var hexagonOverlay: HexagonOverlay? = null
@@ -133,6 +142,7 @@ class FullscreenMapActivity : AppCompatActivity() {
         mapView = findViewById(R.id.fullscreenMapView)
         closeButton = findViewById(R.id.closeButton)
         centerButton = findViewById(R.id.centerButton)
+        readingPulseDot = findViewById(R.id.readingPulseDot)
         metricSelector = findViewById(R.id.metricSelector)
         zoomInButton = findViewById(R.id.zoomInButton)
         zoomOutButton = findViewById(R.id.zoomOutButton)
@@ -144,6 +154,28 @@ class FullscreenMapActivity : AppCompatActivity() {
         statsMaxDose = findViewById(R.id.statsMaxDose)
         statsStdDev = findViewById(R.id.statsStdDev)
         statsAreaCovered = findViewById(R.id.statsAreaCovered)
+    }
+
+    private fun pulseReadingDot() {
+        if (!::readingPulseDot.isInitialized) return
+        readingPulseDot.animate().cancel()
+        readingPulseDot.scaleX = 1f
+        readingPulseDot.scaleY = 1f
+        readingPulseDot.alpha = 0.9f
+        readingPulseDot.animate()
+            .scaleX(2.0f)
+            .scaleY(2.0f)
+            .alpha(0.2f)
+            .setDuration(180)
+            .withEndAction {
+                readingPulseDot.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(0.6f)
+                    .setDuration(220)
+                    .start()
+            }
+            .start()
     }
     
     private fun setupMap() {
@@ -422,6 +454,13 @@ class FullscreenMapActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+
+        val filter = IntentFilter(RadiaCodeForegroundService.ACTION_READING)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(readingPulseReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(readingPulseReceiver, filter)
+        }
         
         // Re-enter immersive mode
         window.decorView.systemUiVisibility = (
@@ -437,6 +476,11 @@ class FullscreenMapActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         mapView.onPause()
+
+        try {
+            unregisterReceiver(readingPulseReceiver)
+        } catch (_: Exception) {
+        }
     }
     
     override fun onDestroy() {

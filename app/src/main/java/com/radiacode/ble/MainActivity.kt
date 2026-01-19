@@ -74,6 +74,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusDot: View
     private lateinit var statusLabel: TextView
     private lateinit var statusContainer: View
+    private lateinit var readingPulseDot: View
 
     // Dashboard - Device Selector
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
@@ -268,6 +269,8 @@ class MainActivity : AppCompatActivity() {
 
     // Coalesce expensive redraws (charts/intelligence) to at most once per second.
     @Volatile private var uiDirty: Boolean = true
+    @Volatile private var lastChartUpdateMs: Long = 0L
+    private val chartUpdateThrottleMs: Long = 250L  // Max 4 chart updates per second
 
     private var lastDeviceRefreshMs: Long = 0L
     private var lastMetadataRefreshMs: Long = 0L
@@ -294,6 +297,8 @@ class MainActivity : AppCompatActivity() {
             val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
             if (paused) return
 
+            pulseReadingDot()
+
             val ts = intent.getLongExtra(RadiaCodeForegroundService.EXTRA_TS_MS, 0L)
             val uSvH = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_USV_H, 0f)
             val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
@@ -308,6 +313,7 @@ class MainActivity : AppCompatActivity() {
             // In all-devices mode, keep charts/metrics quiet (overlay explains why).
             if (isAllDevicesModeCache) {
                 uiDirty = true
+                triggerThrottledChartUpdate()
                 return
             }
 
@@ -327,8 +333,53 @@ class MainActivity : AppCompatActivity() {
                 cpsHistory.add(ts, cps)
                 sampleCount++
                 uiDirty = true
+                
+                // Trigger immediate chart update (throttled to avoid overwhelming the UI)
+                triggerThrottledChartUpdate()
             }
         }
+    }
+    
+    /**
+     * Trigger a chart update immediately if enough time has passed since the last one.
+     * This makes charts feel responsive without overwhelming the UI.
+     */
+    private fun triggerThrottledChartUpdate() {
+        val now = System.currentTimeMillis()
+        if (now - lastChartUpdateMs < chartUpdateThrottleMs) return
+        lastChartUpdateMs = now
+        
+        val paused = Prefs.isPauseLiveEnabled(this)
+        if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
+            pausedSnapshotDose = currentWindowSeriesDose()
+            pausedSnapshotCps = currentWindowSeriesCps()
+        }
+        val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
+        val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
+        updateCharts(doseSeries, cpsSeries)
+        uiDirty = false
+    }
+
+    private fun pulseReadingDot() {
+        if (!::readingPulseDot.isInitialized) return
+        readingPulseDot.animate().cancel()
+        readingPulseDot.scaleX = 1f
+        readingPulseDot.scaleY = 1f
+        readingPulseDot.alpha = 0.9f
+        readingPulseDot.animate()
+            .scaleX(1.8f)
+            .scaleY(1.8f)
+            .alpha(0.25f)
+            .setDuration(180)
+            .withEndAction {
+                readingPulseDot.animate()
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .alpha(0.6f)
+                    .setDuration(220)
+                    .start()
+            }
+            .start()
     }
     
     private val deviceStateReceiver = object : android.content.BroadcastReceiver() {
@@ -530,6 +581,7 @@ class MainActivity : AppCompatActivity() {
         statusDot = findViewById(R.id.statusDot)
         statusLabel = findViewById(R.id.statusLabel)
         statusContainer = statusLabel.parent as View
+        readingPulseDot = findViewById(R.id.readingPulseDot)
 
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)

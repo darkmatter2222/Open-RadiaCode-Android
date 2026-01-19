@@ -127,6 +127,10 @@ class RadiaCodeForegroundService : Service() {
     private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
 
+    private var lastMapSaveLogMs: Long = 0L
+    private var lastNoLocationLogMs: Long = 0L
+    private var lastAlertEvalMs: Long = 0L
+
     private val btStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
@@ -208,18 +212,27 @@ class RadiaCodeForegroundService : Service() {
             } catch (_: Exception) {}
             
             // Get last known location as initial value
-            val lastGps = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            val lastNetwork = locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-            currentLocation = when {
-                lastGps != null && lastNetwork != null -> 
-                    if (lastGps.time > lastNetwork.time) lastGps else lastNetwork
-                lastGps != null -> lastGps
-                else -> lastNetwork
-            }
+            currentLocation = getBestLastKnownLocation()
             
             Log.d(TAG, "Background location tracking started, initial: ${currentLocation?.latitude},${currentLocation?.longitude}")
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException starting background location tracking", e)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun getBestLastKnownLocation(): Location? {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
+        val lm = locationManager ?: (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)
+        val lastGps = try { lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+        val lastNetwork = try { lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+        return when {
+            lastGps != null && lastNetwork != null -> if (lastGps.time > lastNetwork.time) lastGps else lastNetwork
+            lastGps != null -> lastGps
+            else -> lastNetwork
         }
     }
     
@@ -415,25 +428,8 @@ class RadiaCodeForegroundService : Service() {
     }
     
     private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {
-        val device = Prefs.getDeviceById(this, deviceId) ?: return
-        
-        // Append to device-specific CSV
-        appendReadingCsvIfNew(deviceId, device.displayName, timestampMs, uSvPerHour, cps)
-        
-        // Save map data point if we have a location (background collection)
-        currentLocation?.let { location ->
-            Prefs.addMapDataPoint(this, location.latitude, location.longitude, uSvPerHour, cps)
-        }
-        
-        // Evaluate smart alerts (using combined recent readings)
-        try {
-            val recentReadings = Prefs.getRecentReadings(this)
-            alertEvaluator.evaluate(uSvPerHour, cps, recentReadings)
-        } catch (t: Throwable) {
-            Log.e(TAG, "Alert evaluation failed", t)
-        }
-        
-        // Live update broadcast for in-app charts
+        // PRIORITY 1: Broadcast to UI immediately for responsive updates
+        // This is the ONLY synchronous thing that happens on the BLE thread
         try {
             val i = Intent(ACTION_READING)
                 .setPackage(packageName)
@@ -443,11 +439,55 @@ class RadiaCodeForegroundService : Service() {
                 .putExtra(EXTRA_DEVICE_ID, deviceId)
             sendBroadcast(i)
         } catch (_: Throwable) {}
+        
+        // PRIORITY 2: Move EVERYTHING else to background thread
+        // This includes: widget updates, notification, CSV, map points, alerts
+        val locationSnap = currentLocation ?: getBestLastKnownLocation()?.also { currentLocation = it }
+        executor.execute {
+            try {
+                // Widget and notification updates (can involve bitmap rendering)
+                requestWidgetUpdate()
+                updateNotificationFromState()
+                
+                val device = Prefs.getDeviceById(this, deviceId) ?: return@execute
+                
+                // Append to device-specific CSV (file I/O)
+                appendReadingCsvIfNew(deviceId, device.displayName, timestampMs, uSvPerHour, cps)
+                
+                // Save map data point if we have location
+                // This is SLOW: parses and rebuilds 86400-entry string
+                if (locationSnap != null) {
+                    Prefs.addMapDataPoint(this, locationSnap.latitude, locationSnap.longitude, uSvPerHour, cps)
 
-        // Coalesce widget updates to reduce binder/RemoteViews churn.
-        requestWidgetUpdate()
-
-        updateNotificationFromState()
+                    // Rate-limited logging
+                    val now = System.currentTimeMillis()
+                    if (now - lastMapSaveLogMs > 5_000L) {
+                        lastMapSaveLogMs = now
+                        Log.d(TAG, "MapPoint saved: dev=$deviceId dose=$uSvPerHour cps=$cps loc=${locationSnap.latitude},${locationSnap.longitude}")
+                    }
+                } else {
+                    val now = System.currentTimeMillis()
+                    if (now - lastNoLocationLogMs > 5_000L) {
+                        lastNoLocationLogMs = now
+                        Log.w(TAG, "MapPoint skipped: no location (dev=$deviceId dose=$uSvPerHour cps=$cps)")
+                    }
+                }
+                
+                // Evaluate smart alerts (parses Prefs data)
+                val now = System.currentTimeMillis()
+                if (now - lastAlertEvalMs > 2_000L) {
+                    lastAlertEvalMs = now
+                    try {
+                        val recentReadings = Prefs.getRecentReadings(this)
+                        alertEvaluator.evaluate(uSvPerHour, cps, recentReadings)
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "Alert evaluation failed", t)
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "Background handleDeviceReading failed", t)
+            }
+        }
     }
 
     private fun requestWidgetUpdate() {

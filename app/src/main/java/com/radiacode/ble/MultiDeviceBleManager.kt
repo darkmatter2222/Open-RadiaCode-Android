@@ -309,26 +309,51 @@ class MultiDeviceBleManager(
                         m.lastSuccessfulPollMs = System.currentTimeMillis()
                         
                         val uSvPerHour = rt.doseRate * 10000.0f
+                        val cps = rt.countRate
                         val timestampMs = System.currentTimeMillis()
                         
-                        // Store reading for this device
-                        val reading = Prefs.LastReading(uSvPerHour, rt.countRate, timestampMs)
-                        Prefs.setDeviceLastReading(context, deviceId, uSvPerHour, rt.countRate, timestampMs)
-                        Prefs.addDeviceReading(context, deviceId, reading)
-                        
-                        // Also update global readings for compatibility
-                        Prefs.setLastReading(context, uSvPerHour, rt.countRate, timestampMs)
-                        Prefs.addRecentReading(context, reading)
-
-                        // Store device metadata (battery/temperature) when available
-                        decoded.metadata?.let { meta ->
-                            Prefs.updateDeviceMetadata(
-                                context = context,
+                        // Update device state FIRST (fast, in-memory)
+                        m.state = m.state.copy(
+                            lastReading = DeviceReading(
                                 deviceId = deviceId,
-                                temperature = meta.temperature,
-                                batteryLevel = meta.batteryLevel,
-                                timestampMs = timestampMs
-                            )
+                                macAddress = m.config.macAddress,
+                                uSvPerHour = uSvPerHour,
+                                cps = cps,
+                                timestampMs = timestampMs,
+                                isConnected = true
+                            ),
+                            statusMessage = "${"%.3f".format(uSvPerHour)} μSv/h"
+                        )
+                        onDeviceStateChanged(m.state)
+                        
+                        // Callback IMMEDIATELY for fast UI updates (broadcast happens here)
+                        onDeviceReading(deviceId, uSvPerHour, cps, timestampMs)
+                        
+                        // Move heavy SharedPreferences writes to background thread
+                        // These parse 4000+ entry strings and are slow
+                        executor.execute {
+                            try {
+                                val reading = Prefs.LastReading(uSvPerHour, cps, timestampMs)
+                                Prefs.setDeviceLastReading(context, deviceId, uSvPerHour, cps, timestampMs)
+                                Prefs.addDeviceReading(context, deviceId, reading)
+                                
+                                // Also update global readings for compatibility
+                                Prefs.setLastReading(context, uSvPerHour, cps, timestampMs)
+                                Prefs.addRecentReading(context, reading)
+
+                                // Store device metadata (battery/temperature) when available
+                                decoded.metadata?.let { meta ->
+                                    Prefs.updateDeviceMetadata(
+                                        context = context,
+                                        deviceId = deviceId,
+                                        temperature = meta.temperature,
+                                        batteryLevel = meta.batteryLevel,
+                                        timestampMs = timestampMs
+                                    )
+                                }
+                            } catch (t: Throwable) {
+                                Log.w(TAG, "Background persistence failed", t)
+                            }
                         }
 
                         // Refresh RSSI (signal strength) after a successful poll
@@ -339,23 +364,6 @@ class MultiDeviceBleManager(
                             .exceptionally {
                                 null
                             }
-                        
-                        // Update device state
-                        m.state = m.state.copy(
-                            lastReading = DeviceReading(
-                                deviceId = deviceId,
-                                macAddress = m.config.macAddress,
-                                uSvPerHour = uSvPerHour,
-                                cps = rt.countRate,
-                                timestampMs = timestampMs,
-                                isConnected = true
-                            ),
-                            statusMessage = "${"%.3f".format(uSvPerHour)} μSv/h"
-                        )
-                        onDeviceStateChanged(m.state)
-                        
-                        // Callback
-                        onDeviceReading(deviceId, uSvPerHour, rt.countRate, timestampMs)
                         
                         // Trigger spectrum read on a separate thread to avoid deadlock
                         if (shouldReadSpectrum) {

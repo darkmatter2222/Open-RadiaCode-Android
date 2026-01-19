@@ -52,6 +52,14 @@
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
+                    <View
+                        android:id="@+id/readingPulseDot"
+                        android:layout_width="6dp"
+                        android:layout_height="6dp"
+                        android:layout_marginStart="10dp"
+                        android:alpha="0.6"
+                        android:background="@drawable/reading_pulse_dot" />
+
                 </LinearLayout>
             </com.google.android.material.appbar.MaterialToolbar>
         </com.google.android.material.appbar.AppBarLayout>
