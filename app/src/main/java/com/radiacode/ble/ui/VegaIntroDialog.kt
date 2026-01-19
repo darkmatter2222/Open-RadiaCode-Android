@@ -41,6 +41,7 @@ class VegaIntroDialog(
 ) : Dialog(context, R.style.Theme_RadiaCode_Dialog_FullScreen) {
 
     private var mediaPlayer: MediaPlayer? = null
+    private var ambientPlayer: MediaPlayer? = null  // Background ambient audio
     private var visualizer: Visualizer? = null
     private lateinit var waveformView: WaveformVisualizerView
     private lateinit var textScrollView: ScrollView
@@ -50,6 +51,7 @@ class VegaIntroDialog(
     
     private val handler = Handler(Looper.getMainLooper())
     private var scrollAnimator: ValueAnimator? = null
+    private var volumeAnimator: ValueAnimator? = null
     private var audioDurationMs: Long = 0
     private var isPlaying = false
     
@@ -268,6 +270,9 @@ Let us begin.
     
     private fun setupMediaPlayer() {
         try {
+            // Setup ambient background audio first (plays at 5% volume, doesn't affect waveform)
+            setupAmbientAudio()
+            
             mediaPlayer = MediaPlayer.create(context, R.raw.vega_intro)?.apply {
                 setOnCompletionListener {
                     onAudioComplete()
@@ -291,19 +296,57 @@ Let us begin.
         }
     }
     
-    private fun startPlayback() {
+    private fun setupAmbientAudio() {
         try {
-            mediaPlayer?.start()
-            isPlaying = true
-            setupVisualizer()
-            startScrollAnimation()
-            
-            // Update close button text after a delay
-            handler.postDelayed({
-                closeButton.text = "Close"
-            }, 5000)
+            ambientPlayer = MediaPlayer.create(context, R.raw.ambient_drone)?.apply {
+                // Start at 20% volume, will duck to 7% when Vega speaks
+                setVolume(0.20f, 0.20f)
+                isLooping = true  // Loop the ambient audio
+            }
         } catch (e: Exception) {
             e.printStackTrace()
+            // Non-critical - continue without ambient audio
+        }
+    }
+    
+    private fun startPlayback() {
+        try {
+            // Start ambient audio first (immediately) at 20% volume
+            ambientPlayer?.start()
+            
+            // Delay Vega's voice and scroll by 3 seconds
+            handler.postDelayed({
+                // Smoothly duck ambient audio from 20% to 7% over 1 second
+                animateAmbientVolume(0.20f, 0.07f, 1000)
+                
+                mediaPlayer?.start()
+                isPlaying = true
+                setupVisualizer()
+                startScrollAnimation()
+            }, 3000)
+            
+            // Update close button text after a delay (8 seconds total: 3s delay + 5s)
+            handler.postDelayed({
+                closeButton.text = "Close"
+            }, 8000)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    
+    /**
+     * Smoothly animate ambient audio volume with ease in/out.
+     */
+    private fun animateAmbientVolume(fromVolume: Float, toVolume: Float, durationMs: Long) {
+        volumeAnimator?.cancel()
+        volumeAnimator = ValueAnimator.ofFloat(fromVolume, toVolume).apply {
+            duration = durationMs
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val volume = animation.animatedValue as Float
+                ambientPlayer?.setVolume(volume, volume)
+            }
+            start()
         }
     }
     
@@ -385,6 +428,10 @@ Let us begin.
     
     private fun onAudioComplete() {
         isPlaying = false
+        
+        // Smoothly bring ambient audio back up from 7% to 20% over 1.5 seconds
+        animateAmbientVolume(0.07f, 0.20f, 1500)
+        
         closeButton.text = "Begin"
         closeButton.setTextColor(Color.parseColor("#00E5FF"))
         
@@ -406,6 +453,8 @@ Let us begin.
         isPlaying = false
         scrollAnimator?.cancel()
         scrollAnimator = null
+        volumeAnimator?.cancel()
+        volumeAnimator = null
         
         try {
             visualizer?.enabled = false
@@ -419,6 +468,15 @@ Let us begin.
             mediaPlayer?.stop()
             mediaPlayer?.release()
             mediaPlayer = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        // Stop and release ambient audio
+        try {
+            ambientPlayer?.stop()
+            ambientPlayer?.release()
+            ambientPlayer = null
         } catch (e: Exception) {
             e.printStackTrace()
         }
