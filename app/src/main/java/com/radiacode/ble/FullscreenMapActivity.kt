@@ -529,102 +529,32 @@ class FullscreenMapActivity : AppCompatActivity() {
         }
     }
     
-    // ===== Hex Grid Functions =====
-    
+    // ========== HEXAGON GRID SYSTEM ==========
+    // Static, tessellating hex grid (flat-top) anchored to a fixed origin in Prefs.
+
+    private fun getGridOrigin(): HexGrid.Origin? {
+        val origin = Prefs.getMapGridOrigin(this) ?: return null
+        return HexGrid.Origin(origin.first, origin.second)
+    }
+
     private fun latLngToHexId(lat: Double, lng: Double): String {
-        val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
-        
-        val x = lng * metersPerDegreeLng
-        val y = lat * metersPerDegreeLat
-        
-        val size = HEX_SIZE_METERS
-        val q = (sqrt(3.0) / 3.0 * x - 1.0 / 3.0 * y) / size
-        val r = (2.0 / 3.0 * y) / size
-        
-        val (hexQ, hexR) = axialRound(q, r)
-        return "$hexQ,$hexR"
+        Prefs.ensureMapGridOrigin(this, lat, lng)
+        val origin = getGridOrigin() ?: HexGrid.Origin(lat, lng)
+        val axial = HexGrid.latLngToAxial(lat, lng, origin, HEX_SIZE_METERS)
+        return axial.toString()
     }
-    
-    private fun axialRound(q: Double, r: Double): Pair<Int, Int> {
-        val s = -q - r
-        var rq = round(q).toInt()
-        var rr = round(r).toInt()
-        var rs = round(s).toInt()
-        
-        val qDiff = abs(rq - q)
-        val rDiff = abs(rr - r)
-        val sDiff = abs(rs - s)
-        
-        if (qDiff > rDiff && qDiff > sDiff) {
-            rq = -rr - rs
-        } else if (rDiff > sDiff) {
-            rr = -rq - rs
-        }
-        
-        return Pair(rq, rr)
-    }
-    
-    /**
-     * Get the center point of a hexagon in lat/lng.
-     * Uses a self-consistent projection to avoid hexagon drift.
-     */
+
     private fun hexIdToLatLng(hexId: String): Pair<Double, Double>? {
-        val parts = hexId.split(",")
-        if (parts.size != 2) return null
-        
-        val q = parts[0].toIntOrNull() ?: return null
-        val r = parts[1].toIntOrNull() ?: return null
-        
-        val size = HEX_SIZE_METERS
-        
-        // Convert axial to pixel (meters)
-        val x = size * (sqrt(3.0) * q + sqrt(3.0) / 2.0 * r)
-        val y = size * (3.0 / 2.0 * r)
-        
-        // Convert meters back to lat/lng
-        // Use the latitude from the y-coordinate itself (self-consistent projection)
-        // This ensures hexagons stay fixed in position regardless of where you are
-        val metersPerDegreeLat = 111320.0
-        val lat = y / metersPerDegreeLat
-        
-        // Use the calculated lat for longitude correction (self-consistent)
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
-        val lng = x / metersPerDegreeLng
-        
-        return Pair(lat, lng)
+        val axial = HexGrid.Axial.parse(hexId) ?: return null
+        val origin = getGridOrigin() ?: return null
+        return HexGrid.axialToLatLng(axial, origin, HEX_SIZE_METERS)
     }
-    
-    /**
-     * Get the 6 corner points of a hexagon for drawing.
-     * Uses the hexagon's own center for projection consistency.
-     */
+
     private fun getHexCorners(hexId: String): List<GeoPoint>? {
-        val center = hexIdToLatLng(hexId) ?: return null
-        val corners = mutableListOf<GeoPoint>()
-        
-        val centerLat = center.first
-        val centerLng = center.second
-        
-        val metersPerDegreeLat = 111320.0
-        // Use the hexagon's center latitude for consistent projection
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
-        
-        // 6 corners for flat-top hexagon
-        for (i in 0 until 6) {
-            val angleDeg = 60.0 * i  // Flat-top: start at 0°
-            val angleRad = Math.toRadians(angleDeg)
-            
-            val cornerX = HEX_SIZE_METERS * cos(angleRad)
-            val cornerY = HEX_SIZE_METERS * sin(angleRad)
-            
-            val cornerLat = centerLat + (cornerY / metersPerDegreeLat)
-            val cornerLng = centerLng + (cornerX / metersPerDegreeLng)
-            
-            corners.add(GeoPoint(cornerLat, cornerLng))
-        }
-        
-        return corners
+        val axial = HexGrid.Axial.parse(hexId) ?: return null
+        val origin = getGridOrigin() ?: return null
+        val corners = HexGrid.axialToCornersLatLng(axial, origin, HEX_SIZE_METERS)
+        return corners.map { (lat, lng) -> GeoPoint(lat, lng) }
     }
     
     private fun getHexAverage(hexId: String): Float? {

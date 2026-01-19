@@ -520,37 +520,10 @@ class MapWidgetConfigActivity : AppCompatActivity() {
     )
     
     private fun latLngToHexId(lat: Double, lng: Double): String {
-        val metersPerDegreeLat = 111320.0
-        val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
-        
-        val x = lng * metersPerDegreeLng
-        val y = lat * metersPerDegreeLat
-        
-        val size = 25.0  // HEX_SIZE_METERS
-        val q = (sqrt(3.0) / 3.0 * x - 1.0 / 3.0 * y) / size
-        val r = (2.0 / 3.0 * y) / size
-        
-        val (hexQ, hexR) = axialRound(q, r)
-        return "$hexQ,$hexR"
-    }
-    
-    private fun axialRound(q: Double, r: Double): Pair<Int, Int> {
-        val s = -q - r
-        var rq = round(q).toInt()
-        var rr = round(r).toInt()
-        var rs = round(s).toInt()
-        
-        val qDiff = abs(rq - q)
-        val rDiff = abs(rr - r)
-        val sDiff = abs(rs - s)
-        
-        if (qDiff > rDiff && qDiff > sDiff) {
-            rq = -rr - rs
-        } else if (rDiff > sDiff) {
-            rr = -rq - rs
-        }
-        
-        return Pair(rq, rr)
+        Prefs.ensureMapGridOrigin(this, lat, lng)
+        val origin = Prefs.getMapGridOrigin(this) ?: Pair(lat, lng)
+        val axial = HexGrid.latLngToAxial(lat, lng, HexGrid.Origin(origin.first, origin.second), 25.0)
+        return axial.toString()
     }
     
     private fun hexIdToScreenPos(

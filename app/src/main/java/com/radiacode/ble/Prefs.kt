@@ -54,6 +54,8 @@ object Prefs {
     
     // Map tracking keys
     private const val KEY_MAP_DATA_POINTS = "map_data_points"
+    private const val KEY_MAP_GRID_ORIGIN_LAT = "map_grid_origin_lat"
+    private const val KEY_MAP_GRID_ORIGIN_LNG = "map_grid_origin_lng"
     private const val KEY_MAP_THEME = "map_theme"
     private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
     
@@ -1785,6 +1787,7 @@ object Prefs {
      * Add a new map data point. Automatically limits to MAX_MAP_POINTS.
      */
     fun addMapDataPoint(context: Context, latitude: Double, longitude: Double, uSvPerHour: Float, cps: Float) {
+        ensureMapGridOrigin(context, latitude, longitude)
         val points = getMapDataPoints(context).toMutableList()
         points.add(MapDataPoint(latitude, longitude, uSvPerHour, cps, System.currentTimeMillis()))
         
@@ -1842,6 +1845,30 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_MAP_DATA_POINTS)
+            .remove(KEY_MAP_GRID_ORIGIN_LAT)
+            .remove(KEY_MAP_GRID_ORIGIN_LNG)
+            .apply()
+    }
+
+    /**
+     * Map grid origin for the hex tessellation.
+     * This anchors the hex grid to a stable reference point so cells never drift.
+     */
+    fun getMapGridOrigin(context: Context): Pair<Double, Double>? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val latStr = prefs.getString(KEY_MAP_GRID_ORIGIN_LAT, null) ?: return null
+        val lngStr = prefs.getString(KEY_MAP_GRID_ORIGIN_LNG, null) ?: return null
+        val lat = latStr.toDoubleOrNull() ?: return null
+        val lng = lngStr.toDoubleOrNull() ?: return null
+        return Pair(lat, lng)
+    }
+
+    fun ensureMapGridOrigin(context: Context, latitude: Double, longitude: Double) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_MAP_GRID_ORIGIN_LAT) && prefs.contains(KEY_MAP_GRID_ORIGIN_LNG)) return
+        prefs.edit()
+            .putString(KEY_MAP_GRID_ORIGIN_LAT, latitude.toString())
+            .putString(KEY_MAP_GRID_ORIGIN_LNG, longitude.toString())
             .apply()
     }
     

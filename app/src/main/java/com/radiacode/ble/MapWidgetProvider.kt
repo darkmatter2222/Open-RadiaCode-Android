@@ -253,7 +253,7 @@ class MapWidgetProvider : AppWidgetProvider() {
             
             // Draw radiation overlay
             if (config.showHexagonGrid) {
-                drawHexagonOverlay(canvas, dataPoints, bounds, config, minVal, maxVal, density)
+                drawHexagonOverlay(context, canvas, dataPoints, bounds, config, minVal, maxVal, density)
             } else {
                 drawCircleOverlay(canvas, dataPoints, bounds, config, minVal, maxVal, density)
             }
@@ -385,6 +385,7 @@ class MapWidgetProvider : AppWidgetProvider() {
         }
         
         private fun drawHexagonOverlay(
+            context: Context,
             canvas: Canvas,
             dataPoints: List<Prefs.MapDataPoint>,
             bounds: MapBounds,
@@ -396,7 +397,7 @@ class MapWidgetProvider : AppWidgetProvider() {
             // Group data into hexagons
             val hexagonData = mutableMapOf<String, MutableList<Prefs.MapDataPoint>>()
             dataPoints.forEach { point ->
-                val hexId = latLngToHexId(point.latitude, point.longitude)
+                val hexId = latLngToHexId(context, point.latitude, point.longitude)
                 hexagonData.getOrPut(hexId) { mutableListOf() }.add(point)
             }
             
@@ -524,38 +525,11 @@ class MapWidgetProvider : AppWidgetProvider() {
             canvas.drawCircle(screenPos.first, screenPos.second, 6f * density, borderPaint)
         }
         
-        private fun latLngToHexId(lat: Double, lng: Double): String {
-            val metersPerDegreeLat = 111320.0
-            val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(lat))
-            
-            val x = lng * metersPerDegreeLng
-            val y = lat * metersPerDegreeLat
-            
-            val size = HEX_SIZE_METERS
-            val q = (sqrt(3.0) / 3.0 * x - 1.0 / 3.0 * y) / size
-            val r = (2.0 / 3.0 * y) / size
-            
-            val (hexQ, hexR) = axialRound(q, r)
-            return "$hexQ,$hexR"
-        }
-        
-        private fun axialRound(q: Double, r: Double): Pair<Int, Int> {
-            val s = -q - r
-            var rq = round(q).toInt()
-            var rr = round(r).toInt()
-            var rs = round(s).toInt()
-            
-            val qDiff = abs(rq - q)
-            val rDiff = abs(rr - r)
-            val sDiff = abs(rs - s)
-            
-            if (qDiff > rDiff && qDiff > sDiff) {
-                rq = -rr - rs
-            } else if (rDiff > sDiff) {
-                rr = -rq - rs
-            }
-            
-            return Pair(rq, rr)
+        private fun latLngToHexId(context: Context, lat: Double, lng: Double): String {
+            Prefs.ensureMapGridOrigin(context, lat, lng)
+            val origin = Prefs.getMapGridOrigin(context) ?: Pair(lat, lng)
+            val axial = HexGrid.latLngToAxial(lat, lng, HexGrid.Origin(origin.first, origin.second), HEX_SIZE_METERS)
+            return axial.toString()
         }
         
         private fun createHexagonPath(centerX: Float, centerY: Float, size: Float): Path {
