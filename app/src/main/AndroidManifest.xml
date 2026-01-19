@@ -114,6 +114,11 @@
             android:exported="false"
             android:label="Notification Settings" />
 
+        <activity
+            android:name=".SoundSettingsActivity"
+            android:exported="false"
+            android:label="Sound Settings" />
+
         <!-- Dashboard Enhancement Activities -->
         <activity
             android:name=".SessionListActivity"

@@ -200,6 +200,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionAppHeader: View
     private lateinit var sectionAppContent: View
     private lateinit var sectionAppArrow: android.widget.ImageView
+    private lateinit var sectionSoundsHeader: View
+    private lateinit var sectionSoundsContent: View
+    private lateinit var sectionSoundsArrow: android.widget.ImageView
     private lateinit var sectionChartHeader: View
     private lateinit var sectionChartContent: View
     private lateinit var sectionChartArrow: android.widget.ImageView
@@ -229,6 +232,10 @@ class MainActivity : AppCompatActivity() {
     // Application settings rows
     private lateinit var rowNotificationSettings: View
     private lateinit var rowPlayIntro: View
+    
+    // Sound settings rows
+    private lateinit var rowSoundSettings: View
+    private lateinit var valueSoundSettings: TextView
     
     // Map settings rows
     private lateinit var rowMapTheme: View
@@ -693,6 +700,9 @@ class MainActivity : AppCompatActivity() {
         sectionAppHeader = findViewById(R.id.sectionAppHeader)
         sectionAppContent = findViewById(R.id.sectionAppContent)
         sectionAppArrow = findViewById(R.id.sectionAppArrow)
+        sectionSoundsHeader = findViewById(R.id.sectionSoundsHeader)
+        sectionSoundsContent = findViewById(R.id.sectionSoundsContent)
+        sectionSoundsArrow = findViewById(R.id.sectionSoundsArrow)
         sectionChartHeader = findViewById(R.id.sectionChartHeader)
         sectionChartContent = findViewById(R.id.sectionChartContent)
         sectionChartArrow = findViewById(R.id.sectionChartArrow)
@@ -722,6 +732,10 @@ class MainActivity : AppCompatActivity() {
         // Application settings rows
         rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
         rowPlayIntro = findViewById(R.id.rowPlayIntro)
+        
+        // Sound settings rows
+        rowSoundSettings = findViewById(R.id.rowSoundSettings)
+        valueSoundSettings = findViewById(R.id.valueSoundSettings)
         
         // Map settings rows
         rowMapTheme = findViewById(R.id.rowMapTheme)
@@ -807,11 +821,17 @@ class MainActivity : AppCompatActivity() {
         setupExpandableSection(sectionMapHeader, sectionMapContent, sectionMapArrow, expanded = true)
         setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
         setupExpandableSection(sectionDetectionHeader, sectionDetectionContent, sectionDetectionArrow, expanded = true)
+        setupExpandableSection(sectionSoundsHeader, sectionSoundsContent, sectionSoundsArrow, expanded = false)
         setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
         
         // Application settings
         rowNotificationSettings.setOnClickListener {
             startActivity(Intent(this, NotificationSettingsActivity::class.java))
+        }
+        
+        // Sound settings
+        rowSoundSettings.setOnClickListener {
+            startActivity(Intent(this, SoundSettingsActivity::class.java))
         }
         
         rowPlayIntro.setOnClickListener {
@@ -2589,6 +2609,9 @@ class MainActivity : AppCompatActivity() {
         val enabledIsotopes = Prefs.getEnabledIsotopes(this)
         val totalIsotopes = IsotopeLibrary.ALL_ISOTOPES.size
         valueIsotopeSettings.text = "${enabledIsotopes.size}/$totalIsotopes enabled"
+        
+        // Sound settings
+        valueSoundSettings.text = Prefs.getSoundSettingsSummary(this)
     }
 
     private enum class Panel { Dashboard, Device, Settings, Logs }

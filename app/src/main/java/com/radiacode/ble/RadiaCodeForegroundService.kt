@@ -154,6 +154,9 @@ class RadiaCodeForegroundService : Service() {
         ensureChannel()
         alertEvaluator = AlertEvaluator(this)
         
+        // Initialize sound manager
+        SoundManager.init(this)
+        
         // Initialize multi-device manager
         deviceManager = MultiDeviceBleManager(
             context = applicationContext,
@@ -339,6 +342,7 @@ class RadiaCodeForegroundService : Service() {
     override fun onDestroy() {
         stopInternal("Service destroyed")
         stopBackgroundLocationTracking()
+        SoundManager.release()  // Release sound resources
         try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
         try { scheduler.shutdownNow() } catch (_: Throwable) {}
         try { executor.shutdownNow() } catch (_: Throwable) {}
@@ -346,6 +350,13 @@ class RadiaCodeForegroundService : Service() {
     }
 
     private fun handleDeviceStateChanged(state: DeviceState) {
+        // Play connection sounds
+        when (state.connectionState) {
+            DeviceConnectionState.CONNECTED -> SoundManager.play(this, Prefs.SoundType.CONNECTED)
+            DeviceConnectionState.DISCONNECTED -> SoundManager.play(this, Prefs.SoundType.DISCONNECTED)
+            else -> { /* No sound for other states */ }
+        }
+        
         // Broadcast state change for UI updates
         try {
             val i = Intent(ACTION_DEVICE_STATE_CHANGED)
@@ -430,6 +441,9 @@ class RadiaCodeForegroundService : Service() {
     }
     
     private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {
+        // Play data tick sound (throttled internally)
+        SoundManager.play(this, Prefs.SoundType.DATA_TICK)
+        
         // Get location snapshot FIRST (needed for broadcast and background work)
         val locationSnap = currentLocation ?: getBestLastKnownLocation()?.also { currentLocation = it }
         

@@ -157,6 +157,9 @@ class AlertEvaluator(private val context: Context) {
     private fun fireAlert(alert: Prefs.SmartAlert, currentDose: Float, currentCps: Float, durationWindowStartMs: Long) {
         val now = System.currentTimeMillis()
         Log.d(TAG, "Firing alert: ${alert.name}")
+        
+        // Play alert sound
+        SoundManager.play(context, Prefs.SoundType.ALARM)
 
         // Record the alert event for chart visualization
         // durationWindowStartMs = when the condition first became true

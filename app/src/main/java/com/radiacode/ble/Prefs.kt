@@ -73,6 +73,20 @@ object Prefs {
     private const val KEY_CHART_ANNOTATIONS_JSON = "chart_annotations_json"
     private const val KEY_SESSIONS_JSON = "sessions_json"
     private const val KEY_CURRENT_SESSION_ID = "current_session_id"
+    
+    // Sound Settings keys
+    private const val KEY_SOUND_ENABLED_DATA_TICK = "sound_enabled_data_tick"
+    private const val KEY_SOUND_ENABLED_CONNECTED = "sound_enabled_connected"
+    private const val KEY_SOUND_ENABLED_DISCONNECTED = "sound_enabled_disconnected"
+    private const val KEY_SOUND_ENABLED_ALARM = "sound_enabled_alarm"
+    private const val KEY_SOUND_ENABLED_ANOMALY = "sound_enabled_anomaly"
+    private const val KEY_SOUND_ENABLED_AMBIENT = "sound_enabled_ambient"
+    private const val KEY_SOUND_VOLUME_DATA_TICK = "sound_volume_data_tick"
+    private const val KEY_SOUND_VOLUME_CONNECTED = "sound_volume_connected"
+    private const val KEY_SOUND_VOLUME_DISCONNECTED = "sound_volume_disconnected"
+    private const val KEY_SOUND_VOLUME_ALARM = "sound_volume_alarm"
+    private const val KEY_SOUND_VOLUME_ANOMALY = "sound_volume_anomaly"
+    private const val KEY_SOUND_VOLUME_AMBIENT = "sound_volume_ambient"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -2086,5 +2100,117 @@ object Prefs {
     fun getIntroSeenVersion(context: Context): Int {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getInt(KEY_INTRO_SEEN_VERSION, 0)
+    }
+    
+    // ==================== Sound Settings ====================
+    
+    /**
+     * Sound types for the application.
+     */
+    enum class SoundType {
+        DATA_TICK,      // Soft tick when data comes in
+        CONNECTED,      // Device connected sound
+        DISCONNECTED,   // Device disconnected sound
+        ALARM,          // Alert/alarm triggered
+        ANOMALY,        // Statistical anomaly detected
+        AMBIENT         // Background ambient drone (loops)
+    }
+    
+    /**
+     * Check if a specific sound type is enabled.
+     * Default values:
+     * - DATA_TICK: false (disabled by default - can be annoying)
+     * - CONNECTED: true
+     * - DISCONNECTED: true
+     * - ALARM: true
+     * - ANOMALY: true
+     * - AMBIENT: false (disabled by default)
+     */
+    fun isSoundEnabled(context: Context, soundType: SoundType): Boolean {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        return when (soundType) {
+            SoundType.DATA_TICK -> prefs.getBoolean(KEY_SOUND_ENABLED_DATA_TICK, false)
+            SoundType.CONNECTED -> prefs.getBoolean(KEY_SOUND_ENABLED_CONNECTED, true)
+            SoundType.DISCONNECTED -> prefs.getBoolean(KEY_SOUND_ENABLED_DISCONNECTED, true)
+            SoundType.ALARM -> prefs.getBoolean(KEY_SOUND_ENABLED_ALARM, true)
+            SoundType.ANOMALY -> prefs.getBoolean(KEY_SOUND_ENABLED_ANOMALY, true)
+            SoundType.AMBIENT -> prefs.getBoolean(KEY_SOUND_ENABLED_AMBIENT, false)
+        }
+    }
+    
+    fun setSoundEnabled(context: Context, soundType: SoundType, enabled: Boolean) {
+        val key = when (soundType) {
+            SoundType.DATA_TICK -> KEY_SOUND_ENABLED_DATA_TICK
+            SoundType.CONNECTED -> KEY_SOUND_ENABLED_CONNECTED
+            SoundType.DISCONNECTED -> KEY_SOUND_ENABLED_DISCONNECTED
+            SoundType.ALARM -> KEY_SOUND_ENABLED_ALARM
+            SoundType.ANOMALY -> KEY_SOUND_ENABLED_ANOMALY
+            SoundType.AMBIENT -> KEY_SOUND_ENABLED_AMBIENT
+        }
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(key, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the volume level for a specific sound type.
+     * Volume ranges from 0.0 to 1.0 (0% to 100%).
+     * Default values:
+     * - DATA_TICK: 0.15 (very quiet)
+     * - CONNECTED: 0.5
+     * - DISCONNECTED: 0.5
+     * - ALARM: 0.8
+     * - ANOMALY: 0.6
+     * - AMBIENT: 0.05 (very quiet background)
+     */
+    fun getSoundVolume(context: Context, soundType: SoundType): Float {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val defaultVolume = when (soundType) {
+            SoundType.DATA_TICK -> 0.15f
+            SoundType.CONNECTED -> 0.5f
+            SoundType.DISCONNECTED -> 0.5f
+            SoundType.ALARM -> 0.8f
+            SoundType.ANOMALY -> 0.6f
+            SoundType.AMBIENT -> 0.05f
+        }
+        val key = when (soundType) {
+            SoundType.DATA_TICK -> KEY_SOUND_VOLUME_DATA_TICK
+            SoundType.CONNECTED -> KEY_SOUND_VOLUME_CONNECTED
+            SoundType.DISCONNECTED -> KEY_SOUND_VOLUME_DISCONNECTED
+            SoundType.ALARM -> KEY_SOUND_VOLUME_ALARM
+            SoundType.ANOMALY -> KEY_SOUND_VOLUME_ANOMALY
+            SoundType.AMBIENT -> KEY_SOUND_VOLUME_AMBIENT
+        }
+        return prefs.getFloat(key, defaultVolume).coerceIn(0f, 1f)
+    }
+    
+    fun setSoundVolume(context: Context, soundType: SoundType, volume: Float) {
+        val key = when (soundType) {
+            SoundType.DATA_TICK -> KEY_SOUND_VOLUME_DATA_TICK
+            SoundType.CONNECTED -> KEY_SOUND_VOLUME_CONNECTED
+            SoundType.DISCONNECTED -> KEY_SOUND_VOLUME_DISCONNECTED
+            SoundType.ALARM -> KEY_SOUND_VOLUME_ALARM
+            SoundType.ANOMALY -> KEY_SOUND_VOLUME_ANOMALY
+            SoundType.AMBIENT -> KEY_SOUND_VOLUME_AMBIENT
+        }
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(key, volume.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /**
+     * Get a summary of enabled sounds for UI display.
+     */
+    fun getSoundSettingsSummary(context: Context): String {
+        val enabled = mutableListOf<String>()
+        if (isSoundEnabled(context, SoundType.DATA_TICK)) enabled.add("Tick")
+        if (isSoundEnabled(context, SoundType.CONNECTED)) enabled.add("Connect")
+        if (isSoundEnabled(context, SoundType.DISCONNECTED)) enabled.add("Disconnect")
+        if (isSoundEnabled(context, SoundType.ALARM)) enabled.add("Alarm")
+        if (isSoundEnabled(context, SoundType.ANOMALY)) enabled.add("Anomaly")
+        if (isSoundEnabled(context, SoundType.AMBIENT)) enabled.add("Ambient")
+        return if (enabled.isEmpty()) "All off" else "${enabled.size} enabled"
     }
 }

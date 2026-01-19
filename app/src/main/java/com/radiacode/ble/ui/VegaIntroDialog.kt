@@ -298,7 +298,13 @@ Let us begin.
     
     private fun setupAmbientAudio() {
         try {
-            ambientPlayer = MediaPlayer.create(context, R.raw.ambient_drone)?.apply {
+            // Try to load ambient_drone, but gracefully handle if it doesn't exist
+            val resId = context.resources.getIdentifier("ambient_drone", "raw", context.packageName)
+            if (resId == 0) {
+                // Non-critical - continue without ambient audio
+                return
+            }
+            ambientPlayer = MediaPlayer.create(context, resId)?.apply {
                 // Start at 5% volume, will ease in to 17% then duck to 5% when Vega speaks
                 // During pauses, dip more aggressively to 15%
                 setVolume(0.05f, 0.05f)
