@@ -532,9 +532,9 @@ class MapCardView @JvmOverloads constructor(
         // Use the hexagon's center latitude for consistent projection
         val metersPerDegreeLng = 111320.0 * cos(Math.toRadians(centerLat))
         
-        // 6 corners for pointy-top hexagon
+        // 6 corners for flat-top hexagon
         for (i in 0 until 6) {
-            val angleDeg = 60.0 * i - 30.0  // Pointy-top: start at -30°
+            val angleDeg = 60.0 * i  // Flat-top: start at 0°
             val angleRad = Math.toRadians(angleDeg)
             
             val cornerX = HEX_SIZE_METERS * cos(angleRad)
