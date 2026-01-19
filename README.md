@@ -292,12 +292,17 @@ The app supports multiple RadiaCode devices simultaneously:
 ```
 RadiaCodeForegroundService
     ↓ (BLE polling every ~1s)
-Prefs.setLastReading() + Prefs.addRecentReading()
     ↓
-*WidgetProvider.updateAll()  →  Home screen widgets
+Broadcast (ACTION_READING with all data including lat/lng)
+    ↓                              ↓
+MainActivity (charts)        FullscreenMapActivity (hexagons)
+    ↓                              ↓
+[Immediate UI updates via broadcast - no Prefs polling]
     ↓
-LocalBroadcast  →  MainActivity (real-time charts)
+Background thread: Prefs writes, widgets, CSV, alerts
 ```
+
+**Performance Note:** All heavy I/O (SharedPreferences, file writes, widget rendering) runs on a background executor to keep the BLE poll cycle at ~1 second. UI components receive data via broadcast for immediate updates.
 
 ### Boot Startup Flow
 

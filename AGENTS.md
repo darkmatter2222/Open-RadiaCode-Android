@@ -207,6 +207,73 @@ Chart sparklines are generated as Bitmaps:
 - Use gradient fill under the line
 - Handle empty data gracefully (show placeholder)
 
+## Performance Optimization (Critical Lessons)
+
+### BLE Polling Thread - Keep It Fast!
+
+**CRITICAL:** The BLE polling callbacks (`onDeviceReading`, `onDeviceStateChanged`) run on the BLE thread. Any blocking work here will slow down the entire poll cycle.
+
+**Root cause of slow UI updates:** When `handleDeviceReading()` was doing heavy work synchronously, the poll cycle went from ~1s to ~4-5s:
+- `Prefs.addMapDataPoint()` parses/rebuilds 86,400-entry strings
+- Widget bitmap rendering (5 providers)
+- CSV file I/O
+- Alert evaluation with Prefs reads
+
+**Solution:** Move ALL heavy work to `executor.execute{}` background thread:
+```kotlin
+private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {
+    // ONLY synchronous: broadcast to UI
+    sendBroadcast(Intent(ACTION_READING).putExtras(...))
+    
+    // EVERYTHING else in background
+    executor.execute {
+        requestWidgetUpdate()           // Widget rendering
+        updateNotificationFromState()   // Notification update  
+        appendReadingCsvIfNew(...)      // File I/O
+        Prefs.addMapDataPoint(...)      // Heavy SharedPrefs work
+        alertEvaluator.evaluate(...)    // Alert evaluation
+    }
+}
+```
+
+### SharedPreferences - Avoid Large String Parsing on UI Thread
+
+**Problem:** `Prefs.getMapDataPoints()` and `Prefs.getRecentReadings()` parse thousands of entries from comma-separated strings. This is O(n) and blocks the calling thread.
+
+**Symptoms:**
+- Poll cycle takes 3-5 seconds instead of 1 second
+- UI feels sluggish
+- Hexagon map updates slowly
+
+**Solutions:**
+1. Move heavy Prefs reads/writes to background threads
+2. Use broadcast receivers for immediate UI updates (don't poll Prefs)
+3. Include relevant data in broadcasts (e.g., lat/lng for map updates)
+
+### Broadcasts for Immediate UI Updates
+
+**Pattern:** Instead of having UI components poll SharedPreferences, include all needed data in the broadcast:
+
+```kotlin
+// In service - include location in broadcast
+val i = Intent(ACTION_READING)
+    .putExtra(EXTRA_USV_H, uSvPerHour)
+    .putExtra(EXTRA_CPS, cps)
+    .putExtra(EXTRA_LATITUDE, location.latitude)   // Include location!
+    .putExtra(EXTRA_LONGITUDE, location.longitude)
+sendBroadcast(i)
+
+// In activity - use broadcast data directly
+readingReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        val lat = intent.getDoubleExtra(EXTRA_LATITUDE, Double.NaN)
+        val lng = intent.getDoubleExtra(EXTRA_LONGITUDE, Double.NaN)
+        // Update hexagon grid immediately - no Prefs polling needed!
+        hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+    }
+}
+```
+
 ## Key Architecture Points
 
 ### Boot Startup

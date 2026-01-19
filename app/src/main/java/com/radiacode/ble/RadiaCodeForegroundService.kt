@@ -56,6 +56,8 @@ class RadiaCodeForegroundService : Service() {
         const val EXTRA_CALIB_A1 = "calib_a1"
         const val EXTRA_CALIB_A2 = "calib_a2"
         const val EXTRA_IS_REALTIME = "is_realtime"  // true for differential spectrum, false for scan
+        const val EXTRA_LATITUDE = "latitude"
+        const val EXTRA_LONGITUDE = "longitude"
 
         private const val EXTRA_ADDRESS = "address"
 
@@ -428,8 +430,12 @@ class RadiaCodeForegroundService : Service() {
     }
     
     private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {
+        // Get location snapshot FIRST (needed for broadcast and background work)
+        val locationSnap = currentLocation ?: getBestLastKnownLocation()?.also { currentLocation = it }
+        
         // PRIORITY 1: Broadcast to UI immediately for responsive updates
         // This is the ONLY synchronous thing that happens on the BLE thread
+        // Include location so map views can update hexagons immediately without polling Prefs
         try {
             val i = Intent(ACTION_READING)
                 .setPackage(packageName)
@@ -437,12 +443,16 @@ class RadiaCodeForegroundService : Service() {
                 .putExtra(EXTRA_USV_H, uSvPerHour)
                 .putExtra(EXTRA_CPS, cps)
                 .putExtra(EXTRA_DEVICE_ID, deviceId)
+            // Add location if available
+            if (locationSnap != null) {
+                i.putExtra(EXTRA_LATITUDE, locationSnap.latitude)
+                i.putExtra(EXTRA_LONGITUDE, locationSnap.longitude)
+            }
             sendBroadcast(i)
         } catch (_: Throwable) {}
         
         // PRIORITY 2: Move EVERYTHING else to background thread
         // This includes: widget updates, notification, CSV, map points, alerts
-        val locationSnap = currentLocation ?: getBestLastKnownLocation()?.also { currentLocation = it }
         executor.execute {
             try {
                 // Widget and notification updates (can involve bitmap rendering)

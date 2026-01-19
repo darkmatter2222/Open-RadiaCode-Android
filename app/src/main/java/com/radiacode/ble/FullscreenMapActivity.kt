@@ -78,6 +78,30 @@ class FullscreenMapActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != RadiaCodeForegroundService.ACTION_READING) return
             pulseReadingDot()
+            
+            // Add reading to hexagon grid immediately if location is available
+            val lat = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LATITUDE, Double.NaN)
+            val lng = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LONGITUDE, Double.NaN)
+            if (lat.isNaN() || lng.isNaN()) return
+            
+            val ts = intent.getLongExtra(RadiaCodeForegroundService.EXTRA_TS_MS, 0L)
+            val uSvH = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_USV_H, 0f)
+            val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
+            
+            // Skip if we've already processed this reading
+            if (ts <= lastProcessedTimestampMs) return
+            lastProcessedTimestampMs = ts
+            
+            // Add to hexagon grid
+            val hexId = latLngToHexId(lat, lng)
+            val reading = HexReading(uSvH, cps, ts)
+            hexagonData.getOrPut(hexId) { mutableListOf() }.add(reading)
+            
+            // Redraw map
+            mapView.invalidate()
+            
+            // Update statistics panel
+            updateStatisticsPanel()
         }
     }
     
@@ -307,15 +331,17 @@ class FullscreenMapActivity : AppCompatActivity() {
     
     /**
      * Start polling for new readings while the map is active.
+     * Note: Live updates now happen via broadcast receiver for immediate response.
+     * This polling is a backup to catch any readings that might be missed.
      */
     private fun startLiveUpdates() {
         updateRunnable = object : Runnable {
             override fun run() {
                 refreshNewReadings()
-                handler.postDelayed(this, 1000)
+                handler.postDelayed(this, 5000)  // Reduced frequency - broadcasts handle live updates
             }
         }
-        handler.postDelayed(updateRunnable!!, 1000)
+        handler.postDelayed(updateRunnable!!, 5000)
     }
     
     private fun stopLiveUpdates() {
