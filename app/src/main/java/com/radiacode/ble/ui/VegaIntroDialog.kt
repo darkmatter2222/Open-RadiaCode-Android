@@ -299,8 +299,9 @@ Let us begin.
     private fun setupAmbientAudio() {
         try {
             ambientPlayer = MediaPlayer.create(context, R.raw.ambient_drone)?.apply {
-                // Start at 20% volume, will duck to 7% when Vega speaks
-                setVolume(0.20f, 0.20f)
+                // Start at 5% volume, will ease in to 17% then duck to 5% when Vega speaks
+                // During pauses, dip more aggressively to 15%
+                setVolume(0.05f, 0.05f)
                 isLooping = true  // Loop the ambient audio
             }
         } catch (e: Exception) {
@@ -311,13 +312,15 @@ Let us begin.
     
     private fun startPlayback() {
         try {
-            // Start ambient audio first (immediately) at 20% volume
+            // Start ambient audio at 5% volume, ease in to 17% over 2.5 seconds
             ambientPlayer?.start()
+            animateAmbientVolume(0.05f, 0.17f, 2500)
             
             // Delay Vega's voice and scroll by 3 seconds
             handler.postDelayed({
-                // Smoothly duck ambient audio from 20% to 7% over 1 second
-                animateAmbientVolume(0.20f, 0.07f, 1000)
+                // Smoothly duck ambient audio from 17% to 5% over 1 second when Vega speaks
+                // During pauses in speech, music will dip to 15% more aggressively
+                animateAmbientVolume(0.17f, 0.05f, 1000)
                 
                 mediaPlayer?.start()
                 isPlaying = true
@@ -429,8 +432,8 @@ Let us begin.
     private fun onAudioComplete() {
         isPlaying = false
         
-        // Smoothly bring ambient audio back up from 7% to 20% over 1.5 seconds
-        animateAmbientVolume(0.07f, 0.20f, 1500)
+        // Smoothly bring ambient audio back up from 5% to 17% over 1.5 seconds
+        animateAmbientVolume(0.05f, 0.17f, 1500)
         
         closeButton.text = "Begin"
         closeButton.setTextColor(Color.parseColor("#00E5FF"))
