@@ -755,12 +755,13 @@ class RadiaCodeForegroundService : Service() {
     private fun getWidgetMinIntervalMs(): Long {
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         val screenOn = pm?.isInteractive ?: true
-        val inForeground = Prefs.isAppInForeground(this)
 
-        return when {
-            inForeground -> WIDGET_MIN_INTERVAL_FOREGROUND_MS
-            !screenOn -> WIDGET_MIN_INTERVAL_SCREEN_OFF_MS
-            else -> WIDGET_MIN_INTERVAL_BACKGROUND_MS
+        // Widgets should remain "real-time" whenever the screen is on (home screen included).
+        // Only slow down when the screen is off.
+        return if (screenOn) {
+            WIDGET_MIN_INTERVAL_FOREGROUND_MS
+        } else {
+            WIDGET_MIN_INTERVAL_SCREEN_OFF_MS
         }
     }
 

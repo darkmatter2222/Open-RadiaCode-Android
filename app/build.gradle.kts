@@ -12,7 +12,38 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 81
-        versionName = "0.95"
+        versionName = "0.96"
+    }
+
+    // The repo’s audio files live in app/audio/. Copy any provided sound assets into res/raw
+    // at build time so SoundManager can load them as Android raw resources.
+    //
+    // Supported filenames in app/audio/:
+    // - sound_data_tick.wav
+    // - sound_connected.wav
+    // - sound_disconnected.wav
+    // - sound_alarm.wav
+    // - sound_anomaly.wav
+    // - ambient_drone.wav (or the original sci-fi ambient drone filename)
+    val audioSrcDir = file("audio")
+    val rawDestDir = file("src/main/res/raw")
+
+    tasks.register<Copy>("syncAudioToRaw") {
+        from(audioSrcDir) {
+            include(
+                "sound_data_tick.*",
+                "sound_connected.*",
+                "sound_disconnected.*",
+                "sound_alarm.*",
+                "sound_anomaly.*",
+                "ambient_drone.*",
+            )
+        }
+        into(rawDestDir)
+    }
+
+    tasks.named("preBuild") {
+        dependsOn("syncAudioToRaw")
     }
 
     buildTypes {
