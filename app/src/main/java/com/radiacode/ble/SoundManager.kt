@@ -3,8 +3,10 @@ package com.radiacode.ble
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.SoundPool
+import android.media.ToneGenerator
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -77,6 +79,10 @@ class SoundManager private constructor(private val context: Context) {
     
     // Track which resource name was loaded into each soundId for debugging
     private val soundIdToResourceName = mutableMapOf<Int, String>()
+
+    // Fallback tones if raw audio resources are missing
+    private val toneLock = Any()
+    private var toneGenerator: ToneGenerator? = null
     
     // MediaPlayer for looping ambient audio
     private var ambientPlayer: MediaPlayer? = null
@@ -168,6 +174,13 @@ class SoundManager private constructor(private val context: Context) {
                 val disconnectedResId = context.resources.getIdentifier("sound_disconnected", "raw", context.packageName)
                 val alarmResId = context.resources.getIdentifier("sound_alarm", "raw", context.packageName)
                 val anomalyResId = context.resources.getIdentifier("sound_anomaly", "raw", context.packageName)
+
+                // Always warn if expected resources are missing (not just in debug)
+                if (dataTickResId == 0) Log.w(TAG, "Missing raw resource: res/raw/sound_data_tick.* (fallback tone will be used)")
+                if (connectedResId == 0) Log.w(TAG, "Missing raw resource: res/raw/sound_connected.* (fallback tone will be used)")
+                if (disconnectedResId == 0) Log.w(TAG, "Missing raw resource: res/raw/sound_disconnected.* (fallback tone will be used)")
+                if (alarmResId == 0) Log.w(TAG, "Missing raw resource: res/raw/sound_alarm.* (fallback tone will be used)")
+                if (anomalyResId == 0) Log.w(TAG, "Missing raw resource: res/raw/sound_anomaly.* (fallback tone will be used)")
                 
                 if (debugLogs) {
                     Log.d(TAG, "=== LOADING SOUNDS ===")
@@ -292,7 +305,8 @@ class SoundManager private constructor(private val context: Context) {
             return
         }
         if (soundId == 0) {
-            Log.d(TAG, "Sound not ready: soundId is 0 for ${soundType.name}")
+            Log.w(TAG, "Sound resource missing for ${soundType.name}; using ToneGenerator fallback")
+            playFallbackTone(soundType)
             return
         }
         
@@ -303,6 +317,52 @@ class SoundManager private constructor(private val context: Context) {
             Log.d(TAG, "SoundPool.play returned streamId=$streamId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play sound", e)
+        }
+    }
+
+    private fun playFallbackTone(soundType: Prefs.SoundType) {
+        try {
+            val toneType = when (soundType) {
+                Prefs.SoundType.DATA_TICK -> ToneGenerator.TONE_PROP_BEEP2
+                Prefs.SoundType.CONNECTED -> ToneGenerator.TONE_PROP_ACK
+                Prefs.SoundType.DISCONNECTED -> ToneGenerator.TONE_PROP_NACK
+                Prefs.SoundType.ALARM -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD
+                Prefs.SoundType.ANOMALY -> ToneGenerator.TONE_PROP_BEEP
+                Prefs.SoundType.AMBIENT -> ToneGenerator.TONE_PROP_BEEP
+            }
+
+            // Approximate per-sound volume (ToneGenerator uses 0..100)
+            val volumeFloat = Prefs.getSoundVolume(context, soundType).coerceIn(0f, 1f)
+            val volumeInt = (volumeFloat * 100f).toInt().coerceIn(10, 100)
+
+            val durationMs = when (soundType) {
+                Prefs.SoundType.DATA_TICK -> 60
+                Prefs.SoundType.CONNECTED -> 120
+                Prefs.SoundType.DISCONNECTED -> 150
+                Prefs.SoundType.ALARM -> 900
+                Prefs.SoundType.ANOMALY -> 250
+                Prefs.SoundType.AMBIENT -> 200
+            }
+
+            synchronized(toneLock) {
+                if (toneGenerator == null) {
+                    toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volumeInt)
+                }
+                // If user changes the slider, recreate generator with new volume
+                val current = toneGenerator
+                if (current == null) {
+                    toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volumeInt)
+                } else {
+                    // ToneGenerator has no setVolume; recreate when volume differs meaningfully
+                    if (volumeInt != 100) {
+                        toneGenerator?.release()
+                        toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, volumeInt)
+                    }
+                }
+                toneGenerator?.startTone(toneType, durationMs)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Fallback tone failed for ${soundType.name}", e)
         }
     }
     
@@ -429,6 +489,13 @@ class SoundManager private constructor(private val context: Context) {
      */
     private fun releaseInternal() {
         stopAmbient()
+        synchronized(toneLock) {
+            try {
+                toneGenerator?.release()
+            } catch (_: Throwable) {
+            }
+            toneGenerator = null
+        }
         soundPool?.release()
         soundPool = null
         soundsLoaded.set(false)
