@@ -1647,10 +1647,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Prefs.setAppInForeground(this, true)
         registerReadingReceiver()
         reloadChartHistoryForSelectedDeviceAsync()
         // Reload map data to pick up points collected in background (off main thread)
         reloadMapPointsAsync()
+        // Only keep high-accuracy location while UI is visible.
+        mapCard.startLocationTracking()
         startUiLoop()
         refreshSettingsRows()
     }
@@ -1725,7 +1728,10 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         unregisterReadingReceiver()
+        // Release interactive location when app is backgrounded.
+        mapCard.stopLocationTracking()
         stopUiLoop()
+        Prefs.setAppInForeground(this, false)
     }
 
     override fun onDestroy() {

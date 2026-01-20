@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 81
-        versionName = "0.94"
+        versionName = "0.95"
     }
 
     buildTypes {
@@ -39,6 +39,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+
+    // Fused Location Provider (battery-friendly location)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     
     // Map library for live location tracking
     implementation("org.osmdroid:osmdroid-android:6.1.18")

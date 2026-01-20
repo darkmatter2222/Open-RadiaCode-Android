@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Bundle
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -19,6 +17,7 @@ import com.radiacode.ble.HexGrid
 import com.radiacode.ble.FullscreenMapActivity
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
+import com.radiacode.ble.location.LocationController
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -62,10 +61,20 @@ class MapCardView @JvmOverloads constructor(
     private var homeLabelsOverlay: TilesOverlay? = null
     
     // Location
-    private var locationManager: LocationManager? = null
-    private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
     private var isTrackingLocation = false
+    private var locationController: LocationController? = null
+    private var interactiveToken: java.util.UUID? = null
+
+    private val locationListener = object : LocationController.Listener {
+        override fun onLocation(location: Location) {
+            currentLocation = location
+            if (isFollowingLocation && !isUserInteractingWithMap) {
+                updateMapCenter(location)
+            }
+            mapView.invalidate()
+        }
+    }
 
     // Map follow-mode: when enabled, keep the map centered on the user's location.
     // Disabled automatically when the user drags the map.
@@ -373,81 +382,27 @@ class MapCardView @JvmOverloads constructor(
             android.util.Log.w("MapCardView", "startLocationTracking: No location permission")
             return
         }
-        
-        locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        
-        locationListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                android.util.Log.d("MapCardView", "onLocationChanged: ${location.latitude},${location.longitude}")
-                currentLocation = location
-                if (isFollowingLocation && !isUserInteractingWithMap) {
-                    updateMapCenter(location)
-                }
-                // Redraw position marker (and overlays) on location changes.
-                mapView.invalidate()
-            }
-            
-            @Deprecated("Deprecated in Java")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            override fun onProviderEnabled(provider: String) {
-                android.util.Log.d("MapCardView", "GPS provider enabled")
-            }
-            override fun onProviderDisabled(provider: String) {
-                android.util.Log.w("MapCardView", "GPS provider disabled")
-            }
+
+        locationController = LocationController.getInstance(context)
+        interactiveToken = locationController?.acquireInteractive()
+        locationController?.addListener(locationListener)
+
+        currentLocation = locationController?.getLastLocation()
+        if (currentLocation != null) {
+            updateMapCenter(currentLocation!!)
         }
-        
-        try {
-            // Request updates from GPS
-            locationManager?.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                5000L,  // 5 seconds
-                10f,    // 10 meters
-                locationListener!!
-            )
-            
-            // Also try network provider as fallback
-            try {
-                locationManager?.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    5000L,
-                    10f,
-                    locationListener!!
-                )
-            } catch (e: Exception) {
-                android.util.Log.w("MapCardView", "Network location provider not available")
-            }
-            
-            // Try to get last known location immediately
-            currentLocation = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-            
-            if (currentLocation != null) {
-                android.util.Log.d("MapCardView", "Got last known location: ${currentLocation!!.latitude},${currentLocation!!.longitude}")
-                updateMapCenter(currentLocation!!)
-            } else {
-                android.util.Log.w("MapCardView", "No last known location available")
-            }
-            
-            isTrackingLocation = true
-            android.util.Log.d("MapCardView", "Location tracking started")
-        } catch (e: SecurityException) {
-            android.util.Log.e("MapCardView", "SecurityException starting location tracking", e)
-        }
+
+        isTrackingLocation = true
+        android.util.Log.d("MapCardView", "Location tracking started (LocationController)")
     }
     
     /**
      * Stop tracking location.
      */
     fun stopLocationTracking() {
-        locationListener?.let { listener ->
-            try {
-                locationManager?.removeUpdates(listener)
-            } catch (e: Exception) {
-                // Ignore
-            }
-        }
-        locationListener = null
+        locationController?.removeListener(locationListener)
+        locationController?.releaseInteractive(interactiveToken)
+        interactiveToken = null
         isTrackingLocation = false
     }
     

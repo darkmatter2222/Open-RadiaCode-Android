@@ -2,6 +2,58 @@
 
 This file documents the repeatable build + deploy loop and development guidelines for this repo.
 
+---
+description: "Autonomous execution agent for this repo. Default behavior: proceed without asking, iterating until the objective is complete, while respecting explicit safety gates."
+tools: ["repo_read", "repo_write", "terminal", "search", "build", "tests", "lint"]
+---
+
+# Agent Operating Contract (Read First)
+
+## Mission
+Complete the user’s objective end-to-end. Work autonomously: plan, implement, build, install to the phone, validate via logs/dumpsys, fix issues, and repeat until done.
+
+## Default Behavior: Keep Going
+Keep iterating until ALL acceptance criteria are satisfied:
+- App builds successfully.
+- On-device install succeeds and the app is relaunched after each install.
+- Validation commands/logs required by the task are captured and show expected improvements.
+- No functional regressions (mapping, background service, widgets, alerts).
+- Documentation is updated for any behavior/usage changes.
+
+When something fails:
+1) read the error output,
+2) identify the root cause,
+3) apply a fix,
+4) re-run the relevant check(s),
+5) repeat until green.
+
+Note: “run indefinitely” means “do not stop early”; stop only when complete or genuinely blocked by a STOP condition.
+
+## Required Device Loop (This Repo)
+After every successful build, ALWAYS:
+1) `adb install -r` the new APK to the connected phone
+2) force-stop and relaunch the app (install does not restart it)
+3) check logs for errors/regressions (at minimum: `adb logcat -v time -s RadiaCode` and error-level logs)
+
+## Git Workflow (This Repo)
+- Work on a feature branch.
+- Make small, reviewable commits when milestones are stable.
+- Always push the feature branch to origin when the task is complete.
+- Never merge to `main` unless explicitly instructed.
+
+## STOP Conditions (Only reasons to pause)
+Stop and ask the user only if required:
+1) Credentials, secrets, tokens, or access you do not have
+2) Actions that affect production, billing, or external infrastructure
+3) Destructive operations (mass deletes, history rewrites/force-push)
+4) Legal/compliance uncertainty (licenses/copyright)
+5) Ambiguity that would change a public API/behavior in a breaking way
+
+If a STOP condition is hit:
+- Explain the issue briefly
+- Propose the safest default
+- Ask for exactly what’s needed to proceed
+
 ## Versioning
 
 **Current Version:** See `app/build.gradle.kts` → `versionName`

@@ -13,20 +13,20 @@ import android.content.Context
 import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.radiacode.ble.location.LocationController
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
+import java.util.UUID
 
 class RadiaCodeForegroundService : Service() {
 
@@ -58,6 +58,13 @@ class RadiaCodeForegroundService : Service() {
         const val EXTRA_IS_REALTIME = "is_realtime"  // true for differential spectrum, false for scan
         const val EXTRA_LATITUDE = "latitude"
         const val EXTRA_LONGITUDE = "longitude"
+
+        private const val NOTIF_MIN_INTERVAL_CONNECTED_MS = 10_000L
+        private const val NOTIF_MIN_INTERVAL_DISCONNECTED_MS = 2_000L
+
+        private const val WIDGET_MIN_INTERVAL_FOREGROUND_MS = 1_000L
+        private const val WIDGET_MIN_INTERVAL_BACKGROUND_MS = 10_000L
+        private const val WIDGET_MIN_INTERVAL_SCREEN_OFF_MS = 30_000L
 
         private const val EXTRA_ADDRESS = "address"
 
@@ -115,6 +122,10 @@ class RadiaCodeForegroundService : Service() {
     private var lastWidgetUpdateMs: Long = 0L
     private var widgetUpdateFuture: ScheduledFuture<*>? = null
 
+    private var lastNotifTitle: String? = null
+    private var lastNotifText: String? = null
+    private var lastNotifPostMs: Long = 0L
+
     // Multi-device manager
     private var deviceManager: MultiDeviceBleManager? = null
 
@@ -128,9 +139,8 @@ class RadiaCodeForegroundService : Service() {
     private val previousConnectionStates = mutableMapOf<String, DeviceConnectionState>()
     
     // Background location tracking for map data
-    private var locationManager: LocationManager? = null
-    private var locationListener: LocationListener? = null
-    private var currentLocation: Location? = null
+    private var locationController: LocationController? = null
+    private var backgroundLocationToken: UUID? = null
 
     private var lastMapSaveLogMs: Long = 0L
     private var lastNoLocationLogMs: Long = 0L
@@ -173,85 +183,10 @@ class RadiaCodeForegroundService : Service() {
         } catch (t: Throwable) {
             Log.w(TAG, "registerReceiver failed", t)
         }
-        
-        // Start background location tracking for map data
-        startBackgroundLocationTracking()
-    }
-    
-    @SuppressLint("MissingPermission")
-    private fun startBackgroundLocationTracking() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "startBackgroundLocationTracking: No location permission")
-            return
-        }
-        
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        
-        locationListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                currentLocation = location
-                Log.d(TAG, "Background location: ${location.latitude},${location.longitude}")
-            }
-            
-            @Deprecated("Deprecated in Java")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
-        }
-        
-        try {
-            // Request GPS updates
-            locationManager?.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                5000L,  // 5 seconds
-                10f,    // 10 meters
-                locationListener!!
-            )
-            
-            // Also try network provider as fallback
-            try {
-                locationManager?.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    5000L,
-                    10f,
-                    locationListener!!
-                )
-            } catch (_: Exception) {}
-            
-            // Get last known location as initial value
-            currentLocation = getBestLastKnownLocation()
-            
-            Log.d(TAG, "Background location tracking started, initial: ${currentLocation?.latitude},${currentLocation?.longitude}")
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException starting background location tracking", e)
-        }
-    }
 
-    @SuppressLint("MissingPermission")
-    private fun getBestLastKnownLocation(): Location? {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            != PackageManager.PERMISSION_GRANTED) {
-            return null
-        }
-        val lm = locationManager ?: (getSystemService(Context.LOCATION_SERVICE) as? LocationManager)
-        val lastGps = try { lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
-        val lastNetwork = try { lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
-        return when {
-            lastGps != null && lastNetwork != null -> if (lastGps.time > lastNetwork.time) lastGps else lastNetwork
-            lastGps != null -> lastGps
-            else -> lastNetwork
-        }
-    }
-    
-    private fun stopBackgroundLocationTracking() {
-        locationListener?.let { listener ->
-            try {
-                locationManager?.removeUpdates(listener)
-            } catch (_: Exception) {}
-        }
-        locationListener = null
-        locationManager = null
+        // Single location owner for the entire app
+        locationController = LocationController.getInstance(this)
+        backgroundLocationToken = locationController?.acquireBackground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -267,11 +202,11 @@ class RadiaCodeForegroundService : Service() {
             }
             ACTION_RELOAD_DEVICES -> {
                 deviceManager?.reloadDevices()
-                updateNotificationFromState()
+                updateNotificationFromState(force = true)
                 return START_STICKY
             }
             ACTION_REFRESH_NOTIFICATION -> {
-                updateNotificationFromState()
+                updateNotificationFromState(force = true)
                 return START_STICKY
             }
             ACTION_REQUEST_SPECTRUM -> {
@@ -344,7 +279,8 @@ class RadiaCodeForegroundService : Service() {
 
     override fun onDestroy() {
         stopInternal("Service destroyed")
-        stopBackgroundLocationTracking()
+        locationController?.releaseBackground(backgroundLocationToken)
+        backgroundLocationToken = null
         SoundManager.release()  // Release sound resources
         try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
         try { scheduler.shutdownNow() } catch (_: Throwable) {}
@@ -376,7 +312,7 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
         
-        updateNotificationFromState()
+        updateNotificationFromState(force = true)
     }
     
     private fun handleSpectrumRequest(requestedDeviceId: String?) {
@@ -451,11 +387,13 @@ class RadiaCodeForegroundService : Service() {
     }
     
     private fun handleDeviceReading(deviceId: String, uSvPerHour: Float, cps: Float, timestampMs: Long) {
-        // Play data tick sound (throttled internally)
-        SoundManager.play(this, Prefs.SoundType.DATA_TICK)
-        
-        // Get location snapshot FIRST (needed for broadcast and background work)
-        val locationSnap = currentLocation ?: getBestLastKnownLocation()?.also { currentLocation = it }
+        // Audio gating: don't keep audio pipeline hot while background/locked.
+        if (shouldPlayDataTick()) {
+            SoundManager.play(this, Prefs.SoundType.DATA_TICK)
+        }
+
+        // Hold-last-fix strategy: attach most recent location fix to each reading.
+        val locationSnap = locationController?.getLastLocation()
         
         // PRIORITY 1: Broadcast to UI immediately for responsive updates
         // This is the ONLY synchronous thing that happens on the BLE thread
@@ -481,7 +419,7 @@ class RadiaCodeForegroundService : Service() {
             try {
                 // Widget and notification updates (can involve bitmap rendering)
                 requestWidgetUpdate()
-                updateNotificationFromState()
+                updateNotificationFromState(force = false)
                 
                 val device = Prefs.getDeviceById(this, deviceId) ?: return@execute
                 
@@ -526,7 +464,7 @@ class RadiaCodeForegroundService : Service() {
 
     private fun requestWidgetUpdate() {
         val now = System.currentTimeMillis()
-        val minIntervalMs = 1_000L
+        val minIntervalMs = getWidgetMinIntervalMs()
         val elapsed = now - lastWidgetUpdateMs
 
         if (elapsed >= minIntervalMs) {
@@ -560,7 +498,7 @@ class RadiaCodeForegroundService : Service() {
         ChartWidgetProvider.updateAll(this)
     }
     
-    private fun updateNotificationFromState() {
+    private fun updateNotificationFromState(force: Boolean) {
         val manager = deviceManager ?: return
         val connectedCount = manager.getConnectedCount()
         val totalCount = manager.getTotalCount()
@@ -569,7 +507,7 @@ class RadiaCodeForegroundService : Service() {
         val style = Prefs.getNotificationStyle(this)
         
         if (totalCount == 0) {
-            notifyUpdate("Open RadiaCode", "No devices configured")
+            notifyUpdate("Open RadiaCode", "No devices configured", force = force, minIntervalMs = 0L)
             return
         }
         
@@ -587,15 +525,15 @@ class RadiaCodeForegroundService : Service() {
             when (style) {
                 Prefs.NotificationStyle.NONE,
                 Prefs.NotificationStyle.OFF -> {
-                    notifyUpdate("Open RadiaCode", "Service running")
+                    notifyUpdate("Open RadiaCode", "Service running", force = force, minIntervalMs = NOTIF_MIN_INTERVAL_DISCONNECTED_MS)
                 }
                 Prefs.NotificationStyle.STATUS_ONLY,
                 Prefs.NotificationStyle.READINGS,
                 Prefs.NotificationStyle.DETAILED -> {
                     if (connectingCount > 0) {
-                        notifyUpdate("Open RadiaCode", "Connecting to $connectingCount device(s)…")
+                        notifyUpdate("Open RadiaCode", "Connecting to $connectingCount device(s)…", force = force, minIntervalMs = NOTIF_MIN_INTERVAL_DISCONNECTED_MS)
                     } else {
-                        notifyUpdate("Open RadiaCode", "All devices disconnected")
+                        notifyUpdate("Open RadiaCode", "All devices disconnected", force = force, minIntervalMs = NOTIF_MIN_INTERVAL_DISCONNECTED_MS)
                     }
                 }
             }
@@ -606,7 +544,7 @@ class RadiaCodeForegroundService : Service() {
         when (style) {
             Prefs.NotificationStyle.NONE,
             Prefs.NotificationStyle.OFF -> {
-                notifyUpdate("Open RadiaCode", "Service running")
+                notifyUpdate("Open RadiaCode", "Service running", force = force, minIntervalMs = NOTIF_MIN_INTERVAL_CONNECTED_MS)
             }
             
             Prefs.NotificationStyle.STATUS_ONLY -> {
@@ -615,7 +553,7 @@ class RadiaCodeForegroundService : Service() {
                 } else {
                     "$connectedCount devices connected"
                 }
-                notifyUpdate("Open RadiaCode", text)
+                notifyUpdate("Open RadiaCode", text, force = force, minIntervalMs = NOTIF_MIN_INTERVAL_CONNECTED_MS)
             }
             
             Prefs.NotificationStyle.READINGS -> {
@@ -634,18 +572,19 @@ class RadiaCodeForegroundService : Service() {
                     "${readingTexts.take(2).joinToString(" • ")} +${readingTexts.size - 2} more"
                 }
                 
-                notifyUpdate(title, text.ifEmpty { "$connectedCount device(s) connected" })
+                notifyUpdate(title, text.ifEmpty { "$connectedCount device(s) connected" }, force = force, minIntervalMs = NOTIF_MIN_INTERVAL_CONNECTED_MS)
             }
             
             Prefs.NotificationStyle.DETAILED -> {
-                buildDetailedNotification(connectedCount, connectedStates)
+                buildDetailedNotification(connectedCount, connectedStates, force = force)
             }
         }
     }
     
     private fun buildDetailedNotification(
         connectedCount: Int,
-        connectedStates: List<DeviceState>
+        connectedStates: List<DeviceState>,
+        force: Boolean,
     ) {
         val showReadings = Prefs.isNotificationShowReadings(this)
         val showDeviceCount = Prefs.isNotificationShowDeviceCount(this)
@@ -727,7 +666,7 @@ class RadiaCodeForegroundService : Service() {
             parts.joinToString(" | ")
         }
         
-        notifyUpdate(title, text)
+        notifyUpdate(title, text, force = force, minIntervalMs = NOTIF_MIN_INTERVAL_CONNECTED_MS)
     }
 
     private fun ensureChannel() {
@@ -753,11 +692,23 @@ class RadiaCodeForegroundService : Service() {
         }
     }
 
-    private fun notifyUpdate(title: String, text: String) {
+    private fun notifyUpdate(title: String, text: String, force: Boolean, minIntervalMs: Long) {
         try {
+            val now = System.currentTimeMillis()
+
+            // De-dupe: if nothing meaningful changed, don't repost.
+            if (!force && title == lastNotifTitle && text == lastNotifText) return
+
+            // Rate-limit: reduce NotificationManagerService:post spam.
+            if (!force && now - lastNotifPostMs < minIntervalMs) return
+
             val nm = getSystemService(NotificationManager::class.java) ?: return
             Prefs.setServiceStatus(this, text)
             nm.notify(NOTIF_ID, buildNotification(title, text))
+
+            lastNotifTitle = title
+            lastNotifText = text
+            lastNotifPostMs = now
         } catch (t: Throwable) {
             Log.e(TAG, "notify failed", t)
         }
@@ -791,7 +742,26 @@ class RadiaCodeForegroundService : Service() {
         deviceManager?.stop()
         deviceManager = null
 
-        notifyUpdate("Open RadiaCode", reason)
+        notifyUpdate("Open RadiaCode", reason, force = true, minIntervalMs = 0L)
+    }
+
+    private fun shouldPlayDataTick(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val screenOn = pm?.isInteractive ?: true
+        val inForeground = Prefs.isAppInForeground(this)
+        return screenOn && inForeground
+    }
+
+    private fun getWidgetMinIntervalMs(): Long {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val screenOn = pm?.isInteractive ?: true
+        val inForeground = Prefs.isAppInForeground(this)
+
+        return when {
+            inForeground -> WIDGET_MIN_INTERVAL_FOREGROUND_MS
+            !screenOn -> WIDGET_MIN_INTERVAL_SCREEN_OFF_MS
+            else -> WIDGET_MIN_INTERVAL_BACKGROUND_MS
+        }
     }
 
     private fun appendReadingCsvIfNew(deviceId: String, deviceName: String, timestampMs: Long, uSvPerHour: Float, cps: Float) {

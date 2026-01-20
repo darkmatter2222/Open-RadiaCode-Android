@@ -18,6 +18,9 @@ object Prefs {
     private const val KEY_SERVICE_STATUS = "service_status"
     private const val KEY_SERVICE_STATUS_TS_MS = "service_status_ts_ms"
 
+    // Process/UI state (used for power optimizations)
+    private const val KEY_APP_IN_FOREGROUND = "app_in_foreground"
+
     private const val KEY_WINDOW_SECONDS = "window_seconds"
     private const val KEY_SMOOTH_SECONDS = "smooth_seconds"
     private const val KEY_PAUSE_LIVE = "pause_live"
@@ -1000,6 +1003,18 @@ object Prefs {
         val ts = prefs.getLong(KEY_SERVICE_STATUS_TS_MS, 0L)
         if (msg.isEmpty() || ts <= 0L) return null
         return ServiceStatus(message = msg, timestampMs = ts)
+    }
+
+    fun setAppInForeground(context: Context, inForeground: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_APP_IN_FOREGROUND, inForeground)
+            .apply()
+    }
+
+    fun isAppInForeground(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_APP_IN_FOREGROUND, false)
     }
 
     // Chart history (stored as compact CSV string for efficiency)

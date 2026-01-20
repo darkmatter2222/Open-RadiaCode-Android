@@ -8,8 +8,6 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -18,6 +16,7 @@ import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.radiacode.ble.location.LocationController
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.tilesource.XYTileSource
@@ -56,10 +55,20 @@ class FullscreenMapActivity : AppCompatActivity() {
     private lateinit var statsAreaCovered: TextView
     
     // Location
-    private var locationManager: LocationManager? = null
-    private var locationListener: LocationListener? = null
     private var currentLocation: Location? = null
     private var isTrackingLocation = false
+    private var locationController: LocationController? = null
+    private var interactiveToken: java.util.UUID? = null
+
+    private val locationListener = object : LocationController.Listener {
+        override fun onLocation(location: Location) {
+            currentLocation = location
+            if (isFollowingLocation && !isUserInteractingWithMap) {
+                mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+            }
+            mapView.invalidate()
+        }
+    }
 
     // Follow-mode: keep map centered after tapping recenter; disable when user drags.
     private var isFollowingLocation = false
@@ -433,53 +442,33 @@ class FullscreenMapActivity : AppCompatActivity() {
             != PackageManager.PERMISSION_GRANTED) {
             return
         }
-        
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        
-        locationListener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                currentLocation = location
-                if (isFollowingLocation && !isUserInteractingWithMap) {
-                    mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
-                }
-                mapView.invalidate()
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
+
+        locationController = LocationController.getInstance(this)
+        interactiveToken = locationController?.acquireInteractive()
+        locationController?.addListener(locationListener)
+
+        currentLocation = locationController?.getLastLocation()
+        currentLocation?.let {
+            mapView.controller.setCenter(GeoPoint(it.latitude, it.longitude))
         }
-        
-        try {
-            locationManager?.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                2000L,
-                5f,
-                locationListener!!
-            )
-            currentLocation = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            currentLocation?.let {
-                mapView.controller.setCenter(GeoPoint(it.latitude, it.longitude))
-            }
-            isTrackingLocation = true
-        } catch (e: SecurityException) {
-            // Permission denied
-        }
+        isTrackingLocation = true
     }
     
     private fun stopLocationTracking() {
-        locationListener?.let { listener ->
-            try {
-                locationManager?.removeUpdates(listener)
-            } catch (e: Exception) {}
-        }
-        locationListener = null
+        locationController?.removeListener(locationListener)
+        locationController?.releaseInteractive(interactiveToken)
+        interactiveToken = null
         isTrackingLocation = false
     }
     
     override fun onResume() {
         super.onResume()
         mapView.onResume()
+
+        Prefs.setAppInForeground(this, true)
+
+        // Only keep high-accuracy location while this activity is visible.
+        startLocationTracking()
 
         val filter = IntentFilter(RadiaCodeForegroundService.ACTION_READING)
         if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -503,10 +492,15 @@ class FullscreenMapActivity : AppCompatActivity() {
         super.onPause()
         mapView.onPause()
 
+        // Release interactive location when backgrounded.
+        stopLocationTracking()
+
         try {
             unregisterReceiver(readingPulseReceiver)
         } catch (_: Exception) {
         }
+
+        Prefs.setAppInForeground(this, false)
     }
     
     override fun onDestroy() {
