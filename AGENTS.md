@@ -29,16 +29,69 @@ When something fails:
 
 Note: “run indefinitely” means “do not stop early”; stop only when complete or genuinely blocked by a STOP condition.
 
+## MANDATORY: Unified Deploy Rule (NO EXCEPTIONS)
+
+**Phone deploy and Git push are ALWAYS done together. No exceptions.**
+
+Whenever you deploy to the phone, you MUST also commit and push to the repo.
+Whenever you commit/push to the repo, you MUST also deploy to the phone.
+
+### Full Deploy Command Sequence
+
+Run this COMPLETE sequence for every deploy:
+
+```powershell
+# 1. Build
+./gradlew assembleDebug
+
+# 2. Install to phone
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+# 3. Restart app (install does NOT restart automatically)
+adb shell am force-stop com.radiacode.ble
+adb shell monkey -p com.radiacode.ble -c android.intent.category.LAUNCHER 1
+
+# 4. Copy APK to Installer folder
+Copy-Item app/build/outputs/apk/debug/app-debug.apk -Destination "Installer/OpenRadiaCode-v$VERSION.apk"
+
+# 5. Commit all changes
+git add -A
+git commit -m "feat/fix: description of changes"
+
+# 6. Push to origin
+git push origin HEAD
+
+# 7. If user requested merge to main:
+git checkout main
+git pull origin main
+git merge <feature-branch> -m "Merge <feature-branch>: description"
+git push origin main
+```
+
+### Quick Reference (Copy-Paste Ready)
+
+For a typical deploy cycle on current branch:
+```powershell
+./gradlew assembleDebug; adb install -r app/build/outputs/apk/debug/app-debug.apk; adb shell am force-stop com.radiacode.ble; adb shell monkey -p com.radiacode.ble -c android.intent.category.LAUNCHER 1; git add -A; git commit -m "feat: description"; git push origin HEAD
+```
+
+For deploy + merge to main:
+```powershell
+./gradlew assembleDebug; adb install -r app/build/outputs/apk/debug/app-debug.apk; adb shell am force-stop com.radiacode.ble; adb shell monkey -p com.radiacode.ble -c android.intent.category.LAUNCHER 1; git add -A; git commit -m "feat: description"; git push origin HEAD; git checkout main; git pull origin main; git merge - -m "Merge: description"; git push origin main
+```
+
 ## Required Device Loop (This Repo)
 After every successful build, ALWAYS:
 1) `adb install -r` the new APK to the connected phone
 2) force-stop and relaunch the app (install does not restart it)
 3) check logs for errors/regressions (at minimum: `adb logcat -v time -s RadiaCode` and error-level logs)
+4) **commit and push to git** (MANDATORY - see Unified Deploy Rule above)
 
 ## Git Workflow (This Repo)
 - Work on a feature branch.
 - Make small, reviewable commits when milestones are stable.
 - Always push the feature branch to origin when the task is complete.
+- **Always deploy to phone when pushing** (MANDATORY - see Unified Deploy Rule above)
 - Never merge to `main` unless explicitly instructed.
 
 ## STOP Conditions (Only reasons to pause)
