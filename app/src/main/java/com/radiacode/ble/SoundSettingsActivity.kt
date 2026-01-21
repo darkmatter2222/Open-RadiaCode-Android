@@ -202,7 +202,9 @@ class SoundSettingsActivity : AppCompatActivity() {
             soundType = Prefs.SoundType.CONNECTED
         )
         testConnected.setOnClickListener {
-            soundManager?.play(Prefs.SoundType.CONNECTED, forcePlay = true)
+            if (switchConnected.isChecked) {
+                soundManager?.play(Prefs.SoundType.CONNECTED)
+            }
         }
         
         // Disconnected
@@ -214,7 +216,9 @@ class SoundSettingsActivity : AppCompatActivity() {
             soundType = Prefs.SoundType.DISCONNECTED
         )
         testDisconnected.setOnClickListener {
-            soundManager?.play(Prefs.SoundType.DISCONNECTED, forcePlay = true)
+            if (switchDisconnected.isChecked) {
+                soundManager?.play(Prefs.SoundType.DISCONNECTED)
+            }
         }
         
         // Alarm
@@ -226,7 +230,9 @@ class SoundSettingsActivity : AppCompatActivity() {
             soundType = Prefs.SoundType.ALARM
         )
         testAlarm.setOnClickListener {
-            soundManager?.play(Prefs.SoundType.ALARM, forcePlay = true)
+            if (switchAlarm.isChecked) {
+                soundManager?.play(Prefs.SoundType.ALARM)
+            }
         }
         
         // Anomaly
@@ -238,7 +244,9 @@ class SoundSettingsActivity : AppCompatActivity() {
             soundType = Prefs.SoundType.ANOMALY
         )
         testAnomaly.setOnClickListener {
-            soundManager?.play(Prefs.SoundType.ANOMALY, forcePlay = true)
+            if (switchAnomaly.isChecked) {
+                soundManager?.play(Prefs.SoundType.ANOMALY)
+            }
         }
         
         // Ambient (special handling - toggle ambient playback)
