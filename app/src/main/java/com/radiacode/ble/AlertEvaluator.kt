@@ -158,11 +158,9 @@ class AlertEvaluator(private val context: Context) {
         val now = System.currentTimeMillis()
         Log.d(TAG, "Firing alert: ${alert.name}")
         
-        // Play alert sound
-        SoundManager.play(context, Prefs.SoundType.ALARM)
-        
-        // Speak alert using VEGA TTS if enabled
+        // Speak alert using VEGA TTS FIRST (starts async, runs parallel with notification)
         if (alert.voiceEnabled && Prefs.isVegaTtsEnabled(context)) {
+            Log.d(TAG, "VegaTTS: Initiating voice alert NOW")
             val currentValue = if (alert.metric == "dose") currentDose.toDouble() else currentCps.toDouble()
             val announcement = VegaTTS.generateAlertAnnouncement(
                 alertName = alert.name,
@@ -173,8 +171,12 @@ class AlertEvaluator(private val context: Context) {
                 severity = alert.severity,
                 durationSeconds = alert.durationSeconds
             )
+            Log.d(TAG, "VegaTTS: Announcement text: $announcement")
             VegaTTS.speak(context, announcement)
         }
+        
+        // Play alert sound
+        SoundManager.play(context, Prefs.SoundType.ALARM)
 
         // Record the alert event for chart visualization
         // durationWindowStartMs = when the condition first became true

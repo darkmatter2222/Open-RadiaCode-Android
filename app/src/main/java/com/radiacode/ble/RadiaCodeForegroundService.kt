@@ -417,8 +417,21 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
         
-        // PRIORITY 2: Move EVERYTHING else to background thread
-        // This includes: widget updates, notification, CSV, map points, alerts
+        // PRIORITY 2: Evaluate alerts IMMEDIATELY - this is time-critical!
+        // Don't queue behind slow operations. Runs on calling thread but is fast (just math).
+        val now = System.currentTimeMillis()
+        if (now - lastAlertEvalMs > 1_000L) {  // Check every second for faster response
+            lastAlertEvalMs = now
+            try {
+                val recentReadings = Prefs.getRecentReadings(this)
+                alertEvaluator.evaluate(uSvPerHour, cps, recentReadings)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Alert evaluation failed", t)
+            }
+        }
+        
+        // PRIORITY 3: Move heavy work to background thread
+        // This includes: widget updates, notification, CSV, map points
         executor.execute {
             try {
                 // Widget and notification updates (can involve bitmap rendering)
@@ -436,28 +449,16 @@ class RadiaCodeForegroundService : Service() {
                     Prefs.addMapDataPoint(this, locationSnap.latitude, locationSnap.longitude, uSvPerHour, cps)
 
                     // Rate-limited logging
-                    val now = System.currentTimeMillis()
-                    if (now - lastMapSaveLogMs > 5_000L) {
-                        lastMapSaveLogMs = now
+                    val logNow = System.currentTimeMillis()
+                    if (logNow - lastMapSaveLogMs > 5_000L) {
+                        lastMapSaveLogMs = logNow
                         Log.d(TAG, "MapPoint saved: dev=$deviceId dose=$uSvPerHour cps=$cps loc=${locationSnap.latitude},${locationSnap.longitude}")
                     }
                 } else {
-                    val now = System.currentTimeMillis()
-                    if (now - lastNoLocationLogMs > 5_000L) {
-                        lastNoLocationLogMs = now
+                    val logNow = System.currentTimeMillis()
+                    if (logNow - lastNoLocationLogMs > 5_000L) {
+                        lastNoLocationLogMs = logNow
                         Log.w(TAG, "MapPoint skipped: no location (dev=$deviceId dose=$uSvPerHour cps=$cps)")
-                    }
-                }
-                
-                // Evaluate smart alerts (parses Prefs data)
-                val now = System.currentTimeMillis()
-                if (now - lastAlertEvalMs > 2_000L) {
-                    lastAlertEvalMs = now
-                    try {
-                        val recentReadings = Prefs.getRecentReadings(this)
-                        alertEvaluator.evaluate(uSvPerHour, cps, recentReadings)
-                    } catch (t: Throwable) {
-                        Log.e(TAG, "Alert evaluation failed", t)
                     }
                 }
             } catch (t: Throwable) {

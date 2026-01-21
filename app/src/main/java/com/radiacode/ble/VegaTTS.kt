@@ -31,7 +31,7 @@ object VegaTTS {
     
     // API Configuration - can be updated via Prefs later
     private const val DEFAULT_API_URL = "http://99.122.58.29:443"
-    private const val TIMEOUT_MS = 120_000 // Model can take a while for long text
+    private const val TIMEOUT_MS = 30_000 // 30 seconds max
     
     private var executor: ExecutorService? = null
     private var mediaPlayer: MediaPlayer? = null
@@ -108,10 +108,12 @@ object VegaTTS {
         }
         
         isSpeaking.set(true)
+        Log.d(TAG, "VegaTTS: Starting synthesis NOW for: $text")
         
         exec.execute {
             try {
-                Log.d(TAG, "Synthesizing: $text")
+                val startTime = System.currentTimeMillis()
+                Log.d(TAG, "VegaTTS: API call starting")
                 
                 val apiUrl = Prefs.getVegaTtsApiUrl(context)
                 val url = URL("$apiUrl/synthesize")
@@ -140,7 +142,8 @@ object VegaTTS {
                 
                 // Read audio data
                 val audioData = connection.inputStream.use { it.readBytes() }
-                Log.d(TAG, "Received ${audioData.size} bytes of audio")
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d(TAG, "VegaTTS: Received ${audioData.size} bytes in ${elapsed}ms")
                 
                 // Save to temp file and play
                 val tempFile = File.createTempFile("vega_tts_", ".wav", context.cacheDir)
@@ -228,9 +231,10 @@ object VegaTTS {
     // ========== VEGA-Style Message Generators ==========
     
     /**
-     * Generate VEGA-style alert announcement for a triggered alert.
+     * Generate VEGA-style alert announcement.
      * 
-     * VEGA speaks in a calm, authoritative manner with precise technical data.
+     * VEGA speaks in a calm, analytical manner.
+     * Measured. Informative. Never panicked.
      */
     fun generateAlertAnnouncement(
         alertName: String,
@@ -241,61 +245,21 @@ object VegaTTS {
         severity: String,
         durationSeconds: Int
     ): String {
-        val metricName = if (metric == "dose") "dose rate" else "count rate"
+        val value = if (metric == "dose") {
+            String.format("%.2f", currentValue)
+        } else {
+            String.format("%.0f", currentValue)
+        }
         val unit = if (metric == "dose") "microsieverts per hour" else "counts per second"
         
-        val formattedCurrent = if (metric == "dose") {
-            String.format("%.3f", currentValue)
-        } else {
-            String.format("%.1f", currentValue)
-        }
-        
-        val formattedThreshold = if (metric == "dose") {
-            String.format("%.3f", threshold)
-        } else {
-            String.format("%.1f", threshold)
-        }
-        
-        val severityPhrase = when (severity.lowercase()) {
-            "info" -> "Advisory"
-            "low" -> "Low priority"
-            "medium" -> "Elevated"
-            "high" -> "Critical"
-            "critical" -> "Severe"
-            "emergency" -> "Emergency"
-            else -> "Alert"
-        }
-        
-        val conditionPhrase = when (condition) {
-            "above" -> "has exceeded the threshold of $formattedThreshold $unit"
-            "below" -> "has dropped below the threshold of $formattedThreshold $unit"
-            "outside_sigma" -> "is outside normal statistical parameters"
-            else -> "has triggered"
-        }
-        
-        // VEGA-style messages - calm, technical, precise
+        // VEGA style: Calm. Analytical. Measured.
         return when (severity.lowercase()) {
-            "emergency", "critical" -> {
-                "$severityPhrase alert. $alertName. " +
-                "Current $metricName: $formattedCurrent $unit. " +
-                "Reading $conditionPhrase. " +
-                "Condition sustained for $durationSeconds seconds. " +
-                "Recommend immediate assessment."
-            }
-            "high" -> {
-                "$severityPhrase condition detected. $alertName. " +
-                "The $metricName of $formattedCurrent $unit $conditionPhrase. " +
-                "Duration: $durationSeconds seconds."
-            }
-            "medium" -> {
-                "$severityPhrase reading. $alertName triggered. " +
-                "Current $metricName: $formattedCurrent $unit. " +
-                "Threshold $conditionPhrase for $durationSeconds seconds."
-            }
-            else -> {
-                "$severityPhrase. $alertName. " +
-                "$metricName $conditionPhrase at $formattedCurrent $unit."
-            }
+            "emergency" -> "Emergency. Radiation levels require immediate attention. Current reading: $value $unit."
+            "critical" -> "Critical alert. Radiation levels exceed safe thresholds. Current reading: $value $unit. Limiting exposure is advised."
+            "high" -> "Warning. Radiation levels are significantly elevated. Current reading: $value $unit. Proceed with caution."
+            "medium" -> "Advisory. Radiation levels have increased above baseline. Current reading: $value $unit."
+            "low" -> "Notice. A change in radiation levels has been detected. Current reading: $value $unit."
+            else -> "Update. Current radiation reading: $value $unit."
         }
     }
     
@@ -308,32 +272,18 @@ object VegaTTS {
         zScore: Double,
         metric: String
     ): String {
-        val metricName = if (metric == "dose") "dose rate" else "count rate"
-        val unit = if (metric == "dose") "microsieverts per hour" else "counts per second"
-        val formattedValue = if (metric == "dose") {
-            String.format("%.3f", currentValue)
+        val unit = if (metric == "dose") "microsieverts" else "counts"
+        val value = if (metric == "dose") {
+            String.format("%.2f", currentValue)
         } else {
-            String.format("%.1f", currentValue)
+            String.format("%.0f", currentValue)
         }
-        val formattedZ = String.format("%.1f", kotlin.math.abs(zScore))
+        val sigma = String.format("%.1f", kotlin.math.abs(zScore))
         
         return when (anomalyType.lowercase()) {
-            "spike", "dose_spike", "cps_spike" -> {
-                "Statistical anomaly detected. " +
-                "Current $metricName of $formattedValue $unit " +
-                "represents a $formattedZ sigma deviation from the baseline. " +
-                "Investigating potential radiation source."
-            }
-            "drop", "sudden_drop" -> {
-                "Anomaly detected. Sudden decrease in $metricName. " +
-                "Current reading: $formattedValue $unit. " +
-                "This represents a $formattedZ sigma deviation below normal."
-            }
-            else -> {
-                "Anomaly in $metricName detected. " +
-                "Current reading: $formattedValue $unit. " +
-                "Deviation: $formattedZ standard deviations."
-            }
+            "spike", "dose_spike", "cps_spike" -> "Anomaly. Spike detected. $value $unit. $sigma sigma."
+            "drop", "sudden_drop" -> "Anomaly. Drop detected. $value $unit."
+            else -> "Anomaly. $value $unit. $sigma sigma deviation."
         }
     }
     
@@ -346,12 +296,10 @@ object VegaTTS {
         currentDose: Double? = null
     ): String {
         return if (connected) {
-            val dosePart = currentDose?.let {
-                " Current dose rate: ${String.format("%.3f", it)} microsieverts per hour."
-            } ?: ""
-            "Connection established${deviceName?.let { " with $it" } ?: ""}.$dosePart All systems nominal."
+            currentDose?.let { "Online. ${String.format("%.2f", it)} microsieverts." }
+                ?: "Online. Systems nominal."
         } else {
-            "Device connection lost${deviceName?.let { " with $it" } ?: ""}. Attempting reconnection."
+            "Connection lost. Reconnecting."
         }
     }
 }
