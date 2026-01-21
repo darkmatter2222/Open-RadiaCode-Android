@@ -90,6 +90,13 @@ object Prefs {
     private const val KEY_SOUND_VOLUME_ALARM = "sound_volume_alarm"
     private const val KEY_SOUND_VOLUME_ANOMALY = "sound_volume_anomaly"
     private const val KEY_SOUND_VOLUME_AMBIENT = "sound_volume_ambient"
+    
+    // VegaTTS Settings keys
+    private const val KEY_VEGA_TTS_ENABLED = "vega_tts_enabled"
+    private const val KEY_VEGA_TTS_API_URL = "vega_tts_api_url"
+    private const val KEY_VEGA_TTS_COOLDOWN_MS = "vega_tts_cooldown_ms"
+    private const val DEFAULT_VEGA_TTS_API_URL = "http://99.122.58.29:443"
+    private const val DEFAULT_VEGA_TTS_COOLDOWN_MS = 30000L  // 30 seconds between voice alerts
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -652,6 +659,7 @@ object Prefs {
      * @param lastTriggeredMs Last time this alert fired
      * @param color Alert color: cyan, green, amber, orange, red, magenta
      * @param severity Alert severity: info, low, medium, high, critical, emergency
+     * @param voiceEnabled Whether to use VEGA TTS to announce this alert
      */
     data class SmartAlert(
         val id: String,
@@ -666,10 +674,11 @@ object Prefs {
         val cooldownMs: Long = 60000L,  // milliseconds
         val lastTriggeredMs: Long = 0L,
         val color: String = "amber",  // cyan, green, amber, orange, red, magenta
-        val severity: String = "medium"  // info, low, medium, high, critical, emergency
+        val severity: String = "medium",  // info, low, medium, high, critical, emergency
+        val voiceEnabled: Boolean = true  // Whether to speak this alert using VEGA TTS
     ) {
         fun toJson(): String {
-            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"thresholdUnit":"$thresholdUnit","sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs,"color":"$color","severity":"$severity"}"""
+            return """{"id":"$id","name":"$name","enabled":$enabled,"metric":"$metric","condition":"$condition","threshold":$threshold,"thresholdUnit":"$thresholdUnit","sigma":$sigma,"durationSeconds":$durationSeconds,"cooldownMs":$cooldownMs,"lastTriggeredMs":$lastTriggeredMs,"color":"$color","severity":"$severity","voiceEnabled":$voiceEnabled}"""
         }
         
         /** Get the AlertSeverity enum for this alert */
@@ -703,7 +712,8 @@ object Prefs {
                     val lastTriggeredMs = json.substringAfter("\"lastTriggeredMs\":").substringBefore(",").substringBefore("}").toLong()
                     val color = json.substringAfter("\"color\":\"").substringBefore("\"").ifEmpty { "amber" }
                     val severity = json.substringAfter("\"severity\":\"").substringBefore("\"").ifEmpty { "medium" }
-                    SmartAlert(id, name, enabled, metric, condition, threshold, thresholdUnit, sigma, durationSeconds, cooldownMs, lastTriggeredMs, color, severity)
+                    val voiceEnabled = json.substringAfter("\"voiceEnabled\":").substringBefore(",").substringBefore("}").toBooleanStrictOrNull() ?: true
+                    SmartAlert(id, name, enabled, metric, condition, threshold, thresholdUnit, sigma, durationSeconds, cooldownMs, lastTriggeredMs, color, severity, voiceEnabled)
                 } catch (e: Exception) {
                     null
                 }
@@ -2227,5 +2237,65 @@ object Prefs {
         if (isSoundEnabled(context, SoundType.ANOMALY)) enabled.add("Anomaly")
         if (isSoundEnabled(context, SoundType.AMBIENT)) enabled.add("Ambient")
         return if (enabled.isEmpty()) "All off" else "${enabled.size} enabled"
+    }
+    
+    // ========== VEGA TTS Settings ==========
+    
+    /**
+     * Check if VEGA TTS voice announcements are globally enabled.
+     * When enabled, alerts with voiceEnabled=true will be spoken aloud.
+     */
+    fun isVegaTtsEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_VEGA_TTS_ENABLED, false)  // Disabled by default
+    }
+    
+    fun setVegaTtsEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_VEGA_TTS_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the VEGA TTS API URL.
+     */
+    fun getVegaTtsApiUrl(context: Context): String {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_VEGA_TTS_API_URL, DEFAULT_VEGA_TTS_API_URL) ?: DEFAULT_VEGA_TTS_API_URL
+    }
+    
+    fun setVegaTtsApiUrl(context: Context, url: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_VEGA_TTS_API_URL, url)
+            .apply()
+    }
+    
+    /**
+     * Get the minimum cooldown between VEGA TTS announcements.
+     * This prevents rapid-fire voice alerts from overlapping or being annoying.
+     */
+    fun getVegaTtsCooldownMs(context: Context): Long {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getLong(KEY_VEGA_TTS_COOLDOWN_MS, DEFAULT_VEGA_TTS_COOLDOWN_MS)
+    }
+    
+    fun setVegaTtsCooldownMs(context: Context, cooldownMs: Long) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_VEGA_TTS_COOLDOWN_MS, cooldownMs)
+            .apply()
+    }
+    
+    /**
+     * Get a summary of VEGA TTS settings for UI display.
+     */
+    fun getVegaTtsSummary(context: Context): String {
+        return if (isVegaTtsEnabled(context)) {
+            "VEGA voice enabled"
+        } else {
+            "Voice off"
+        }
     }
 }

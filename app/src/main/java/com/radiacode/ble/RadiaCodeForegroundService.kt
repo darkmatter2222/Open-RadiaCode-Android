@@ -170,6 +170,9 @@ class RadiaCodeForegroundService : Service() {
         // Initialize sound manager
         SoundManager.init(this)
         
+        // Initialize VEGA TTS
+        VegaTTS.init(this)
+        
         // Initialize multi-device manager
         deviceManager = MultiDeviceBleManager(
             context = applicationContext,
@@ -282,6 +285,7 @@ class RadiaCodeForegroundService : Service() {
         locationController?.releaseBackground(backgroundLocationToken)
         backgroundLocationToken = null
         SoundManager.release()  // Release sound resources
+        VegaTTS.release()  // Release VEGA TTS resources
         try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
         try { scheduler.shutdownNow() } catch (_: Throwable) {}
         try { executor.shutdownNow() } catch (_: Throwable) {}

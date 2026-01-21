@@ -163,6 +163,7 @@ class AlertConfigActivity : AppCompatActivity() {
         val cooldownInput = dialogView.findViewById<TextInputEditText>(R.id.inputCooldown)
         val colorSpinner = dialogView.findViewById<Spinner>(R.id.spinnerColor)
         val severitySpinner = dialogView.findViewById<Spinner>(R.id.spinnerSeverity)
+        val voiceSwitch = dialogView.findViewById<SwitchMaterial>(R.id.switchVoiceEnabled)
 
         // Setup metric spinner
         val metrics = listOf("Dose Rate" to "dose", "Count Rate" to "count")
@@ -264,12 +265,14 @@ class AlertConfigActivity : AppCompatActivity() {
             cooldownInput.setText((existing.cooldownMs / 1000).toString())
             colorSpinner.setSelection(colors.indexOfFirst { it.second == existing.color }.coerceAtLeast(0))
             severitySpinner.setSelection(severities.indexOfFirst { it.second == existing.severity }.coerceAtLeast(0))
+            voiceSwitch.isChecked = existing.voiceEnabled
         } else {
             // Defaults
             durationInput.setText("5")
             cooldownInput.setText("60")
             colorSpinner.setSelection(2)  // Amber (index 2)
             severitySpinner.setSelection(2)  // Medium (index 2)
+            voiceSwitch.isChecked = true  // Voice enabled by default for new alerts
         }
 
         val dialog = AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
@@ -311,6 +314,7 @@ class AlertConfigActivity : AppCompatActivity() {
                 val cooldown = (cooldownInput.text?.toString()?.toIntOrNull() ?: 60) * 1000L
                 val color = colors[colorSpinner.selectedItemPosition].second
                 val severity = severities[severitySpinner.selectedItemPosition].second
+                val voiceEnabled = voiceSwitch.isChecked
 
                 val alert = Prefs.SmartAlert(
                     id = existing?.id ?: UUID.randomUUID().toString(),
@@ -325,7 +329,8 @@ class AlertConfigActivity : AppCompatActivity() {
                     cooldownMs = cooldown,
                     lastTriggeredMs = existing?.lastTriggeredMs ?: 0L,
                     color = color,
-                    severity = severity
+                    severity = severity,
+                    voiceEnabled = voiceEnabled
                 )
 
                 if (isEdit) {
@@ -429,7 +434,8 @@ class AlertConfigActivity : AppCompatActivity() {
                 "outside_sigma" -> "outside ${alert.sigma.toInt()}σ"
                 else -> alert.condition
             }
-            return "${severityEnum.icon} $metricLabel $conditionLabel for ${alert.durationSeconds}s"
+            val voiceIcon = if (alert.voiceEnabled) " 🔊" else ""
+            return "${severityEnum.icon} $metricLabel $conditionLabel for ${alert.durationSeconds}s$voiceIcon"
         }
     }
 

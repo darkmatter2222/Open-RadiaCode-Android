@@ -160,6 +160,21 @@ class AlertEvaluator(private val context: Context) {
         
         // Play alert sound
         SoundManager.play(context, Prefs.SoundType.ALARM)
+        
+        // Speak alert using VEGA TTS if enabled
+        if (alert.voiceEnabled && Prefs.isVegaTtsEnabled(context)) {
+            val currentValue = if (alert.metric == "dose") currentDose.toDouble() else currentCps.toDouble()
+            val announcement = VegaTTS.generateAlertAnnouncement(
+                alertName = alert.name,
+                metric = alert.metric,
+                currentValue = currentValue,
+                threshold = alert.threshold,
+                condition = alert.condition,
+                severity = alert.severity,
+                durationSeconds = alert.durationSeconds
+            )
+            VegaTTS.speak(context, announcement)
+        }
 
         // Record the alert event for chart visualization
         // durationWindowStartMs = when the condition first became true

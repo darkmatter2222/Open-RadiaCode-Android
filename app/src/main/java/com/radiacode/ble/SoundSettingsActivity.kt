@@ -5,8 +5,10 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 
 /**
@@ -61,6 +63,11 @@ class SoundSettingsActivity : AppCompatActivity() {
     private lateinit var sliderAmbient: SeekBar
     private lateinit var volumeAmbient: TextView
     private lateinit var sliderContainerAmbient: LinearLayout
+    
+    // VEGA TTS
+    private lateinit var switchVegaTts: SwitchMaterial
+    private lateinit var vegaSettingsContainer: LinearLayout
+    private lateinit var testVegaTts: MaterialButton
     
     // Test buttons
     private lateinit var testDataTick: View
@@ -132,6 +139,11 @@ class SoundSettingsActivity : AppCompatActivity() {
         sliderAmbient = findViewById(R.id.sliderAmbient)
         volumeAmbient = findViewById(R.id.volumeAmbient)
         sliderContainerAmbient = findViewById(R.id.sliderContainerAmbient)
+        
+        // VEGA TTS
+        switchVegaTts = findViewById(R.id.switchVegaTts)
+        vegaSettingsContainer = findViewById(R.id.vegaSettingsContainer)
+        testVegaTts = findViewById(R.id.testVegaTts)
     }
 
     private fun setupToolbar() {
@@ -177,6 +189,10 @@ class SoundSettingsActivity : AppCompatActivity() {
         sliderAmbient.progress = (Prefs.getSoundVolume(this, Prefs.SoundType.AMBIENT) * 100).toInt()
         volumeAmbient.text = "${sliderAmbient.progress}%"
         sliderContainerAmbient.visibility = if (switchAmbient.isChecked) View.VISIBLE else View.GONE
+        
+        // VEGA TTS
+        switchVegaTts.isChecked = Prefs.isVegaTtsEnabled(this)
+        vegaSettingsContainer.visibility = if (switchVegaTts.isChecked) View.VISIBLE else View.GONE
     }
 
     private fun setupListeners() {
@@ -273,6 +289,31 @@ class SoundSettingsActivity : AppCompatActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+        
+        // VEGA TTS
+        switchVegaTts.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setVegaTtsEnabled(this, isChecked)
+            vegaSettingsContainer.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+        
+        testVegaTts.setOnClickListener {
+            // Test VEGA TTS with a sample announcement
+            Toast.makeText(this, "Connecting to VEGA...", Toast.LENGTH_SHORT).show()
+            VegaTTS.speak(
+                context = this,
+                text = "VEGA online. Radiation monitoring systems nominal. Standing by for alert conditions.",
+                onComplete = {
+                    runOnUiThread {
+                        Toast.makeText(this, "VEGA test complete", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onError = { error ->
+                    runOnUiThread {
+                        Toast.makeText(this, "VEGA error: $error", Toast.LENGTH_LONG).show()
+                    }
+                }
+            )
+        }
     }
     
     private fun setupSoundTypeListeners(
