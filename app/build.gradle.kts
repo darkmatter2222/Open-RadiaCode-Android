@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 85
-        versionName = "1.00"
+        versionName = "1.01"
     }
 
     // The repo’s audio files live in app/audio/. Copy any provided sound assets into res/raw

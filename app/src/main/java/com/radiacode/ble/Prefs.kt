@@ -98,6 +98,16 @@ object Prefs {
     private const val KEY_VEGA_TTS_COOLDOWN_MS = "vega_tts_cooldown_ms"
     private const val DEFAULT_VEGA_TTS_API_URL = "http://99.122.58.29:443"
     private const val DEFAULT_VEGA_TTS_COOLDOWN_MS = 30000L  // 30 seconds between voice alerts
+    
+    // Statistical Intelligence (VEGA) Settings keys
+    private const val KEY_STATISTICAL_ZSCORE_ENABLED = "statistical_zscore_enabled"
+    private const val KEY_STATISTICAL_ZSCORE_SIGMA = "statistical_zscore_sigma"
+    private const val KEY_STATISTICAL_ROC_ENABLED = "statistical_roc_enabled"
+    private const val KEY_STATISTICAL_ROC_THRESHOLD = "statistical_roc_threshold"
+    private const val KEY_STATISTICAL_CUSUM_ENABLED = "statistical_cusum_enabled"
+    private const val KEY_STATISTICAL_FORECAST_ENABLED = "statistical_forecast_enabled"
+    private const val KEY_STATISTICAL_FORECAST_THRESHOLD = "statistical_forecast_threshold"
+    private const val KEY_STATISTICAL_VOICE_ENABLED = "statistical_voice_enabled"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -2321,5 +2331,148 @@ object Prefs {
         } else {
             "Voice off"
         }
+    }
+    
+    // ========== Statistical Intelligence (VEGA) Settings ==========
+    
+    /**
+     * Check if Z-score anomaly detection is enabled.
+     * When enabled, alerts will trigger when readings deviate significantly from baseline.
+     */
+    fun isStatisticalZScoreEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_ZSCORE_ENABLED, true)  // Enabled by default
+    }
+    
+    fun setStatisticalZScoreEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_ZSCORE_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the sigma threshold for Z-score alerts (1, 2, or 3).
+     * Default is 2σ (95% confidence).
+     */
+    fun getStatisticalZScoreSigma(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_STATISTICAL_ZSCORE_SIGMA, 2)
+    }
+    
+    fun setStatisticalZScoreSigma(context: Context, sigma: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_STATISTICAL_ZSCORE_SIGMA, sigma.coerceIn(1, 4))
+            .apply()
+    }
+    
+    /**
+     * Check if rate-of-change detection is enabled.
+     * Detects rapid increases/decreases that may indicate approaching a source.
+     */
+    fun isStatisticalRocEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_ROC_ENABLED, true)  // Enabled by default
+    }
+    
+    fun setStatisticalRocEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_ROC_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the rate-of-change threshold in percent per second.
+     * Default is 5%/s - triggers when readings change by more than 5% per second.
+     */
+    fun getStatisticalRocThreshold(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_STATISTICAL_ROC_THRESHOLD, 5f)
+    }
+    
+    fun setStatisticalRocThreshold(context: Context, threshold: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_STATISTICAL_ROC_THRESHOLD, threshold.coerceIn(1f, 50f))
+            .apply()
+    }
+    
+    /**
+     * Check if CUSUM change-point detection is enabled.
+     * Detects subtle but persistent shifts that static thresholds miss.
+     */
+    fun isStatisticalCusumEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_CUSUM_ENABLED, true)  // Enabled by default
+    }
+    
+    fun setStatisticalCusumEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_CUSUM_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Check if forecast-based alerting is enabled.
+     * Alerts when predicted future readings will exceed a threshold.
+     */
+    fun isStatisticalForecastEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_FORECAST_ENABLED, false)  // Disabled by default (requires threshold)
+    }
+    
+    fun setStatisticalForecastEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_FORECAST_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the forecast threshold in µSv/h.
+     * When forecast-based alerting is enabled, alerts will trigger when predicted
+     * dose rate exceeds this value within 60 seconds.
+     */
+    fun getStatisticalForecastThreshold(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_STATISTICAL_FORECAST_THRESHOLD, 0.5f)  // Default 0.5 µSv/h
+    }
+    
+    fun setStatisticalForecastThreshold(context: Context, threshold: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_STATISTICAL_FORECAST_THRESHOLD, threshold.coerceAtLeast(0f))
+            .apply()
+    }
+    
+    /**
+     * Check if voice announcements for statistical alerts are enabled.
+     * Separate from individual alert voice settings - this is global for statistical intelligence.
+     */
+    fun isStatisticalVoiceEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_VOICE_ENABLED, true)  // Enabled by default (if VEGA TTS is enabled)
+    }
+    
+    fun setStatisticalVoiceEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_VOICE_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get a summary of statistical intelligence settings for UI display.
+     */
+    fun getStatisticalIntelligenceSummary(context: Context): String {
+        val enabled = mutableListOf<String>()
+        if (isStatisticalZScoreEnabled(context)) enabled.add("Z-Score")
+        if (isStatisticalRocEnabled(context)) enabled.add("ROC")
+        if (isStatisticalCusumEnabled(context)) enabled.add("CUSUM")
+        if (isStatisticalForecastEnabled(context)) enabled.add("Forecast")
+        return if (enabled.isEmpty()) "All off" else enabled.joinToString(", ")
     }
 }

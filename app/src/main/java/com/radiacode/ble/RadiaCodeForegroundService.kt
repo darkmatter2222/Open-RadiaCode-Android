@@ -46,6 +46,7 @@ class RadiaCodeForegroundService : Service() {
         const val ACTION_READING = "com.radiacode.ble.action.READING"
         const val ACTION_DEVICE_STATE_CHANGED = "com.radiacode.ble.action.DEVICE_STATE"
         const val ACTION_SPECTRUM_DATA = "com.radiacode.ble.action.SPECTRUM_DATA"
+        const val ACTION_STATISTICAL_UPDATE = "com.radiacode.ble.action.STATISTICAL_UPDATE"
         const val EXTRA_TS_MS = "ts_ms"
         const val EXTRA_USV_H = "usv_h"
         const val EXTRA_CPS = "cps"
@@ -58,6 +59,20 @@ class RadiaCodeForegroundService : Service() {
         const val EXTRA_IS_REALTIME = "is_realtime"  // true for differential spectrum, false for scan
         const val EXTRA_LATITUDE = "latitude"
         const val EXTRA_LONGITUDE = "longitude"
+        
+        // Statistical intelligence (VEGA) extras
+        const val EXTRA_DOSE_ZSCORE = "dose_zscore"
+        const val EXTRA_DOSE_SIGMA_LEVEL = "dose_sigma_level"
+        const val EXTRA_DOSE_ROC = "dose_roc"
+        const val EXTRA_DOSE_ROC_PERCENT = "dose_roc_percent"
+        const val EXTRA_DOSE_TREND = "dose_trend"
+        const val EXTRA_DOSE_FORECAST_30S = "dose_forecast_30s"
+        const val EXTRA_DOSE_FORECAST_60S = "dose_forecast_60s"
+        const val EXTRA_DOSE_BASELINE_MEAN = "dose_baseline_mean"
+        const val EXTRA_DOSE_BASELINE_STDDEV = "dose_baseline_stddev"
+        const val EXTRA_CUSUM_CHANGE = "cusum_change"
+        const val EXTRA_CPS_ZSCORE = "cps_zscore"
+        const val EXTRA_CPS_SIGMA_LEVEL = "cps_sigma_level"
 
         private const val NOTIF_MIN_INTERVAL_CONNECTED_MS = 10_000L
         private const val NOTIF_MIN_INTERVAL_DISCONNECTED_MS = 2_000L
@@ -132,6 +147,9 @@ class RadiaCodeForegroundService : Service() {
     // Alert evaluation
     private lateinit var alertEvaluator: AlertEvaluator
     
+    // Statistical intelligence engine (VEGA)
+    private lateinit var statisticalEngine: StatisticalEngine
+    
     // Track last CSV timestamp per device
     private val lastCsvTimestamps = mutableMapOf<String, Long>()
     
@@ -166,6 +184,9 @@ class RadiaCodeForegroundService : Service() {
         super.onCreate()
         ensureChannel()
         alertEvaluator = AlertEvaluator(this)
+        
+        // Initialize statistical intelligence engine
+        statisticalEngine = StatisticalEngine.getInstance(this)
         
         // Initialize sound manager
         SoundManager.init(this)
@@ -450,14 +471,50 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
         
-        // PRIORITY 2: Evaluate alerts IMMEDIATELY - this is time-critical!
+        // PRIORITY 2: Statistical analysis - feed data to VEGA engine
+        // This is fast (just math) and runs on the calling thread
+        val (doseSnapshot, cpsSnapshot) = try {
+            statisticalEngine.addReading(uSvPerHour, cps, timestampMs)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Statistical analysis failed", t)
+            Pair(null, null)
+        }
+        
+        // Broadcast statistical snapshot for UI (z-score, forecast, etc.)
+        if (doseSnapshot != null && cpsSnapshot != null) {
+            try {
+                val statsIntent = Intent(ACTION_STATISTICAL_UPDATE)
+                    .setPackage(packageName)
+                    .putExtra(EXTRA_DOSE_ZSCORE, doseSnapshot.zScore.zScore)
+                    .putExtra(EXTRA_DOSE_SIGMA_LEVEL, doseSnapshot.zScore.sigmaLevel)
+                    .putExtra(EXTRA_DOSE_ROC, doseSnapshot.rateOfChange.ratePerSecond)
+                    .putExtra(EXTRA_DOSE_ROC_PERCENT, doseSnapshot.rateOfChange.ratePercentPerSecond)
+                    .putExtra(EXTRA_DOSE_TREND, doseSnapshot.rateOfChange.trend.name)
+                    .putExtra(EXTRA_DOSE_FORECAST_30S, doseSnapshot.forecast30s.predictedValue)
+                    .putExtra(EXTRA_DOSE_FORECAST_60S, doseSnapshot.forecast60s.predictedValue)
+                    .putExtra(EXTRA_DOSE_BASELINE_MEAN, doseSnapshot.baseline.mean)
+                    .putExtra(EXTRA_DOSE_BASELINE_STDDEV, doseSnapshot.baseline.standardDeviation)
+                    .putExtra(EXTRA_CUSUM_CHANGE, doseSnapshot.cusum.changeDetected)
+                    .putExtra(EXTRA_CPS_ZSCORE, cpsSnapshot.zScore.zScore)
+                    .putExtra(EXTRA_CPS_SIGMA_LEVEL, cpsSnapshot.zScore.sigmaLevel)
+                sendBroadcast(statsIntent)
+            } catch (_: Throwable) {}
+        }
+        
+        // PRIORITY 3: Evaluate alerts - both classic and statistical
         // Don't queue behind slow operations. Runs on calling thread but is fast (just math).
         val now = System.currentTimeMillis()
         if (now - lastAlertEvalMs > 1_000L) {  // Check every second for faster response
             lastAlertEvalMs = now
             try {
                 val recentReadings = Prefs.getRecentReadings(this)
+                // Classic threshold alerts
                 alertEvaluator.evaluate(uSvPerHour, cps, recentReadings)
+                
+                // Statistical alerts (VEGA intelligence)
+                if (doseSnapshot != null && cpsSnapshot != null) {
+                    alertEvaluator.evaluateStatistical(doseSnapshot, cpsSnapshot, statisticalEngine)
+                }
             } catch (t: Throwable) {
                 Log.e(TAG, "Alert evaluation failed", t)
             }

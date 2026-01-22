@@ -259,6 +259,7 @@ class AlertEvaluator(private val context: Context) {
      */
     fun reset() {
         alertStartTimes.clear()
+        statisticalTriggerCooldowns.clear()
     }
     
     /**
@@ -268,4 +269,208 @@ class AlertEvaluator(private val context: Context) {
     fun getActiveAlertCount(): Int {
         return alertStartTimes.size
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // STATISTICAL ALERT EVALUATION (VEGA Intelligence)
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    // Cooldown tracking for statistical triggers
+    private val statisticalTriggerCooldowns = mutableMapOf<String, Long>()
+    private val DEFAULT_STATISTICAL_COOLDOWN_MS = 30_000L  // 30 seconds between same type triggers
+    
+    /**
+     * Evaluate statistical alerts from VEGA engine snapshots.
+     * This runs alongside classic threshold alerts for comprehensive coverage.
+     */
+    fun evaluateStatistical(
+        doseSnapshot: StatisticalEngine.AnalysisSnapshot,
+        cpsSnapshot: StatisticalEngine.AnalysisSnapshot,
+        engine: StatisticalEngine
+    ) {
+        // Load statistical alert configuration from preferences
+        val config = loadStatisticalConfig()
+        if (!config.anyEnabled()) {
+            return  // No statistical alerts enabled
+        }
+        
+        // Get triggers from the engine
+        val triggers = engine.evaluateTriggers(doseSnapshot, cpsSnapshot, config)
+        
+        val now = System.currentTimeMillis()
+        
+        for (trigger in triggers) {
+            val triggerKey = "${trigger.type}_${trigger.message.hashCode()}"
+            val lastTriggerTime = statisticalTriggerCooldowns[triggerKey] ?: 0L
+            
+            // Check cooldown
+            if (now - lastTriggerTime < DEFAULT_STATISTICAL_COOLDOWN_MS) {
+                Log.d(TAG, "Statistical trigger on cooldown: ${trigger.type}")
+                continue
+            }
+            
+            // Fire the statistical alert
+            fireStatisticalAlert(trigger, doseSnapshot, cpsSnapshot)
+            statisticalTriggerCooldowns[triggerKey] = now
+        }
+    }
+    
+    /**
+     * Load statistical alert configuration from preferences.
+     */
+    private fun loadStatisticalConfig(): StatisticalEngine.StatisticalAlertConfig {
+        return StatisticalEngine.StatisticalAlertConfig(
+            zScoreEnabled = Prefs.isStatisticalZScoreEnabled(context),
+            zScoreSigmaThreshold = Prefs.getStatisticalZScoreSigma(context),
+            rocEnabled = Prefs.isStatisticalRocEnabled(context),
+            rocThresholdPercent = Prefs.getStatisticalRocThreshold(context),
+            cusumEnabled = Prefs.isStatisticalCusumEnabled(context),
+            forecastEnabled = Prefs.isStatisticalForecastEnabled(context),
+            forecastThreshold = Prefs.getStatisticalForecastThreshold(context)
+        )
+    }
+    
+    /**
+     * Fire a statistical alert with VEGA voice and notification.
+     */
+    private fun fireStatisticalAlert(
+        trigger: StatisticalEngine.StatisticalTrigger,
+        doseSnapshot: StatisticalEngine.AnalysisSnapshot,
+        cpsSnapshot: StatisticalEngine.AnalysisSnapshot
+    ) {
+        Log.d(TAG, "Firing statistical alert: ${trigger.type} - ${trigger.message}")
+        
+        // Generate VEGA announcement
+        if (Prefs.isVegaTtsEnabled(context) && Prefs.isStatisticalVoiceEnabled(context)) {
+            val announcement = generateStatisticalAnnouncement(trigger, doseSnapshot, cpsSnapshot)
+            VegaTTS.speak(context, announcement)
+        }
+        
+        // Play alert sound based on severity
+        when (trigger.severity) {
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.CRITICAL,
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.ALERT -> {
+                SoundManager.play(context, Prefs.SoundType.ALARM)
+            }
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.WARNING -> {
+                SoundManager.play(context, Prefs.SoundType.ANOMALY)
+            }
+            else -> {
+                // INFO level - no sound, just notification
+            }
+        }
+        
+        // Check notification permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) 
+                != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
+        }
+        
+        // Build notification
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        val title = when (trigger.severity) {
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.CRITICAL -> "🚨 VEGA Critical Alert"
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.ALERT -> "⚠️ VEGA Alert"
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.WARNING -> "📊 VEGA Warning"
+            StatisticalEngine.StatisticalTrigger.TriggerSeverity.INFO -> "📈 VEGA Insight"
+        }
+        
+        val text = trigger.message
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            trigger.type.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val notification = NotificationCompat.Builder(context, AlertConfigActivity.NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notifications)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(
+                "$text\n\n" +
+                "Dose: ${String.format("%.3f", doseSnapshot.currentValue)} µSv/h (z=${String.format("%.1f", doseSnapshot.zScore.zScore)}σ)\n" +
+                "Baseline: ${String.format("%.3f", doseSnapshot.baseline.mean)} ± ${String.format("%.3f", doseSnapshot.baseline.standardDeviation)} µSv/h\n" +
+                "Confidence: ${String.format("%.1f", trigger.confidence * 100)}%"
+            ))
+            .setPriority(when (trigger.severity) {
+                StatisticalEngine.StatisticalTrigger.TriggerSeverity.CRITICAL -> NotificationCompat.PRIORITY_MAX
+                StatisticalEngine.StatisticalTrigger.TriggerSeverity.ALERT -> NotificationCompat.PRIORITY_HIGH
+                else -> NotificationCompat.PRIORITY_DEFAULT
+            })
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        
+        val notifId = ALERT_NOTIF_BASE_ID + 5000 + kotlin.math.abs(trigger.type.hashCode() % 1000)
+        notificationManager.notify(notifId, notification)
+    }
+    
+    /**
+     * Generate VEGA-style announcement for statistical alerts.
+     */
+    private fun generateStatisticalAnnouncement(
+        trigger: StatisticalEngine.StatisticalTrigger,
+        doseSnapshot: StatisticalEngine.AnalysisSnapshot,
+        cpsSnapshot: StatisticalEngine.AnalysisSnapshot
+    ): String {
+        return when (trigger.type) {
+            StatisticalEngine.StatisticalTrigger.TriggerType.ZSCORE_ANOMALY -> {
+                val sigma = doseSnapshot.zScore.sigmaLevel
+                val direction = when (doseSnapshot.zScore.anomalyDirection) {
+                    StatisticalEngine.ZScoreResult.AnomalyDirection.ABOVE -> "above"
+                    StatisticalEngine.ZScoreResult.AnomalyDirection.BELOW -> "below"
+                    else -> "deviating from"
+                }
+                when (sigma) {
+                    4 -> "Critical statistical anomaly. Dose rate is ${sigma} sigma $direction baseline. This is extremely rare. Immediate attention recommended."
+                    3 -> "Statistical anomaly detected with high confidence. Dose rate is ${sigma} sigma $direction your established normal. Attention advised."
+                    2 -> "I have detected a statistical deviation. Dose rate is ${sigma} sigma $direction baseline. Continued monitoring recommended."
+                    else -> "Observing an interesting pattern. Dose rate is slightly $direction normal range."
+                }
+            }
+            
+            StatisticalEngine.StatisticalTrigger.TriggerType.RATE_OF_CHANGE -> {
+                val trend = doseSnapshot.rateOfChange.trend
+                val rate = kotlin.math.abs(doseSnapshot.rateOfChange.ratePercentPerSecond)
+                when (trend) {
+                    StatisticalEngine.RateOfChangeResult.TrendDirection.RISING -> 
+                        "Dose rate increasing at ${String.format("%.1f", rate)} percent per second. You may be approaching a source."
+                    StatisticalEngine.RateOfChangeResult.TrendDirection.FALLING -> 
+                        "Dose rate decreasing at ${String.format("%.1f", rate)} percent per second. You are moving away from elevated levels."
+                    else -> "Rate of change detected."
+                }
+            }
+            
+            StatisticalEngine.StatisticalTrigger.TriggerType.CUSUM_CHANGE -> {
+                val direction = doseSnapshot.cusum.changeDirection
+                when (direction) {
+                    StatisticalEngine.CusumResult.ChangeDirection.INCREASE -> 
+                        "I have detected a subtle but persistent shift. Background levels are trending upward. This change was too gradual for threshold alerts but is statistically significant."
+                    StatisticalEngine.CusumResult.ChangeDirection.DECREASE -> 
+                        "Environmental conditions have changed. Background levels have shifted downward. Recording new baseline parameters."
+                    else -> "Change point detected in radiation levels."
+                }
+            }
+            
+            StatisticalEngine.StatisticalTrigger.TriggerType.FORECAST_THRESHOLD -> {
+                val predicted = doseSnapshot.forecast60s.predictedValue
+                "Predictive analysis indicates dose rate will reach ${String.format("%.3f", predicted)} microsieverts per hour within 60 seconds based on current trajectory."
+            }
+        }
+    }
+}
+
+/**
+ * Extension function to check if any statistical alerts are enabled.
+ */
+private fun StatisticalEngine.StatisticalAlertConfig.anyEnabled(): Boolean {
+    return zScoreEnabled || rocEnabled || cusumEnabled || forecastEnabled
 }
