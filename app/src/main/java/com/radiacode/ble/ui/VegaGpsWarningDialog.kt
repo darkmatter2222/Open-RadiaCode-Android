@@ -1,22 +1,29 @@
 package com.radiacode.ble.ui
 
 import android.animation.ValueAnimator
+import android.app.Activity
 import android.app.Dialog
 import android.content.Context
 import android.graphics.*
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.renderscript.Allocation
+import android.renderscript.Element
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
-import com.radiacode.ble.VegaTTS
 
 /**
  * VegaGpsWarningDialog - Warning dialog when enabling GPS tracking.
@@ -40,20 +47,19 @@ class VegaGpsWarningDialog(
     
     private val handler = Handler(Looper.getMainLooper())
     private var visualizer: Visualizer? = null
+    private var mediaPlayer: MediaPlayer? = null
     private var hasSpeechStarted = false
+    private var waveformAnimator: ValueAnimator? = null
     
     companion object {
-        // Warning text for GPS tracking
-        private const val WARNING_TEXT = """Enabling high-accuracy GPS tracking will significantly impact battery life.
+        // Warning text for GPS tracking (displayed on screen - no hyphens for clarity)
+        private const val WARNING_TEXT = """Enabling high accuracy GPS tracking will significantly impact battery life.
 
 This feature records your radiological journey with precise location data, creating detailed maps of radiation levels as you move.
 
 Consider using a battery bank or enabling this feature only when actively mapping your environment.
 
 When GPS tracking is enabled, the app will continuously collect location data and store radiation readings for each position you visit."""
-
-        // Vega's spoken warning (slightly different for natural speech)
-        private const val VEGA_WARNING = "Warning: Enabling high-accuracy GPS tracking will significantly impact battery life. This feature records your radiological journey with precise location data. Consider using a battery bank, or enabling this only when actively mapping."
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,10 +70,17 @@ When GPS tracking is enabled, the app will continuously collect location data an
         val rootLayout = createLayout()
         setContentView(rootLayout)
         
-        // Make dialog properly sized
+        // Make dialog properly sized with blur behind it
         window?.apply {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             setBackgroundDrawableResource(android.R.color.transparent)
+            // Add dim and blur effect
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.7f)
+            // Enable blur if supported (Android 12+)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                setBackgroundBlurRadius(25)
+            }
         }
         
         // Prevent dismiss on outside touch
@@ -75,7 +88,7 @@ When GPS tracking is enabled, the app will continuously collect location data an
         
         // Start Vega's warning if voice is enabled
         if (Prefs.isVegaTtsEnabled(context)) {
-            startVegaWarning()
+            playPrebakedWarning()
         } else {
             // Just show simulated waveform animation if voice disabled
             waveformView.setUsingRealAudio(false)
@@ -293,37 +306,63 @@ When GPS tracking is enabled, the app will continuously collect location data an
         }
     }
     
-    private fun startVegaWarning() {
+    /**
+     * Play the pre-baked GPS warning audio from raw resources.
+     * This avoids real-time API calls and ensures consistent playback.
+     */
+    private fun playPrebakedWarning() {
         hasSpeechStarted = true
-        
-        // Speak the warning with Vega's voice
-        VegaTTS.speak(
-            context,
-            VEGA_WARNING,
-            onComplete = {
-                // Speech finished
-                handler.post {
-                    waveformView.setUsingRealAudio(false)
-                }
-            },
-            onError = { error ->
-                // Speech failed, continue with simulated waveform
-                handler.post {
-                    waveformView.setUsingRealAudio(false)
-                    startSimulatedWaveform()
-                }
-            }
-        )
-        
-        // Setup visualizer for real audio feedback
-        // Note: VegaTTS uses MediaPlayer internally, so we can try to capture its audio
-        // For now, use simulated waveform that animates while speaking
         waveformView.setUsingRealAudio(false)
-        startSimulatedWaveform()
+        
+        try {
+            // Release any existing player
+            mediaPlayer?.release()
+            
+            // Create MediaPlayer from raw resource
+            mediaPlayer = MediaPlayer.create(context, R.raw.vega_gps_warning)?.apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .build()
+                )
+                
+                setOnCompletionListener {
+                    // Speech finished - stop waveform animation
+                    handler.post {
+                        waveformAnimator?.cancel()
+                        waveformAnimator = null
+                    }
+                }
+                
+                setOnErrorListener { _, what, extra ->
+                    android.util.Log.e("VegaGpsWarning", "MediaPlayer error: what=$what, extra=$extra")
+                    true
+                }
+                
+                start()
+            }
+            
+            // Start waveform animation synced to audio duration
+            if (mediaPlayer != null) {
+                startSimulatedWaveform()
+            } else {
+                // Fallback - audio file not found, just show animation
+                android.util.Log.w("VegaGpsWarning", "Pre-baked audio not found, using animation only")
+                startSimulatedWaveform()
+            }
+            
+        } catch (e: Exception) {
+            android.util.Log.e("VegaGpsWarning", "Failed to play pre-baked audio", e)
+            // Fallback to just the animation
+            startSimulatedWaveform()
+        }
     }
     
     private fun startSimulatedWaveform() {
-        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+        waveformAnimator?.cancel()
+        
+        waveformAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 100
             repeatCount = ValueAnimator.INFINITE
             addUpdateListener {
@@ -336,14 +375,27 @@ When GPS tracking is enabled, the app will continuously collect location data an
             start()
         }
         
-        // Stop after typical speech duration (about 12 seconds)
-        handler.postDelayed({
-            animator.cancel()
-        }, 12000)
+        // Stop after typical speech duration (about 12 seconds) if no MediaPlayer
+        if (mediaPlayer == null) {
+            handler.postDelayed({
+                waveformAnimator?.cancel()
+                waveformAnimator = null
+            }, 12000)
+        }
     }
     
     private fun cleanupAndDismiss() {
         try {
+            // Stop waveform animation
+            waveformAnimator?.cancel()
+            waveformAnimator = null
+            
+            // Stop and release media player
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+            mediaPlayer = null
+            
+            // Release visualizer
             visualizer?.enabled = false
             visualizer?.release()
             visualizer = null
