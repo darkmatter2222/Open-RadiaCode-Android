@@ -18,10 +18,10 @@ Transform Open RadiaCode from a **reactive alarm system** into a **proactive rad
 | 2 | Z-Score Anomaly Detection | ✅ Implemented | Real-time z-score with 1σ/2σ/3σ/4σ levels |
 | 3 | Rate-of-Change Detection | ✅ Implemented | First derivative tracking, trend detection |
 | 4 | CUSUM Change-Point Detection | ✅ Implemented | Catches subtle persistent shifts |
-| 5 | Real-Time Dose Rate Forecasting | ✅ Implemented | Holt-Winters double exponential smoothing |
-| 6 | Predictive Threshold Crossing | ⬜ Not Started | |
-| 7 | Cumulative Dose Forecasting | ⬜ Not Started | |
-| 8 | Source Proximity Estimation | ⬜ Not Started | |
+| 5 | Real-Time Dose Rate Forecasting | ✅ Implemented | Holt-Winters + visual forecast on chart |
+| 6 | Predictive Threshold Crossing | ✅ Implemented | Warns BEFORE hitting user thresholds |
+| 7 | Cumulative Dose Forecasting | ✅ Implemented | Tracks session dose, projects time-to-limit |
+| 8 | Source Proximity Estimation | ✅ Implemented | Inverse-square law distance estimation |
 | 9 | Poisson Uncertainty Quantification | ⬜ Not Started | |
 | 10 | Moving Average Crossover Signals | ⬜ Not Started | |
 | 11 | Bayesian Changepoint Detection | ⬜ Not Started | |

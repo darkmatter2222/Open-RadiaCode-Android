@@ -67,7 +67,11 @@ class RadiaCodeForegroundService : Service() {
         const val EXTRA_DOSE_ROC_PERCENT = "dose_roc_percent"
         const val EXTRA_DOSE_TREND = "dose_trend"
         const val EXTRA_DOSE_FORECAST_30S = "dose_forecast_30s"
+        const val EXTRA_DOSE_FORECAST_30S_LOWER = "dose_forecast_30s_lower"
+        const val EXTRA_DOSE_FORECAST_30S_UPPER = "dose_forecast_30s_upper"
         const val EXTRA_DOSE_FORECAST_60S = "dose_forecast_60s"
+        const val EXTRA_DOSE_FORECAST_60S_LOWER = "dose_forecast_60s_lower"
+        const val EXTRA_DOSE_FORECAST_60S_UPPER = "dose_forecast_60s_upper"
         const val EXTRA_DOSE_BASELINE_MEAN = "dose_baseline_mean"
         const val EXTRA_DOSE_BASELINE_STDDEV = "dose_baseline_stddev"
         const val EXTRA_CUSUM_CHANGE = "cusum_change"
@@ -491,7 +495,11 @@ class RadiaCodeForegroundService : Service() {
                     .putExtra(EXTRA_DOSE_ROC_PERCENT, doseSnapshot.rateOfChange.ratePercentPerSecond)
                     .putExtra(EXTRA_DOSE_TREND, doseSnapshot.rateOfChange.trend.name)
                     .putExtra(EXTRA_DOSE_FORECAST_30S, doseSnapshot.forecast30s.predictedValue)
+                    .putExtra(EXTRA_DOSE_FORECAST_30S_LOWER, doseSnapshot.forecast30s.lowerBound)
+                    .putExtra(EXTRA_DOSE_FORECAST_30S_UPPER, doseSnapshot.forecast30s.upperBound)
                     .putExtra(EXTRA_DOSE_FORECAST_60S, doseSnapshot.forecast60s.predictedValue)
+                    .putExtra(EXTRA_DOSE_FORECAST_60S_LOWER, doseSnapshot.forecast60s.lowerBound)
+                    .putExtra(EXTRA_DOSE_FORECAST_60S_UPPER, doseSnapshot.forecast60s.upperBound)
                     .putExtra(EXTRA_DOSE_BASELINE_MEAN, doseSnapshot.baseline.mean)
                     .putExtra(EXTRA_DOSE_BASELINE_STDDEV, doseSnapshot.baseline.standardDeviation)
                     .putExtra(EXTRA_CUSUM_CHANGE, doseSnapshot.cusum.changeDetected)

@@ -65,6 +65,17 @@ class ProChartView @JvmOverloads constructor(
     private var sigmaBandLevel: Int = 0  // 0 = off, 1/2/3 = ±1σ/2σ/3σ
     private var showMeanLine: Boolean = false
     
+    // Forecast visualization (VEGA Statistical Intelligence)
+    data class ForecastPoint(
+        val secondsAhead: Int,
+        val predicted: Float,
+        val lowerBound: Float,
+        val upperBound: Float
+    )
+    private var forecastPoints: List<ForecastPoint> = emptyList()
+    private var showForecast: Boolean = true  // Show forecast by default when available
+    private var forecastHorizonSeconds: Int = 60  // How far ahead to show forecast (default 60s)
+    
     // Alert markers (from triggered alerts)
     data class AlertMarker(
         val triggerTimestampMs: Long,        // When the alert notification fired
@@ -196,6 +207,31 @@ class ProChartView @JvmOverloads constructor(
         color = ContextCompat.getColor(context, R.color.pro_text_muted)
         alpha = 200
         pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
+    }
+
+    // Forecast line paint (VEGA Statistical Intelligence - dotted cyan)
+    private val forecastLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 2.5f
+        color = ContextCompat.getColor(context, R.color.pro_cyan)
+        alpha = 200
+        pathEffect = DashPathEffect(floatArrayOf(density * 6f, density * 4f), 0f)
+    }
+    
+    // Forecast confidence interval paint (semi-transparent fill)
+    private val forecastConfidencePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = ContextCompat.getColor(context, R.color.pro_cyan)
+        alpha = 30
+    }
+    
+    // Forecast boundary paint (thin dashed lines for upper/lower bounds)
+    private val forecastBoundaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = density * 1f
+        color = ContextCompat.getColor(context, R.color.pro_cyan)
+        alpha = 100
+        pathEffect = DashPathEffect(floatArrayOf(density * 3f, density * 3f), 0f)
     }
 
     // Mean line paint (solid horizontal line)
@@ -710,6 +746,52 @@ class ProChartView @JvmOverloads constructor(
         showMeanLine = show
         invalidate()
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FORECAST VISUALIZATION (VEGA Statistical Intelligence)
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Set forecast data points to display extending from the chart's right edge.
+     * The forecast appears as a dotted line with a shaded confidence interval.
+     * 
+     * @param points List of forecast points with secondsAhead, predicted, lowerBound, upperBound
+     */
+    fun setForecast(points: List<ForecastPoint>) {
+        this.forecastPoints = points
+        invalidate()
+    }
+    
+    /**
+     * Clear forecast display.
+     */
+    fun clearForecast() {
+        this.forecastPoints = emptyList()
+        invalidate()
+    }
+    
+    /**
+     * Show or hide forecast visualization.
+     * Forecast data is still retained but not drawn when hidden.
+     */
+    fun setShowForecast(show: Boolean) {
+        this.showForecast = show
+        invalidate()
+    }
+    
+    /**
+     * Set how far ahead to display the forecast (in seconds).
+     * Points beyond this horizon will not be displayed.
+     */
+    fun setForecastHorizon(seconds: Int) {
+        this.forecastHorizonSeconds = seconds.coerceIn(10, 300)  // 10s to 5min
+        invalidate()
+    }
+    
+    /**
+     * Check if forecast is currently being displayed.
+     */
+    fun isForecastVisible(): Boolean = showForecast && forecastPoints.isNotEmpty()
 
     fun setAccentColor(color: Int) {
         accentColor = color
@@ -1007,6 +1089,12 @@ class ProChartView @JvmOverloads constructor(
         // Draw fill and line
         canvas.drawPath(fillPath, fillPaint)
         canvas.drawPath(linePath, linePaint)
+        
+        // Draw forecast (VEGA Statistical Intelligence)
+        // Only show forecast when following real-time (forecast extends from latest data)
+        if (showForecast && forecastPoints.isNotEmpty() && isFollowingRealTime && n > 0) {
+            drawForecast(canvas, chartWidth, chartHeight, yMin, yRange, visibleSamples.last())
+        }
 
         // Draw rolling average line (dotted) for visible portion
         if (rollingAvgSamples.size >= samples.size && visibleSamples.isNotEmpty()) {
@@ -1085,6 +1173,124 @@ class ProChartView @JvmOverloads constructor(
         val rect = RectF(x - padH, y - padV, x + textWidth + padH, y + textPaint.textSize + padV)
         canvas.drawRoundRect(rect, density * 4f, density * 4f, bgPaint)
         canvas.drawText(text, x, y + textPaint.textSize * 0.85f, textPaint)
+    }
+
+    /**
+     * Draw VEGA Statistical Intelligence forecast line extending from the latest data point.
+     * Shows predicted dose rate with confidence interval bands.
+     */
+    private fun drawForecast(
+        canvas: Canvas,
+        chartWidth: Float,
+        chartHeight: Float,
+        yMin: Float,
+        yRange: Float,
+        lastDataPoint: Float
+    ) {
+        if (forecastPoints.isEmpty()) return
+        
+        // The forecast extends into a "future" area to the right of the chart
+        // We'll draw it in a small extension area (about 15% of chart width)
+        val forecastAreaWidth = chartWidth * 0.15f
+        val forecastStartX = chartRight
+        val forecastEndX = chartRight + forecastAreaWidth
+        
+        // Calculate the starting Y from the last data point
+        val startYNorm = (lastDataPoint - yMin) / yRange
+        val startY = chartBottom - chartHeight * startYNorm
+        
+        // Get max seconds in forecast for scaling
+        val maxSeconds = forecastPoints.maxOfOrNull { it.secondsAhead } ?: return
+        if (maxSeconds <= 0) return
+        
+        // Build the forecast paths
+        val forecastPath = Path()
+        val upperBoundPath = Path()
+        val lowerBoundPath = Path()
+        val confidencePath = Path()
+        
+        // Start from the last data point
+        forecastPath.moveTo(forecastStartX, startY)
+        upperBoundPath.moveTo(forecastStartX, startY)
+        lowerBoundPath.moveTo(forecastStartX, startY)
+        
+        // Collect points for the confidence region
+        val upperPoints = mutableListOf<Pair<Float, Float>>()
+        val lowerPoints = mutableListOf<Pair<Float, Float>>()
+        
+        upperPoints.add(forecastStartX to startY)
+        lowerPoints.add(forecastStartX to startY)
+        
+        // Plot each forecast point
+        for (point in forecastPoints.sortedBy { it.secondsAhead }) {
+            val xProgress = point.secondsAhead.toFloat() / maxSeconds.toFloat()
+            val x = forecastStartX + forecastAreaWidth * xProgress
+            
+            // Main prediction
+            val predictedYNorm = ((point.predicted - yMin) / yRange).coerceIn(0f, 1f)
+            val predictedY = chartBottom - chartHeight * predictedYNorm
+            forecastPath.lineTo(x, predictedY)
+            
+            // Upper bound
+            val upperYNorm = ((point.upperBound - yMin) / yRange).coerceIn(0f, 1f)
+            val upperY = chartBottom - chartHeight * upperYNorm
+            upperBoundPath.lineTo(x, upperY)
+            upperPoints.add(x to upperY)
+            
+            // Lower bound
+            val lowerYNorm = ((point.lowerBound - yMin) / yRange).coerceIn(0f, 1f)
+            val lowerY = chartBottom - chartHeight * lowerYNorm
+            lowerBoundPath.lineTo(x, lowerY)
+            lowerPoints.add(x to lowerY)
+        }
+        
+        // Build the confidence region (upper path forward, lower path backward)
+        confidencePath.moveTo(upperPoints.first().first, upperPoints.first().second)
+        for ((x, y) in upperPoints) {
+            confidencePath.lineTo(x, y)
+        }
+        for ((x, y) in lowerPoints.reversed()) {
+            confidencePath.lineTo(x, y)
+        }
+        confidencePath.close()
+        
+        // Draw confidence region fill
+        canvas.drawPath(confidencePath, forecastConfidencePaint)
+        
+        // Draw boundary lines
+        canvas.drawPath(upperBoundPath, forecastBoundaryPaint)
+        canvas.drawPath(lowerBoundPath, forecastBoundaryPaint)
+        
+        // Draw main forecast line
+        canvas.drawPath(forecastPath, forecastLinePaint)
+        
+        // Draw "FORECAST" label
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#00E5FF")
+            textSize = 9f * density
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            alpha = 180
+        }
+        val labelX = forecastStartX + 4f * density
+        val labelY = chartTop + 14f * density
+        canvas.drawText("▶ FORECAST", labelX, labelY, labelPaint)
+        
+        // Draw time labels for forecast horizon
+        val timeLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#6E6E78")
+            textSize = 8f * density
+            typeface = Typeface.MONOSPACE
+        }
+        
+        // Draw +30s and +60s markers if applicable
+        for (point in forecastPoints) {
+            if (point.secondsAhead == 30 || point.secondsAhead == 60) {
+                val xProgress = point.secondsAhead.toFloat() / maxSeconds
+                val x = forecastStartX + forecastAreaWidth * xProgress
+                val label = "+${point.secondsAhead}s"
+                canvas.drawText(label, x - timeLabelPaint.measureText(label) / 2, chartBottom + 12f * density, timeLabelPaint)
+            }
+        }
     }
 
     /** Draw rolling average as a dotted line */

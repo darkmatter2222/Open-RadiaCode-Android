@@ -351,6 +351,55 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
+     * Receiver for VEGA Statistical Intelligence updates.
+     * Updates the chart forecast visualization when forecast data is available.
+     */
+    private val statisticalReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action != RadiaCodeForegroundService.ACTION_STATISTICAL_UPDATE) return
+            
+            // Only show forecast if user has it enabled
+            if (!Prefs.isStatisticalForecastEnabled(this@MainActivity)) {
+                doseChart.clearForecast()
+                return
+            }
+            
+            // Extract forecast data
+            val forecast30s = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S, Float.NaN)
+            val forecast30sLower = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S_LOWER, Float.NaN)
+            val forecast30sUpper = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S_UPPER, Float.NaN)
+            val forecast60s = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S, Float.NaN)
+            val forecast60sLower = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S_LOWER, Float.NaN)
+            val forecast60sUpper = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S_UPPER, Float.NaN)
+            
+            // Build forecast points if data is valid
+            if (!forecast30s.isNaN() && !forecast60s.isNaN()) {
+                // Convert to display units
+                val du = Prefs.getDoseUnit(this@MainActivity, Prefs.DoseUnit.USV_H)
+                val conversionFactor = if (du == Prefs.DoseUnit.NSV_H) 1000f else 1f
+                
+                val forecastPoints = listOf(
+                    ProChartView.ForecastPoint(
+                        secondsAhead = 30,
+                        predicted = forecast30s * conversionFactor,
+                        lowerBound = forecast30sLower * conversionFactor,
+                        upperBound = forecast30sUpper * conversionFactor
+                    ),
+                    ProChartView.ForecastPoint(
+                        secondsAhead = 60,
+                        predicted = forecast60s * conversionFactor,
+                        lowerBound = forecast60sLower * conversionFactor,
+                        upperBound = forecast60sUpper * conversionFactor
+                    )
+                )
+                doseChart.setForecast(forecastPoints)
+            } else {
+                doseChart.clearForecast()
+            }
+        }
+    }
+    
+    /**
      * Trigger a chart update immediately if enough time has passed since the last one.
      * This makes charts feel responsive without overwhelming the UI.
      */
@@ -2849,11 +2898,13 @@ class MainActivity : AppCompatActivity() {
         val readingFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_READING)
         val stateFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_DEVICE_STATE_CHANGED)
         val spectrumFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_SPECTRUM_DATA)
+        val statisticalFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_STATISTICAL_UPDATE)
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(readingReceiver, readingFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
                 registerReceiver(deviceStateReceiver, stateFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
                 registerReceiver(spectrumReceiver, spectrumFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
+                registerReceiver(statisticalReceiver, statisticalFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
                 registerReceiver(readingReceiver, readingFilter)
@@ -2861,6 +2912,8 @@ class MainActivity : AppCompatActivity() {
                 registerReceiver(deviceStateReceiver, stateFilter)
                 @Suppress("DEPRECATION")
                 registerReceiver(spectrumReceiver, spectrumFilter)
+                @Suppress("DEPRECATION")
+                registerReceiver(statisticalReceiver, statisticalFilter)
             }
         } catch (_: Throwable) {}
     }
@@ -2874,6 +2927,9 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
         try {
             unregisterReceiver(spectrumReceiver)
+        } catch (_: Throwable) {}
+        try {
+            unregisterReceiver(statisticalReceiver)
         } catch (_: Throwable) {}
     }
     

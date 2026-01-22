@@ -41,6 +41,10 @@ class StatisticalEngine(private val context: Context) {
         private const val MEDIUM_WINDOW_SIZE = 300    // ~5 minutes
         private const val LONG_WINDOW_SIZE = 3600     // ~1 hour
         
+        // Source proximity tracking (Feature #8)
+        private const val PROXIMITY_BUFFER_SIZE = 10  // Track last 10 readings for approach analysis
+        private const val MIN_APPROACHING_SAMPLES = 3  // Need at least 3 rising samples
+        
         // Singleton instance for app-wide access
         @Volatile
         private var instance: StatisticalEngine? = null
@@ -148,6 +152,78 @@ class StatisticalEngine(private val context: Context) {
     }
 
     /**
+     * Cumulative dose tracking result (Tier 2 - Feature #7).
+     * Tracks running total and projects time to reach dose limits.
+     */
+    data class CumulativeDoseResult(
+        val totalMicroSv: Float,           // Total accumulated dose in µSv
+        val sessionDurationMs: Long,       // How long this session has been running
+        val currentRateMicroSvPerHour: Float, // Current dose rate
+        val projectedDailyMicroSv: Float,  // Projected 24-hour total at current rate
+        val hoursToLimit: Float,           // Hours until reaching daily limit
+        val percentOfDailyLimit: Float     // Current % of configured daily limit
+    ) {
+        companion object {
+            val EMPTY = CumulativeDoseResult(0f, 0L, 0f, 0f, Float.POSITIVE_INFINITY, 0f)
+            const val DEFAULT_DAILY_LIMIT_USV = 50f  // 50 µSv/day is reasonable for public exposure
+        }
+        
+        /**
+         * Get human-readable time to limit string.
+         */
+        fun getTimeToLimitString(): String {
+            return when {
+                hoursToLimit.isInfinite() || hoursToLimit > 1000 -> "N/A"
+                hoursToLimit < 1 -> "${(hoursToLimit * 60).toInt()} minutes"
+                hoursToLimit < 24 -> "${hoursToLimit.toInt()} hours ${((hoursToLimit % 1) * 60).toInt()} min"
+                else -> ">${(hoursToLimit / 24).toInt()} days"
+            }
+        }
+    }
+
+    /**
+     * Source proximity estimation result (Tier 2 - Feature #8).
+     * Uses inverse-square law to estimate distance to a point radiation source.
+     * 
+     * Note: This is an ESTIMATE only. Actual radiation fields can be complex
+     * due to shielding, multiple sources, non-point sources, etc.
+     */
+    data class SourceProximityResult(
+        val isApproaching: Boolean,            // Whether we're moving toward source
+        val estimatedDistanceMeters: Float,    // Estimated current distance (if calculable)
+        val confidenceLevel: Confidence,       // How confident we are in the estimate
+        val approachRateMetersPerSec: Float,   // How fast we're approaching
+        val predictedPeakDoseRate: Float,      // Predicted dose at closest approach
+        val predictedTimeToClosest: Float,     // Seconds until closest approach
+        val recommendation: String             // VEGA guidance text
+    ) {
+        enum class Confidence { NONE, LOW, MEDIUM, HIGH }
+        
+        companion object {
+            val UNKNOWN = SourceProximityResult(
+                isApproaching = false,
+                estimatedDistanceMeters = Float.NaN,
+                confidenceLevel = Confidence.NONE,
+                approachRateMetersPerSec = 0f,
+                predictedPeakDoseRate = 0f,
+                predictedTimeToClosest = Float.NaN,
+                recommendation = "Insufficient data for proximity estimation"
+            )
+        }
+        
+        /**
+         * Get user-friendly distance string.
+         */
+        fun getDistanceString(): String {
+            return when {
+                estimatedDistanceMeters.isNaN() -> "Unknown"
+                estimatedDistanceMeters < 1 -> "${(estimatedDistanceMeters * 100).toInt()} cm"
+                else -> String.format("%.1f m", estimatedDistanceMeters)
+            }
+        }
+    }
+
+    /**
      * Complete statistical analysis snapshot.
      */
     data class AnalysisSnapshot(
@@ -178,7 +254,8 @@ class StatisticalEngine(private val context: Context) {
             ZSCORE_ANOMALY,
             RATE_OF_CHANGE,
             CUSUM_CHANGE,
-            FORECAST_THRESHOLD
+            FORECAST_THRESHOLD,
+            PREDICTIVE_CROSSING     // Alert BEFORE threshold is hit
         }
         
         enum class TriggerSeverity {
@@ -217,6 +294,15 @@ class StatisticalEngine(private val context: Context) {
     private var lastCpsReading: TimestampedValue? = null
     private var doseRocDirection = 0  // Consecutive same-direction count
     private var cpsRocDirection = 0
+    
+    // Cumulative dose tracking (Tier 2 - Feature #7)
+    private var cumulativeDoseStartMs: Long = 0L
+    private var cumulativeDoseMicroSv: Float = 0f  // Running total in µSv
+    private var lastCumulativeDoseUpdateMs: Long = 0L
+    
+    // Source proximity tracking (Tier 2 - Feature #8)
+    // Track recent readings for inverse-square analysis
+    private val proximityReadings = ArrayDeque<TimestampedValue>(PROXIMITY_BUFFER_SIZE)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC API
@@ -233,6 +319,12 @@ class StatisticalEngine(private val context: Context) {
         // Add to rolling buffers
         doseReadings.add(TimestampedValue(doseRate, timestampMs))
         cpsReadings.add(TimestampedValue(cps, timestampMs))
+        
+        // Update cumulative dose (Feature #7)
+        updateCumulativeDose(doseRate, timestampMs)
+        
+        // Update proximity buffer (Feature #8)
+        updateProximityBuffer(doseRate, timestampMs)
         
         // Update baselines (EWMA)
         doseBaseline = updateBaseline(doseBaseline, doseRate, timestampMs)
@@ -333,6 +425,209 @@ class StatisticalEngine(private val context: Context) {
         }
         return points
     }
+    
+    /**
+     * Get current cumulative dose information (Feature #7).
+     * 
+     * @param dailyLimitMicroSv The user's configured daily dose limit in µSv
+     * @return CumulativeDoseResult with running total and projections
+     */
+    @Synchronized
+    fun getCumulativeDose(dailyLimitMicroSv: Float = CumulativeDoseResult.DEFAULT_DAILY_LIMIT_USV): CumulativeDoseResult {
+        val now = System.currentTimeMillis()
+        val sessionDuration = if (cumulativeDoseStartMs > 0) now - cumulativeDoseStartMs else 0L
+        
+        // Calculate current rate from baseline or last reading
+        val currentRate = if (doseBaseline.mean > 0) doseBaseline.mean else lastDoseReading?.value ?: 0f
+        
+        // Project 24-hour total based on current rate
+        val projectedDaily = currentRate * 24f  // µSv/h * 24h = µSv/day
+        
+        // Calculate hours to reach daily limit
+        val remaining = dailyLimitMicroSv - cumulativeDoseMicroSv
+        val hoursToLimit = if (currentRate > 0 && remaining > 0) {
+            remaining / currentRate
+        } else {
+            Float.POSITIVE_INFINITY
+        }
+        
+        // Percentage of daily limit
+        val percentOfLimit = (cumulativeDoseMicroSv / dailyLimitMicroSv) * 100f
+        
+        return CumulativeDoseResult(
+            totalMicroSv = cumulativeDoseMicroSv,
+            sessionDurationMs = sessionDuration,
+            currentRateMicroSvPerHour = currentRate,
+            projectedDailyMicroSv = projectedDaily,
+            hoursToLimit = hoursToLimit,
+            percentOfDailyLimit = percentOfLimit
+        )
+    }
+    
+    /**
+     * Reset cumulative dose counter (e.g., at midnight or user request).
+     */
+    @Synchronized
+    fun resetCumulativeDose() {
+        cumulativeDoseMicroSv = 0f
+        cumulativeDoseStartMs = System.currentTimeMillis()
+        lastCumulativeDoseUpdateMs = cumulativeDoseStartMs
+        Log.d(TAG, "Cumulative dose counter reset")
+    }
+    
+    /**
+     * Update cumulative dose based on time elapsed since last update.
+     * Called internally by addReading.
+     */
+    private fun updateCumulativeDose(doseRate: Float, timestampMs: Long) {
+        // Initialize if this is first reading
+        if (cumulativeDoseStartMs == 0L) {
+            cumulativeDoseStartMs = timestampMs
+            lastCumulativeDoseUpdateMs = timestampMs
+            return
+        }
+        
+        // Calculate time delta in hours
+        val deltaMs = timestampMs - lastCumulativeDoseUpdateMs
+        if (deltaMs <= 0) return
+        
+        val deltaHours = deltaMs / (1000f * 60f * 60f)  // ms to hours
+        
+        // Accumulate dose: µSv/h * hours = µSv
+        val doseAccumulated = doseRate * deltaHours
+        cumulativeDoseMicroSv += doseAccumulated
+        lastCumulativeDoseUpdateMs = timestampMs
+    }
+    
+    /**
+     * Update proximity tracking buffer.
+     * Called internally by addReading.
+     */
+    private fun updateProximityBuffer(doseRate: Float, timestampMs: Long) {
+        if (proximityReadings.size >= PROXIMITY_BUFFER_SIZE) {
+            proximityReadings.removeFirst()
+        }
+        proximityReadings.addLast(TimestampedValue(doseRate, timestampMs))
+    }
+    
+    /**
+     * Estimate source proximity using inverse-square law analysis (Feature #8).
+     * 
+     * This analyzes the rate of change of dose readings to estimate:
+     * 1. Whether you're approaching or moving away from a source
+     * 2. Approximate distance (assuming point source)
+     * 3. Predicted dose at closest approach
+     * 
+     * @param backgroundRate The known background radiation level (to subtract)
+     * @return SourceProximityResult with estimates and recommendations
+     */
+    @Synchronized
+    fun estimateSourceProximity(backgroundRate: Float = 0.1f): SourceProximityResult {
+        val readings = proximityReadings.toList()
+        
+        // Need minimum samples for analysis
+        if (readings.size < MIN_APPROACHING_SAMPLES) {
+            return SourceProximityResult.UNKNOWN
+        }
+        
+        // Check if we're consistently approaching (dose increasing)
+        val recent = readings.takeLast(MIN_APPROACHING_SAMPLES)
+        var approachingCount = 0
+        for (i in 1 until recent.size) {
+            if (recent[i].value > recent[i-1].value) {
+                approachingCount++
+            }
+        }
+        
+        val isApproaching = approachingCount >= MIN_APPROACHING_SAMPLES - 1
+        
+        // Calculate rate of change
+        val first = readings.first()
+        val last = readings.last()
+        val deltaTime = (last.timestampMs - first.timestampMs) / 1000f  // seconds
+        if (deltaTime <= 0) return SourceProximityResult.UNKNOWN
+        
+        val deltaRate = last.value - first.value
+        val rateOfChange = deltaRate / deltaTime  // µSv/h per second
+        
+        // Subtract background to get net dose from source
+        val netFirst = (first.value - backgroundRate).coerceAtLeast(0.001f)
+        val netLast = (last.value - backgroundRate).coerceAtLeast(0.001f)
+        
+        // Using inverse-square law: I1/I2 = (r2/r1)²
+        // So: r1/r2 = sqrt(I2/I1)
+        // If we assume walking speed ~1 m/s, we can estimate distances
+        val intensityRatio = netLast / netFirst
+        
+        var estimatedDistance = Float.NaN
+        var approachRate = 0f
+        var predictedPeak = 0f
+        var timeToClosest = Float.NaN
+        var confidence = SourceProximityResult.Confidence.NONE
+        var recommendation = "Insufficient data for proximity estimation"
+        
+        if (isApproaching && intensityRatio > 1.0f) {
+            // We're approaching - dose is increasing
+            val distanceRatio = 1f / sqrt(intensityRatio)  // r_now / r_before
+            
+            // Assuming average walking speed of 1 m/s and given time interval
+            val assumedDistanceTraversed = deltaTime * 1.0f  // meters (assuming 1 m/s)
+            approachRate = assumedDistanceTraversed / deltaTime
+            
+            // Estimate current distance based on rate of increase
+            // Higher rate of change = closer to source
+            // This is a rough estimate - real-world factors vary greatly
+            if (rateOfChange > 0.01f) {
+                // Very rough heuristic: distance ∝ 1/sqrt(rate_of_change)
+                // Calibrated so 0.1 µSv/h/s change suggests ~1m distance
+                estimatedDistance = (0.1f / rateOfChange) * 3.0f  // Very rough estimate
+                estimatedDistance = estimatedDistance.coerceIn(0.1f, 100f)
+            }
+            
+            // Predict peak based on trajectory
+            // If intensity is rising by R per second, and using inverse square...
+            // Peak will be much higher at closest approach
+            if (estimatedDistance > 0.1f) {
+                // Assume closest approach might be 0.5m (arm's length)
+                val closestApproach = 0.5f
+                val peakFactor = (estimatedDistance / closestApproach).let { it * it }  // inverse square
+                predictedPeak = netLast * peakFactor + backgroundRate
+                predictedPeak = predictedPeak.coerceAtMost(netLast * 100f)  // Cap at 100x current
+                
+                // Time to closest
+                timeToClosest = (estimatedDistance - closestApproach) / approachRate
+                timeToClosest = timeToClosest.coerceAtLeast(0f)
+            }
+            
+            // Set confidence based on data quality
+            confidence = when {
+                readings.size >= 8 && approachingCount >= 6 -> SourceProximityResult.Confidence.HIGH
+                readings.size >= 5 && approachingCount >= 3 -> SourceProximityResult.Confidence.MEDIUM
+                else -> SourceProximityResult.Confidence.LOW
+            }
+            
+            recommendation = when {
+                predictedPeak > 10f -> "⚠️ High source activity. Exercise caution."
+                predictedPeak > 1f -> "Source detected ahead. Current trajectory is safe."
+                else -> "Approaching weak source. Continue monitoring."
+            }
+            
+        } else if (!isApproaching && intensityRatio < 1.0f) {
+            // Moving away from source
+            confidence = SourceProximityResult.Confidence.LOW
+            recommendation = "Moving away from source. Dose rate decreasing."
+        }
+        
+        return SourceProximityResult(
+            isApproaching = isApproaching,
+            estimatedDistanceMeters = estimatedDistance,
+            confidenceLevel = confidence,
+            approachRateMetersPerSec = approachRate,
+            predictedPeakDoseRate = predictedPeak,
+            predictedTimeToClosest = timeToClosest,
+            recommendation = recommendation
+        )
+    }
 
     /**
      * Evaluate statistical triggers against configured thresholds.
@@ -419,6 +714,48 @@ class StatisticalEngine(private val context: Context) {
             }
         }
         
+        // Predictive threshold crossing - alert BEFORE user thresholds are hit
+        if (config.predictiveCrossingEnabled && config.userAlertThresholds.isNotEmpty()) {
+            val roc = doseSnapshot.rateOfChange
+            // Only predict if we're rising
+            if (roc.trend == RateOfChangeResult.TrendDirection.RISING && roc.ratePerSecond > 0) {
+                val current = doseSnapshot.currentValue
+                
+                for (threshold in config.userAlertThresholds) {
+                    // Skip if we're already above this threshold
+                    if (current >= threshold) continue
+                    
+                    // Calculate time to reach threshold using current rate
+                    val timeToThresholdSeconds = (threshold - current) / roc.ratePerSecond
+                    
+                    // Warn if we'll cross within the warning window
+                    if (timeToThresholdSeconds > 0 && timeToThresholdSeconds <= config.predictiveCrossingWarningSeconds) {
+                        val minutes = (timeToThresholdSeconds / 60).toInt()
+                        val seconds = (timeToThresholdSeconds % 60).toInt()
+                        val timeStr = if (minutes > 0) {
+                            "$minutes minute${if (minutes > 1) "s" else ""} ${seconds} second${if (seconds != 1) "s" else ""}"
+                        } else {
+                            "$seconds second${if (seconds != 1) "s" else ""}"
+                        }
+                        
+                        triggers.add(StatisticalTrigger(
+                            type = StatisticalTrigger.TriggerType.PREDICTIVE_CROSSING,
+                            severity = if (timeToThresholdSeconds < 30) 
+                                StatisticalTrigger.TriggerSeverity.ALERT 
+                            else 
+                                StatisticalTrigger.TriggerSeverity.WARNING,
+                            message = "At current rate, you will exceed ${String.format("%.2f", threshold)} µSv/h in approximately $timeStr",
+                            confidence = min(1f, (config.predictiveCrossingWarningSeconds.toFloat() - timeToThresholdSeconds) / config.predictiveCrossingWarningSeconds),
+                            detectedValue = current,
+                            thresholdValue = threshold,
+                            timestampMs = doseSnapshot.timestampMs
+                        ))
+                        break  // Only alert for the nearest threshold
+                    }
+                }
+            }
+        }
+        
         return triggers
     }
 
@@ -445,7 +782,20 @@ class StatisticalEngine(private val context: Context) {
         lastCpsReading = null
         doseRocDirection = 0
         cpsRocDirection = 0
+        proximityReadings.clear()
+        // Note: We intentionally DON'T reset cumulative dose on engine reset
+        // Use resetCumulativeDose() explicitly if needed
         Log.d(TAG, "Statistical engine reset")
+    }
+
+    /**
+     * Full reset including cumulative dose (call for complete fresh start).
+     */
+    @Synchronized
+    fun fullReset() {
+        reset()
+        resetCumulativeDose()
+        Log.d(TAG, "Statistical engine full reset (including cumulative dose)")
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -769,7 +1119,11 @@ class StatisticalEngine(private val context: Context) {
         val rocThresholdPercent: Float = 5f,         // Alert at 5%/second change
         val cusumEnabled: Boolean = true,
         val forecastEnabled: Boolean = false,
-        val forecastThreshold: Float = 0f            // µSv/h threshold for forecast alert
+        val forecastThreshold: Float = 0f,           // µSv/h threshold for forecast alert
+        // Predictive threshold crossing: warn before hitting user-configured alert thresholds
+        val predictiveCrossingEnabled: Boolean = true,
+        val predictiveCrossingWarningSeconds: Int = 60,  // Warn this many seconds before crossing
+        val userAlertThresholds: List<Float> = emptyList()  // User's alert thresholds (µSv/h)
     )
 
     /**

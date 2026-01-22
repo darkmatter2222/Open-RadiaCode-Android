@@ -108,6 +108,8 @@ object Prefs {
     private const val KEY_STATISTICAL_FORECAST_ENABLED = "statistical_forecast_enabled"
     private const val KEY_STATISTICAL_FORECAST_THRESHOLD = "statistical_forecast_threshold"
     private const val KEY_STATISTICAL_VOICE_ENABLED = "statistical_voice_enabled"
+    private const val KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED = "statistical_predictive_crossing_enabled"
+    private const val KEY_STATISTICAL_PREDICTIVE_CROSSING_SECONDS = "statistical_predictive_crossing_seconds"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -2465,6 +2467,38 @@ object Prefs {
     }
     
     /**
+     * Check if predictive threshold crossing alerts are enabled.
+     * This warns users BEFORE they will hit configured alert thresholds.
+     */
+    fun isStatisticalPredictiveCrossingEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED, true)  // Enabled by default
+    }
+    
+    fun setStatisticalPredictiveCrossingEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get how far ahead (in seconds) to warn about threshold crossing.
+     * Default is 60 seconds.
+     */
+    fun getStatisticalPredictiveCrossingSeconds(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_STATISTICAL_PREDICTIVE_CROSSING_SECONDS, 60)
+    }
+    
+    fun setStatisticalPredictiveCrossingSeconds(context: Context, seconds: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_STATISTICAL_PREDICTIVE_CROSSING_SECONDS, seconds.coerceIn(10, 300))
+            .apply()
+    }
+    
+    /**
      * Get a summary of statistical intelligence settings for UI display.
      */
     fun getStatisticalIntelligenceSummary(context: Context): String {
@@ -2473,6 +2507,7 @@ object Prefs {
         if (isStatisticalRocEnabled(context)) enabled.add("ROC")
         if (isStatisticalCusumEnabled(context)) enabled.add("CUSUM")
         if (isStatisticalForecastEnabled(context)) enabled.add("Forecast")
+        if (isStatisticalPredictiveCrossingEnabled(context)) enabled.add("Predictive")
         return if (enabled.isEmpty()) "All off" else enabled.joinToString(", ")
     }
 }

@@ -318,6 +318,13 @@ class AlertEvaluator(private val context: Context) {
      * Load statistical alert configuration from preferences.
      */
     private fun loadStatisticalConfig(): StatisticalEngine.StatisticalAlertConfig {
+        // Extract user-configured "above" thresholds for dose alerts
+        val userAlerts = Prefs.getSmartAlerts(context)
+            .filter { it.enabled && it.metric == "dose" && it.condition == "above" }
+            .map { it.threshold.toFloat() }
+            .distinct()
+            .sorted()
+        
         return StatisticalEngine.StatisticalAlertConfig(
             zScoreEnabled = Prefs.isStatisticalZScoreEnabled(context),
             zScoreSigmaThreshold = Prefs.getStatisticalZScoreSigma(context),
@@ -325,7 +332,10 @@ class AlertEvaluator(private val context: Context) {
             rocThresholdPercent = Prefs.getStatisticalRocThreshold(context),
             cusumEnabled = Prefs.isStatisticalCusumEnabled(context),
             forecastEnabled = Prefs.isStatisticalForecastEnabled(context),
-            forecastThreshold = Prefs.getStatisticalForecastThreshold(context)
+            forecastThreshold = Prefs.getStatisticalForecastThreshold(context),
+            predictiveCrossingEnabled = Prefs.isStatisticalPredictiveCrossingEnabled(context),
+            predictiveCrossingWarningSeconds = Prefs.getStatisticalPredictiveCrossingSeconds(context),
+            userAlertThresholds = userAlerts
         )
     }
     
@@ -464,6 +474,11 @@ class AlertEvaluator(private val context: Context) {
                 val predicted = doseSnapshot.forecast60s.predictedValue
                 "Predictive analysis indicates dose rate will reach ${String.format("%.3f", predicted)} microsieverts per hour within 60 seconds based on current trajectory."
             }
+            
+            StatisticalEngine.StatisticalTrigger.TriggerType.PREDICTIVE_CROSSING -> {
+                // Use the message from the trigger which contains the time estimate
+                trigger.message
+            }
         }
     }
 }
@@ -472,5 +487,5 @@ class AlertEvaluator(private val context: Context) {
  * Extension function to check if any statistical alerts are enabled.
  */
 private fun StatisticalEngine.StatisticalAlertConfig.anyEnabled(): Boolean {
-    return zScoreEnabled || rocEnabled || cusumEnabled || forecastEnabled
+    return zScoreEnabled || rocEnabled || cusumEnabled || forecastEnabled || predictiveCrossingEnabled
 }
