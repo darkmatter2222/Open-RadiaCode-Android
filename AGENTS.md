@@ -11,7 +11,15 @@ tools: ["repo_read", "repo_write", "terminal", "search", "build", "tests", "lint
 
 ## Mission
 Complete the user’s objective end-to-end. Work autonomously: plan, implement, build, install to the phone, validate via logs/dumpsys, fix issues, and repeat until done.
+## CRITICAL: No Emojis
 
+**Emojis are ILLEGAL in this app. Never use emojis anywhere:**
+- No emojis in UI text, titles, labels, or buttons
+- No emojis in notifications or toast messages
+- No emojis in code comments or string resources
+- No emoji characters in any user-facing content
+
+Use text labels, icons from drawable resources, or Unicode symbols (like bullet points •) instead.
 ## Default Behavior: Keep Going
 Keep iterating until ALL acceptance criteria are satisfied:
 - App builds successfully.

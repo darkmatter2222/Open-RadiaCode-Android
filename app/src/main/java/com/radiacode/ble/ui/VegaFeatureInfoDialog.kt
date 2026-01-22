@@ -53,13 +53,11 @@ class VegaFeatureInfoDialog(
      */
     enum class VegaFeature(
         val title: String,
-        val icon: String,
         val audioResName: String,  // Resource name for pre-baked audio
         val explanation: String
     ) {
         ZSCORE(
             title = "Z-Score Anomaly Detection",
-            icon = "📊",
             audioResName = "vega_info_zscore",
             explanation = """
 Z-Score anomaly detection is your mathematical guardian against unexpected radiation changes.
@@ -94,7 +92,6 @@ CONS
         
         ROC(
             title = "Rate of Change Detection",
-            icon = "📈",
             audioResName = "vega_info_roc",
             explanation = """
 Rate of Change detection monitors how rapidly your radiation levels are shifting.
@@ -129,7 +126,6 @@ CONS
         
         CUSUM(
             title = "CUSUM Change Detection",
-            icon = "📉",
             audioResName = "vega_info_cusum",
             explanation = """
 CUSUM, or Cumulative Sum, detects subtle persistent shifts that other methods miss.
@@ -162,7 +158,6 @@ CONS
         
         FORECAST(
             title = "Holt-Winters Forecasting",
-            icon = "🔮",
             audioResName = "vega_info_forecast",
             explanation = """
 The Holt-Winters forecasting system predicts where your radiation levels are heading.
@@ -198,7 +193,6 @@ CONS
         
         PREDICTIVE_CROSSING(
             title = "Predictive Threshold Crossing",
-            icon = "⏰",
             audioResName = "vega_info_predictive",
             explanation = """
 Predictive Threshold Crossing warns you before you hit your configured Smart Alert thresholds.
@@ -237,7 +231,6 @@ CONS
         
         VOICE(
             title = "VEGA Voice Announcements",
-            icon = "🔊",
             audioResName = "vega_info_voice",
             explanation = """
 VEGA Voice brings statistical intelligence to life through spoken announcements.
@@ -334,31 +327,6 @@ CONS
             }
         }
         
-        // Title row with icon
-        val titleRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = (8 * density).toInt()
-            }
-        }
-        
-        // Feature icon
-        val iconText = TextView(context).apply {
-            text = feature.icon
-            textSize = 28f
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                rightMargin = (12 * density).toInt()
-            }
-        }
-        titleRow.addView(iconText)
-        
         // Title
         val titleText = TextView(context).apply {
             text = feature.title
@@ -366,12 +334,13 @@ CONS
             setTextColor(Color.parseColor("#00E5FF"))  // Cyan accent
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
         }
-        titleRow.addView(titleText)
-        contentLayout.addView(titleRow)
+        contentLayout.addView(titleText)
         
         // Subtitle
         val subtitle = TextView(context).apply {
