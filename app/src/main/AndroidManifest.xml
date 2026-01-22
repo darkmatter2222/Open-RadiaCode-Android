@@ -86,6 +86,11 @@
             android:label="Isotope Settings" />
 
         <activity
+            android:name=".VegaStatisticalSettingsActivity"
+            android:exported="false"
+            android:label="VEGA Intelligence" />
+
+        <activity
             android:name=".WidgetConfigActivity"
             android:exported="true"
             android:theme="@style/Theme.RadiaCode"

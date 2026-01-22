@@ -2168,6 +2168,65 @@
                                     app:tint="@color/pro_text_muted" />
                             </LinearLayout>
 
+                            <FrameLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- VEGA Intelligence -->
+                            <LinearLayout
+                                android:id="@+id/rowVegaIntelligence"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="VEGA Intelligence"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Statistical analysis &amp; forecasting"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueVegaIntelligence"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="All off"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
                         </LinearLayout>
                     </LinearLayout>
 

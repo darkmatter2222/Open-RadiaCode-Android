@@ -2343,7 +2343,7 @@ object Prefs {
      */
     fun isStatisticalZScoreEnabled(context: Context): Boolean {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_STATISTICAL_ZSCORE_ENABLED, true)  // Enabled by default
+            .getBoolean(KEY_STATISTICAL_ZSCORE_ENABLED, false)  // Disabled by default - enable in VEGA settings
     }
     
     fun setStatisticalZScoreEnabled(context: Context, enabled: Boolean) {
@@ -2375,7 +2375,7 @@ object Prefs {
      */
     fun isStatisticalRocEnabled(context: Context): Boolean {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_STATISTICAL_ROC_ENABLED, true)  // Enabled by default
+            .getBoolean(KEY_STATISTICAL_ROC_ENABLED, false)  // Disabled by default - enable in VEGA settings
     }
     
     fun setStatisticalRocEnabled(context: Context, enabled: Boolean) {
@@ -2407,7 +2407,7 @@ object Prefs {
      */
     fun isStatisticalCusumEnabled(context: Context): Boolean {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_STATISTICAL_CUSUM_ENABLED, true)  // Enabled by default
+            .getBoolean(KEY_STATISTICAL_CUSUM_ENABLED, false)  // Disabled by default - enable in VEGA settings
     }
     
     fun setStatisticalCusumEnabled(context: Context, enabled: Boolean) {
@@ -2456,7 +2456,7 @@ object Prefs {
      */
     fun isStatisticalVoiceEnabled(context: Context): Boolean {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_STATISTICAL_VOICE_ENABLED, true)  // Enabled by default (if VEGA TTS is enabled)
+            .getBoolean(KEY_STATISTICAL_VOICE_ENABLED, false)  // Disabled by default - enable in VEGA settings
     }
     
     fun setStatisticalVoiceEnabled(context: Context, enabled: Boolean) {
@@ -2472,7 +2472,7 @@ object Prefs {
      */
     fun isStatisticalPredictiveCrossingEnabled(context: Context): Boolean {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getBoolean(KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED, true)  // Enabled by default
+            .getBoolean(KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED, false)  // Disabled by default - enable in VEGA settings
     }
     
     fun setStatisticalPredictiveCrossingEnabled(context: Context, enabled: Boolean) {

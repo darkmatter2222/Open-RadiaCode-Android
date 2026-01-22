@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowPause: View
     private lateinit var rowSpikePercentages: View
     private lateinit var rowSmartAlerts: View
+    private lateinit var rowVegaIntelligence: View
     private lateinit var rowTrendArrows: View
     private lateinit var rowIsotopeSettings: View
 
@@ -193,6 +194,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valueUnits: TextView
     private lateinit var valuePause: TextView
     private lateinit var valueSmartAlerts: TextView
+    private lateinit var valueVegaIntelligence: TextView
     private lateinit var valueTrendArrows: TextView
     private lateinit var valueNotificationStyle: TextView
     private lateinit var valueIsotopeSettings: TextView
@@ -780,6 +782,7 @@ class MainActivity : AppCompatActivity() {
         rowUnits = findViewById(R.id.rowUnits)
         rowPause = findViewById(R.id.rowPause)
         rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
+        rowVegaIntelligence = findViewById(R.id.rowVegaIntelligence)
         rowTrendArrows = findViewById(R.id.rowTrendArrows)
         rowIsotopeSettings = findViewById(R.id.rowIsotopeSettings)
 
@@ -790,6 +793,7 @@ class MainActivity : AppCompatActivity() {
         valueUnits = findViewById(R.id.valueUnits)
         valuePause = findViewById(R.id.valuePause)
         valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
+        valueVegaIntelligence = findViewById(R.id.valueVegaIntelligence)
         valueTrendArrows = findViewById(R.id.valueTrendArrows)
         valueIsotopeSettings = findViewById(R.id.valueIsotopeSettings)
         valueNotificationStyle = findViewById(R.id.valueNotificationStyle)
@@ -1050,6 +1054,10 @@ class MainActivity : AppCompatActivity() {
 
         rowSmartAlerts.setOnClickListener {
             startActivity(Intent(this, AlertConfigActivity::class.java))
+        }
+        
+        rowVegaIntelligence.setOnClickListener {
+            startActivity(Intent(this, VegaStatisticalSettingsActivity::class.java))
         }
         
         rowIsotopeSettings.setOnClickListener {
@@ -2724,6 +2732,13 @@ class MainActivity : AppCompatActivity() {
         valueSmartAlerts.text = if (enabledCount == 0) "None" else "$enabledCount active"
         valueSmartAlerts.setTextColor(ContextCompat.getColor(this,
             if (enabledCount > 0) R.color.pro_amber else R.color.pro_text_muted))
+        
+        // VEGA Intelligence
+        val vegaSummary = Prefs.getStatisticalIntelligenceSummary(this)
+        valueVegaIntelligence.text = vegaSummary
+        val vegaEnabled = vegaSummary != "All off"
+        valueVegaIntelligence.setTextColor(ContextCompat.getColor(this,
+            if (vegaEnabled) R.color.pro_cyan else R.color.pro_text_muted))
         
         // Notification style
         val notifStyle = Prefs.getNotificationStyle(this)
