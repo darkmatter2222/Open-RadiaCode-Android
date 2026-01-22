@@ -2,6 +2,7 @@ package com.radiacode.ble
 
 import android.os.Bundle
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
@@ -9,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.radiacode.ble.ui.VegaFeatureInfoDialog
 
 /**
  * Settings activity for VEGA Statistical Intelligence.
@@ -36,6 +38,7 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var zScoreSigmaSeek: SeekBar
     private lateinit var zScoreSigmaValue: TextView
     private lateinit var zScoreDescription: TextView
+    private lateinit var zScoreInfoBtn: ImageView
     
     // Rate of Change
     private lateinit var rocToggle: SwitchMaterial
@@ -43,10 +46,12 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var rocThresholdSeek: SeekBar
     private lateinit var rocThresholdValue: TextView
     private lateinit var rocDescription: TextView
+    private lateinit var rocInfoBtn: ImageView
     
     // CUSUM
     private lateinit var cusumToggle: SwitchMaterial
     private lateinit var cusumDescription: TextView
+    private lateinit var cusumInfoBtn: ImageView
     
     // Forecast
     private lateinit var forecastToggle: SwitchMaterial
@@ -55,6 +60,7 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var forecastThresholdValue: TextView
     private lateinit var forecastDescription: TextView
     private lateinit var forecastChartToggle: SwitchMaterial
+    private lateinit var forecastInfoBtn: ImageView
     
     // Predictive Crossing
     private lateinit var predictiveToggle: SwitchMaterial
@@ -62,10 +68,12 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var predictiveSecondsSeek: SeekBar
     private lateinit var predictiveSecondsValue: TextView
     private lateinit var predictiveDescription: TextView
+    private lateinit var predictiveInfoBtn: ImageView
     
     // Voice
     private lateinit var voiceToggle: SwitchMaterial
     private lateinit var voiceDescription: TextView
+    private lateinit var voiceInfoBtn: ImageView
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +98,7 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         zScoreSigmaSeek = findViewById(R.id.zScoreSigmaSeek)
         zScoreSigmaValue = findViewById(R.id.zScoreSigmaValue)
         zScoreDescription = findViewById(R.id.zScoreDescription)
+        zScoreInfoBtn = findViewById(R.id.zScoreInfoBtn)
         
         // ROC
         rocToggle = findViewById(R.id.rocToggle)
@@ -97,10 +106,12 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         rocThresholdSeek = findViewById(R.id.rocThresholdSeek)
         rocThresholdValue = findViewById(R.id.rocThresholdValue)
         rocDescription = findViewById(R.id.rocDescription)
+        rocInfoBtn = findViewById(R.id.rocInfoBtn)
         
         // CUSUM
         cusumToggle = findViewById(R.id.cusumToggle)
         cusumDescription = findViewById(R.id.cusumDescription)
+        cusumInfoBtn = findViewById(R.id.cusumInfoBtn)
         
         // Forecast
         forecastToggle = findViewById(R.id.forecastToggle)
@@ -109,6 +120,7 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         forecastThresholdValue = findViewById(R.id.forecastThresholdValue)
         forecastDescription = findViewById(R.id.forecastDescription)
         forecastChartToggle = findViewById(R.id.forecastChartToggle)
+        forecastInfoBtn = findViewById(R.id.forecastInfoBtn)
         
         // Predictive
         predictiveToggle = findViewById(R.id.predictiveToggle)
@@ -116,10 +128,12 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         predictiveSecondsSeek = findViewById(R.id.predictiveSecondsSeek)
         predictiveSecondsValue = findViewById(R.id.predictiveSecondsValue)
         predictiveDescription = findViewById(R.id.predictiveDescription)
+        predictiveInfoBtn = findViewById(R.id.predictiveInfoBtn)
         
         // Voice
         voiceToggle = findViewById(R.id.voiceToggle)
         voiceDescription = findViewById(R.id.voiceDescription)
+        voiceInfoBtn = findViewById(R.id.voiceInfoBtn)
     }
     
     private fun setupToolbar() {
@@ -290,6 +304,30 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         voiceToggle.setOnCheckedChangeListener { _, isChecked ->
             Prefs.setStatisticalVoiceEnabled(this, isChecked)
         }
+        
+        // Info button click handlers
+        zScoreInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ZSCORE) 
+        }
+        rocInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ROC) 
+        }
+        cusumInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.CUSUM) 
+        }
+        forecastInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.FORECAST) 
+        }
+        predictiveInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.PREDICTIVE_CROSSING) 
+        }
+        voiceInfoBtn.setOnClickListener { 
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.VOICE) 
+        }
+    }
+    
+    private fun showFeatureInfo(feature: VegaFeatureInfoDialog.VegaFeature) {
+        VegaFeatureInfoDialog(this, feature).show()
     }
     
     private fun updateZScoreUI(sigma: Int) {

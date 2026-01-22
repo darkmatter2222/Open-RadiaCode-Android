@@ -120,6 +120,8 @@ class AlertConfigActivity : AppCompatActivity() {
                 description = "Radiation level alerts"
                 enableVibration(true)
                 enableLights(true)
+                // Disable system sound - app plays its own sounds via SoundManager/VegaTTS
+                setSound(null, null)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)

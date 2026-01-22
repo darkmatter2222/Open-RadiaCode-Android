@@ -224,6 +224,7 @@ class DangerZoneWarning(private val context: Context) {
             .setColor(ContextCompat.getColor(context, level.colorRes))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setSound(null)  // Disable system sound - app plays its own sounds
             .also { builder ->
                 if (level.severity >= AlertLevel.DANGER.severity) {
                     builder.setOngoing(true)
@@ -257,6 +258,8 @@ class DangerZoneWarning(private val context: Context) {
                 enableVibration(true)
                 enableLights(true)
                 lightColor = ContextCompat.getColor(context, R.color.pro_red)
+                // Disable system sound - app plays its own sounds via SoundManager/VegaTTS
+                setSound(null, null)
             }
             notificationManager.createNotificationChannel(channel)
         }

@@ -209,29 +209,28 @@ class ProChartView @JvmOverloads constructor(
         pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
     }
 
-    // Forecast line paint (VEGA Statistical Intelligence - dotted cyan)
+    // Forecast line paint (VEGA Statistical Intelligence - bright amber/gold dashed)
     private val forecastLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = density * 2.5f
-        color = ContextCompat.getColor(context, R.color.pro_cyan)
-        alpha = 200
-        pathEffect = DashPathEffect(floatArrayOf(density * 6f, density * 4f), 0f)
+        strokeWidth = density * 3f
+        color = Color.parseColor("#FFB300")  // Bright amber - distinct from cyan data
+        pathEffect = DashPathEffect(floatArrayOf(density * 8f, density * 4f), 0f)
     }
     
-    // Forecast confidence interval paint (semi-transparent fill)
+    // Forecast confidence interval paint (semi-transparent amber fill)
     private val forecastConfidencePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        color = ContextCompat.getColor(context, R.color.pro_cyan)
-        alpha = 30
+        color = Color.parseColor("#FFB300")  // Amber
+        alpha = 40
     }
     
-    // Forecast boundary paint (thin dashed lines for upper/lower bounds)
+    // Forecast boundary paint (thin dashed amber lines for upper/lower bounds)
     private val forecastBoundaryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = density * 1f
-        color = ContextCompat.getColor(context, R.color.pro_cyan)
-        alpha = 100
-        pathEffect = DashPathEffect(floatArrayOf(density * 3f, density * 3f), 0f)
+        strokeWidth = density * 1.5f
+        color = Color.parseColor("#FFB300")  // Amber
+        alpha = 120
+        pathEffect = DashPathEffect(floatArrayOf(density * 4f, density * 4f), 0f)
     }
 
     // Mean line paint (solid horizontal line)
@@ -531,13 +530,15 @@ class ProChartView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         // Calculate chart bounds
         val yAxisWidth = density * 44f
+        // Reserve extra space on right for forecast area when enabled
+        val forecastSpace = if (showForecast && forecastPoints.isNotEmpty()) density * 80f else 0f
         val rightAxisWidth = if (hasSecondaryAxis) density * 100f else density * 12f  // Extra wide for secondary axis labels
         val xAxisHeight = density * 24f
         val padding = density * 12f
 
         chartLeft = yAxisWidth
         chartTop = padding
-        chartRight = w - rightAxisWidth
+        chartRight = w - rightAxisWidth - forecastSpace
         chartBottom = h - xAxisHeight
     }
 
@@ -758,7 +759,13 @@ class ProChartView @JvmOverloads constructor(
      * @param points List of forecast points with secondsAhead, predicted, lowerBound, upperBound
      */
     fun setForecast(points: List<ForecastPoint>) {
+        val hadForecast = forecastPoints.isNotEmpty()
+        val hasForecast = points.isNotEmpty()
         this.forecastPoints = points
+        // Request layout if forecast visibility changed (to recalculate chart bounds)
+        if (hadForecast != hasForecast) {
+            requestLayout()
+        }
         invalidate()
     }
     
@@ -766,7 +773,11 @@ class ProChartView @JvmOverloads constructor(
      * Clear forecast display.
      */
     fun clearForecast() {
+        val hadForecast = forecastPoints.isNotEmpty()
         this.forecastPoints = emptyList()
+        if (hadForecast) {
+            requestLayout()  // Reclaim the forecast space
+        }
         invalidate()
     }
     
@@ -1264,16 +1275,15 @@ class ProChartView @JvmOverloads constructor(
         // Draw main forecast line
         canvas.drawPath(forecastPath, forecastLinePaint)
         
-        // Draw "FORECAST" label
+        // Draw "FORECAST" label in amber to match forecast color
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#00E5FF")
+            color = Color.parseColor("#FFB300")  // Amber to match forecast
             textSize = 9f * density
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            alpha = 180
         }
         val labelX = forecastStartX + 4f * density
         val labelY = chartTop + 14f * density
-        canvas.drawText("▶ FORECAST", labelX, labelY, labelPaint)
+        canvas.drawText("▶ VEGA", labelX, labelY, labelPaint)
         
         // Draw time labels for forecast horizon
         val timeLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

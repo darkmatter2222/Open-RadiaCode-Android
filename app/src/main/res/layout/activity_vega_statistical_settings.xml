@@ -129,6 +129,16 @@
                                 android:textSize="12sp" />
                         </LinearLayout>
 
+                        <ImageView
+                            android:id="@+id/zScoreInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Z-Score Info" />
+
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/zScoreToggle"
                             android:layout_width="wrap_content"
@@ -233,6 +243,16 @@
                                 android:textSize="12sp" />
                         </LinearLayout>
 
+                        <ImageView
+                            android:id="@+id/rocInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="ROC Info" />
+
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/rocToggle"
                             android:layout_width="wrap_content"
@@ -336,6 +356,16 @@
                                 android:textSize="12sp" />
                         </LinearLayout>
 
+                        <ImageView
+                            android:id="@+id/cusumInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="CUSUM Info" />
+
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/cusumToggle"
                             android:layout_width="wrap_content"
@@ -399,6 +429,16 @@
                                 android:textColor="@color/pro_text_muted"
                                 android:textSize="12sp" />
                         </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/forecastInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Forecast Info" />
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/forecastToggle"
@@ -524,6 +564,16 @@
                                 android:textSize="12sp" />
                         </LinearLayout>
 
+                        <ImageView
+                            android:id="@+id/predictiveInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Predictive Info" />
+
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/predictiveToggle"
                             android:layout_width="wrap_content"
@@ -637,6 +687,16 @@
                                 android:textColor="@color/pro_text_muted"
                                 android:textSize="12sp" />
                         </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/voiceInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Voice Info" />
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/voiceToggle"

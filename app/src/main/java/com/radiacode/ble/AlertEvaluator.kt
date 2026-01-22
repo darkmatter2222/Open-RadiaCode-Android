@@ -247,6 +247,7 @@ class AlertEvaluator(private val context: Context) {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setVibrate(longArrayOf(0, 500, 200, 500))
+            .setSound(null)  // Disable system sound - app plays its own sounds
             .build()
 
         // Use unique ID based on alert ID
