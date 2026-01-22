@@ -309,10 +309,10 @@ When GPS tracking is enabled, the app will continuously collect location data an
     /**
      * Play the pre-baked GPS warning audio from raw resources.
      * This avoids real-time API calls and ensures consistent playback.
+     * Uses real-time Visualizer API for accurate waveform display.
      */
     private fun playPrebakedWarning() {
         hasSpeechStarted = true
-        waveformView.setUsingRealAudio(false)
         
         try {
             // Release any existing player
@@ -328,10 +328,11 @@ When GPS tracking is enabled, the app will continuously collect location data an
                 )
                 
                 setOnCompletionListener {
-                    // Speech finished - stop waveform animation
+                    // Speech finished - stop visualizer and waveform
                     handler.post {
                         waveformAnimator?.cancel()
                         waveformAnimator = null
+                        visualizer?.enabled = false
                     }
                 }
                 
@@ -343,18 +344,66 @@ When GPS tracking is enabled, the app will continuously collect location data an
                 start()
             }
             
-            // Start waveform animation synced to audio duration
+            // Setup real-time visualizer for accurate waveform
             if (mediaPlayer != null) {
-                startSimulatedWaveform()
+                setupVisualizer()
             } else {
-                // Fallback - audio file not found, just show animation
+                // Fallback - audio file not found, just show simulated animation
                 android.util.Log.w("VegaGpsWarning", "Pre-baked audio not found, using animation only")
+                waveformView.setUsingRealAudio(false)
                 startSimulatedWaveform()
             }
             
         } catch (e: Exception) {
             android.util.Log.e("VegaGpsWarning", "Failed to play pre-baked audio", e)
             // Fallback to just the animation
+            waveformView.setUsingRealAudio(false)
+            startSimulatedWaveform()
+        }
+    }
+    
+    /**
+     * Setup real-time audio visualizer to get actual waveform/FFT data.
+     * This creates the live bar chart effect synchronized with the audio.
+     */
+    private fun setupVisualizer() {
+        try {
+            val audioSessionId = mediaPlayer?.audioSessionId ?: return
+            
+            visualizer = Visualizer(audioSessionId).apply {
+                captureSize = Visualizer.getCaptureSizeRange()[1] // Max capture size
+                setDataCaptureListener(
+                    object : Visualizer.OnDataCaptureListener {
+                        override fun onWaveFormDataCapture(
+                            vis: Visualizer?,
+                            waveform: ByteArray?,
+                            samplingRate: Int
+                        ) {
+                            waveform?.let { waveformView.updateWaveform(it) }
+                        }
+                        
+                        override fun onFftDataCapture(
+                            vis: Visualizer?,
+                            fft: ByteArray?,
+                            samplingRate: Int
+                        ) {
+                            fft?.let { waveformView.updateFft(it) }
+                        }
+                    },
+                    Visualizer.getMaxCaptureRate(),
+                    true,  // Waveform data
+                    true   // FFT data for frequency visualization
+                )
+                enabled = true
+            }
+            
+            // Mark that we have real audio data
+            waveformView.setUsingRealAudio(true)
+        } catch (e: Exception) {
+            // Visualizer requires RECORD_AUDIO permission
+            // Fall back to simulated waveform
+            android.util.Log.e("VegaGpsWarning", "Visualizer setup failed, using simulated waveform", e)
+            waveformView.setUsingRealAudio(false)
             startSimulatedWaveform()
         }
     }
