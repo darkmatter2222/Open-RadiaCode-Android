@@ -461,3 +461,240 @@ See [docs/UI.md](docs/UI.md) for the canonical UI/UX spec including:
 - Component specifications
 - Interaction patterns
 - Navigation structure
+---
+
+## Vega AI Voice System
+
+Vega is the app's radiological awareness AI companion. She provides voice guidance, warnings, and context throughout the user experience.
+
+### Vega TTS API
+
+**Endpoint:** `http://99.122.58.29:443/synthesize`  
+**Method:** POST  
+**Content-Type:** `application/json`  
+**Body:** `{"text": "Your message here"}`  
+**Response:** WAV audio file
+
+### Pre-Baked Audio Pattern (Preferred)
+
+For modal dialogs and predictable UI flows, **pre-bake audio files** instead of making runtime API calls:
+
+1. **Generate audio during development:**
+   ```powershell
+   # Write JSON to temp file (avoids shell escaping issues)
+   $json = '{"text":"Your warning text here."}'
+   $json | Out-File -FilePath "request.json" -Encoding utf8 -NoNewline
+   
+   # Call Vega TTS API
+   curl.exe -X POST "http://99.122.58.29:443/synthesize" `
+     -H "Content-Type: application/json" `
+     -d "@request.json" `
+     -o "app/src/main/res/raw/vega_your_audio.wav"
+   
+   # Clean up
+   Remove-Item "request.json"
+   ```
+
+2. **Store in res/raw:**
+   - Location: `app/src/main/res/raw/`
+   - Naming: `vega_<purpose>.wav` (e.g., `vega_gps_warning.wav`, `vega_intro.wav`)
+
+3. **Play via MediaPlayer:**
+   ```kotlin
+   mediaPlayer = MediaPlayer.create(context, R.raw.vega_gps_warning)?.apply {
+       setAudioAttributes(
+           AudioAttributes.Builder()
+               .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+               .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+               .build()
+       )
+       start()
+   }
+   ```
+
+### Text Guidelines for TTS
+
+When writing text for Vega to speak:
+- **Avoid hyphens** in compound words (write "high accuracy" not "high-accuracy")
+- **Use periods** for natural pauses
+- **Spell out abbreviations** the first time ("GPS" is fine, but avoid "µSv/h")
+- **Keep sentences concise** for clarity
+
+### Real-Time TTS (VegaTTS.kt)
+
+For dynamic content where pre-baking isn't possible, use `VegaTTS.speak()`:
+```kotlin
+VegaTTS.speak(context, "Dynamic message about ${reading} microsieverts per hour")
+```
+
+Only use real-time TTS when the content is truly dynamic (e.g., actual readings, user-specific data).
+
+---
+
+## Modal Dialog Design Patterns
+
+### Standard Modal Structure
+
+All modals follow this visual hierarchy:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  ⚠️  Title Text                                     │  ← Icon + Title row
+├─────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────┐  │
+│  │  ▁▂▃▅▆▇▅▃▂▁▂▃▅▆▇▅▃▂▁▂▃▅▆▇                    │  │  ← Waveform visualizer
+│  └───────────────────────────────────────────────┘  │
+│                                                     │
+│  Body text explaining the situation. Keep it        │  ← Warning/info text
+│  concise but complete.                              │
+│                                                     │
+│                        [Cancel]  [Primary Action]   │  ← Button row (right-aligned)
+└─────────────────────────────────────────────────────┘
+```
+
+### Required Visual Effects
+
+#### 1. Background Blur (Android 12+)
+```kotlin
+window?.apply {
+    addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+    setDimAmount(0.7f)  // 70% dim
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        setBackgroundBlurRadius(25)  // Blur radius in pixels
+    }
+}
+```
+
+#### 2. Card Styling
+```kotlin
+private fun createCardBackground(density: Float): GradientDrawable {
+    return GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 16 * density  // 16dp corners
+        setColor(Color.parseColor("#1A1A1E"))  // pro_surface
+        setStroke((1 * density).toInt(), Color.parseColor("#2A2A2E"))  // pro_border
+    }
+}
+```
+
+#### 3. Waveform Visualizer Integration
+
+Every modal with Vega voice MUST include a `WaveformVisualizerView`:
+
+```kotlin
+// Container with subtle border
+val waveformContainer = FrameLayout(context).apply {
+    layoutParams = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        (80 * density).toInt()  // 80dp height for modals (140dp for full-screen intros)
+    ).apply {
+        bottomMargin = (16 * density).toInt()
+    }
+    background = createWaveformBackground(density)  // #121216 fill, #2A2A2E border
+}
+
+// Waveform view
+waveformView = WaveformVisualizerView(context).apply {
+    layoutParams = FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT
+    ).apply {
+        // 2dp inset from container border
+        leftMargin = (2 * density).toInt()
+        rightMargin = (2 * density).toInt()
+        topMargin = (2 * density).toInt()
+        bottomMargin = (2 * density).toInt()
+    }
+}
+waveformContainer.addView(waveformView)
+```
+
+#### 4. Real-Time Audio Visualization
+
+Use Android's `Visualizer` API to sync waveform with actual audio:
+
+```kotlin
+private fun setupVisualizer() {
+    val audioSessionId = mediaPlayer?.audioSessionId ?: return
+    
+    visualizer = Visualizer(audioSessionId).apply {
+        captureSize = Visualizer.getCaptureSizeRange()[1]  // Max capture size
+        setDataCaptureListener(
+            object : Visualizer.OnDataCaptureListener {
+                override fun onWaveFormDataCapture(
+                    vis: Visualizer?, waveform: ByteArray?, samplingRate: Int
+                ) {
+                    waveform?.let { waveformView.updateWaveform(it) }
+                }
+                
+                override fun onFftDataCapture(
+                    vis: Visualizer?, fft: ByteArray?, samplingRate: Int
+                ) {
+                    fft?.let { waveformView.updateFft(it) }
+                }
+            },
+            Visualizer.getMaxCaptureRate(),
+            true,  // Capture waveform
+            true   // Capture FFT for frequency bars
+        )
+        enabled = true
+    }
+    waveformView.setUsingRealAudio(true)
+}
+```
+
+**Fallback:** If Visualizer fails (missing RECORD_AUDIO permission), use simulated waveform:
+```kotlin
+waveformView.setUsingRealAudio(false)
+// Generate random animation data
+```
+
+### Button Styling
+
+```kotlin
+private fun createButtonBackground(density: Float, isPrimary: Boolean): GradientDrawable {
+    return GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = 20 * density  // Pill-shaped
+        if (isPrimary) {
+            setStroke((1 * density).toInt(), Color.parseColor("#00E5FF"))  // Cyan border
+            setColor(Color.parseColor("#1A2A30"))  // Subtle cyan tint
+        } else {
+            setStroke((1 * density).toInt(), Color.parseColor("#3A3A3E"))
+            setColor(Color.parseColor("#1A1A1E"))
+        }
+    }
+}
+```
+
+### Modal Title Colors by Type
+
+| Modal Type | Icon | Title Color |
+|------------|------|-------------|
+| Warning | ⚠️ | `#FFD600` (pro_yellow) |
+| Error/Alert | 🚨 | `#FF5252` (pro_red) |
+| Info/Welcome | 💡 | `#00E5FF` (pro_cyan) |
+| Success | ✅ | `#69F0AE` (pro_green) |
+
+### Complete Modal Checklist
+
+When creating a new modal dialog:
+
+- [ ] Extend `Dialog` with `R.style.Theme_RadiaCode_Dialog_FullScreen`
+- [ ] Add blur effect (`setBackgroundBlurRadius(25)`) for Android 12+
+- [ ] Add dim effect (`setDimAmount(0.7f)`)
+- [ ] Use `#1A1A1E` card background with `#2A2A2E` border
+- [ ] Include `WaveformVisualizerView` if Vega speaks
+- [ ] Setup `Visualizer` for real-time audio visualization
+- [ ] Pre-bake audio file if content is static
+- [ ] Right-align buttons (Cancel left, Primary right)
+- [ ] Use appropriate title color for modal type
+- [ ] Clean up MediaPlayer, Visualizer, and animations in `onStop()`
+- [ ] Prevent dismiss on outside touch (`setCanceledOnTouchOutside(false)`)
+
+### Reference Implementations
+
+- **Full-screen intro:** `VegaIntroDialog.kt` (scrolling text, ambient audio, 140dp waveform)
+- **Warning modal:** `VegaGpsWarningDialog.kt` (compact, blur, 80dp waveform)
+
+---

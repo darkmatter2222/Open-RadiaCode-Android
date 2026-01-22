@@ -314,3 +314,175 @@ Full wizard for configuring 0-10 statistical alerts:
 - Real-time streaming mode for continuous identification
 - Configurable probability vs fraction display
 - Isotope settings activity to enable/disable individual isotopes
+---
+
+## Modal Dialogs
+
+### Design Principles
+
+Modals interrupt the user flow to communicate important information or request a decision. They must:
+1. **Demand attention** — Blur and dim the background
+2. **Communicate clearly** — Use appropriate iconography and color
+3. **Provide Vega context** — Include waveform visualization when Vega speaks
+4. **Offer clear actions** — Right-aligned buttons with obvious primary action
+
+### Visual Specifications
+
+#### Background Treatment
+- **Dim amount:** 70% (`setDimAmount(0.7f)`)
+- **Blur radius:** 25px (Android 12+ via `setBackgroundBlurRadius(25)`)
+- **Fallback:** Solid dim for Android < 12
+
+#### Card Container
+```
+Background:    #1A1A1E (pro_surface)
+Border:        #2A2A2E (pro_border), 1dp
+Corner radius: 16dp
+Padding:       20dp horizontal, 24dp top, 20dp bottom
+Margin:        16dp from screen edges, 48dp from top/bottom
+```
+
+#### Title Row
+```
+Icon size:     24sp emoji or 24dp vector
+Title size:    20sp, sans-serif-medium, BOLD
+Title colors:
+  - Warning:   #FFD600 (pro_yellow)
+  - Error:     #FF5252 (pro_red)
+  - Info:      #00E5FF (pro_cyan)
+  - Success:   #69F0AE (pro_green)
+Spacing:       12dp between icon and title
+Bottom margin: 16dp
+```
+
+#### Waveform Visualizer
+```
+Container height:  80dp (modals) / 140dp (full-screen intros)
+Container bg:      #121216 with #2A2A2E border, 12dp corners
+Waveform inset:    2dp from container edges
+Bottom margin:     16dp
+```
+
+The waveform MUST use real-time audio data via Android's `Visualizer` API when Vega is speaking. This creates a synchronized bar-chart animation that represents her voice.
+
+#### Body Text
+```
+Size:          14sp
+Color:         #E8E8F0
+Line spacing:  1.4x
+Font:          sans-serif, regular
+Bottom margin: 24dp
+```
+
+#### Buttons
+```
+Height:        Auto (12dp vertical padding)
+Corner radius: 20dp (pill-shaped)
+Font:          15sp, sans-serif-medium
+
+Primary button:
+  - Text color: #00E5FF (pro_cyan)
+  - Background: #1A2A30 (subtle cyan tint)
+  - Border:     #00E5FF, 1dp
+
+Secondary button:
+  - Text color: #9E9EA8 (pro_text_secondary)
+  - Background: #1A1A1E
+  - Border:     #3A3A3E, 1dp
+
+Alignment:     Right-aligned (Cancel left, Primary right)
+Spacing:       12dp between buttons
+```
+
+### Modal Types
+
+#### 1. Warning Modal (VegaGpsWarningDialog)
+Used when user is about to enable a feature with significant consequences.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  ⚠️  GPS Tracking Warning                           │
+├─────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────┐  │
+│  │  ▁▂▃▅▆▇▅▃▂▁ [real-time waveform] ▁▂▃▅▆▇▅▃▂▁  │  │
+│  └───────────────────────────────────────────────┘  │
+│                                                     │
+│  Enabling high accuracy GPS tracking will           │
+│  significantly impact battery life.                 │
+│                                                     │
+│  This feature records your radiological journey     │
+│  with precise location data...                      │
+│                                                     │
+│                         [Cancel]  [I understand...] │
+└─────────────────────────────────────────────────────┘
+```
+
+Features:
+- Yellow title (warning color)
+- Pre-baked Vega audio (`vega_gps_warning.wav`)
+- Real-time `Visualizer` waveform synced to audio
+- Two-button layout (cancel + confirm)
+
+#### 2. Introduction Modal (VegaIntroDialog)
+Full-screen welcome experience when app first launches.
+
+```
+┌────────────────────────────────────────────────────────┐
+│                                                        │
+│           Welcome to Open RadiaCode                    │
+│      Introducing Vega, your radiological companion     │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  ▁▂▃▅▆▇▅▃▂▁ [140dp tall waveform] ▁▂▃▅▆▇▅▃▂▁▂▃  │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│              [Auto-scrolling transcript]               │
+│                                                        │
+│                   Hello. I am Vega...                  │
+│                                                        │
+│                                                        │
+│                   [Skip Introduction]                  │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+Features:
+- Full-screen with `#0D0D0F` background
+- Centered cyan title
+- 140dp waveform container
+- Auto-scrolling text synced to audio duration
+- Ambient background audio (5% → 17% → ducked)
+- Single button (Skip → Close → Begin)
+
+#### 3. Confirmation Modal (Generic Pattern)
+For simple yes/no decisions without Vega voice.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  💡  Clear All Data?                                │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  This will remove all recorded readings and         │
+│  reset your session statistics.                     │
+│                                                     │
+│                            [Cancel]  [Clear Data]   │
+└─────────────────────────────────────────────────────┘
+```
+
+Features:
+- No waveform (no Vega voice)
+- Appropriate icon/color for action type
+- Concise explanation
+- Clear button labels describing the action
+
+### Audio Integration
+
+When a modal includes Vega's voice:
+
+1. **Pre-bake audio** for static content (store in `res/raw/vega_*.wav`)
+2. **Setup Visualizer** attached to MediaPlayer's audio session
+3. **Feed real data** to WaveformVisualizerView (`updateWaveform()`, `updateFft()`)
+4. **Fallback gracefully** if RECORD_AUDIO permission unavailable
+5. **Clean up** MediaPlayer and Visualizer in `onStop()`
+
+See `AGENTS.md` → "Modal Dialog Design Patterns" for implementation code.
