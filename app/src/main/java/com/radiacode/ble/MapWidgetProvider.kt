@@ -93,6 +93,11 @@ class MapWidgetProvider : AppWidgetProvider() {
         private fun buildViews(context: Context, widgetId: Int, options: Bundle?): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_map)
             
+            // Check if GPS tracking is disabled - show disabled state
+            if (!Prefs.isGpsTrackingEnabled(context)) {
+                return buildDisabledViews(context, widgetId, options)
+            }
+            
             // Get config (or create default)
             val config = Prefs.getMapWidgetConfig(context, widgetId) ?: MapWidgetConfig.createDefault(widgetId)
             
@@ -171,6 +176,109 @@ class MapWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.mapWidgetRoot, pi)
             
             return views
+        }
+        
+        /**
+         * Build RemoteViews for the disabled state (GPS tracking off).
+         */
+        private fun buildDisabledViews(context: Context, widgetId: Int, options: Bundle?): RemoteViews {
+            val views = RemoteViews(context.packageName, R.layout.widget_map)
+            
+            // Get widget dimensions
+            val density = context.resources.displayMetrics.density
+            val maxWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0) ?: 0
+            val maxHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0) ?: 0
+            val minWidth = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250) ?: 250
+            val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 250) ?: 250
+            
+            val widthDp = if (maxWidth > 0) maxWidth else minWidth
+            val heightDp = if (maxHeight > 0) maxHeight else minHeight
+            val widgetWidth = (widthDp * density).toInt().coerceAtLeast(300)
+            val widgetHeight = (heightDp * density).toInt().coerceAtLeast(300)
+            
+            // Apply dark background
+            views.setInt(R.id.mapWidgetRoot, "setBackgroundResource", R.drawable.widget_background)
+            
+            // Render disabled state bitmap
+            val disabledBitmap = renderDisabledBitmap(context, widgetWidth, widgetHeight, density)
+            views.setImageViewBitmap(R.id.mapImage, disabledBitmap)
+            
+            // Set label to show disabled
+            views.setTextViewText(R.id.mapMetricLabel, "📍 GPS OFF")
+            views.setTextViewText(R.id.mapPointCount, "Tap to enable")
+            views.setViewVisibility(R.id.mapMetadataRow, View.GONE)
+            
+            // Click handler opens the main app (to settings)
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra("open_settings", true)
+                putExtra("scroll_to_map", true)
+            }
+            val piFlags = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
+            val pi = PendingIntent.getActivity(context, widgetId + 10000, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or piFlags)
+            views.setOnClickPendingIntent(R.id.mapWidgetRoot, pi)
+            
+            return views
+        }
+        
+        /**
+         * Render the disabled state bitmap.
+         */
+        private fun renderDisabledBitmap(
+            context: Context,
+            width: Int,
+            height: Int,
+            density: Float
+        ): Bitmap {
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            
+            // Dark background
+            canvas.drawColor(Color.parseColor("#1A1A1E"))
+            
+            // Draw centered message
+            val textPaint = Paint().apply {
+                color = Color.parseColor("#9E9EA8")
+                textSize = 16 * density
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+            
+            val subtitlePaint = Paint().apply {
+                color = Color.parseColor("#6E6E78")
+                textSize = 13 * density
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            
+            val centerX = width / 2f
+            val centerY = height / 2f
+            
+            // Draw GPS icon placeholder
+            val iconPaint = Paint().apply {
+                color = Color.parseColor("#6E6E78")
+                textSize = 48 * density
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            canvas.drawText("📍", centerX, centerY - 30 * density, iconPaint)
+            
+            // Draw main text
+            canvas.drawText("GPS Tracking Disabled", centerX, centerY + 20 * density, textPaint)
+            
+            // Draw subtitle
+            canvas.drawText("Battery saver mode active", centerX, centerY + 45 * density, subtitlePaint)
+            
+            // Draw tap hint
+            val hintPaint = Paint().apply {
+                color = Color.parseColor("#00E5FF")
+                textSize = 12 * density
+                textAlign = Paint.Align.CENTER
+                isAntiAlias = true
+            }
+            canvas.drawText("Tap to enable in settings", centerX, centerY + 75 * density, hintPaint)
+            
+            return bitmap
         }
         
         /**

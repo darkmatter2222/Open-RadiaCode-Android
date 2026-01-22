@@ -40,6 +40,7 @@ import com.radiacode.ble.dashboard.DashboardLayout
 import com.radiacode.ble.dashboard.DashboardReorderHelper
 import com.radiacode.ble.dashboard.PanelType
 import com.radiacode.ble.ui.VegaIntroDialog
+import com.radiacode.ble.ui.VegaGpsWarningDialog
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
@@ -238,6 +239,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var valueSoundSettings: TextView
     
     // Map settings rows
+    private lateinit var rowGpsTracking: View
+    private lateinit var switchGpsTracking: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var rowMapTheme: View
     private lateinit var valueMapTheme: android.widget.TextView
     private lateinit var rowClearMapData: View
@@ -519,8 +522,31 @@ class MainActivity : AppCompatActivity() {
             startServiceIfConfigured()
         }
         
+        // Handle intent from widget (e.g., open settings for GPS tracking)
+        handleWidgetIntent(intent)
+        
         // Check for first-run intro
         checkAndShowIntro()
+    }
+    
+    /**
+     * Handle intents from widgets (e.g., to open settings for GPS tracking).
+     */
+    private fun handleWidgetIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("open_settings", false) == true) {
+            setPanel(Panel.Settings)
+            if (intent.getBooleanExtra("scroll_to_map", false)) {
+                // Show the GPS tracking warning dialog
+                mainHandler.postDelayed({
+                    showGpsTrackingWarningDialog()
+                }, 500)
+            }
+        }
+    }
+    
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleWidgetIntent(intent)
     }
     
     /**
@@ -567,6 +593,29 @@ class MainActivity : AppCompatActivity() {
                 Prefs.markIntroSeen(this)
             }
         }
+        dialog.show()
+    }
+    
+    /**
+     * Show the GPS tracking warning dialog with Vega voice.
+     * Called when user tries to enable GPS tracking.
+     */
+    private fun showGpsTrackingWarningDialog() {
+        val dialog = VegaGpsWarningDialog(
+            this,
+            onConfirm = {
+                // User confirmed - enable GPS tracking
+                Prefs.setGpsTrackingEnabled(this, true)
+                switchGpsTracking.isChecked = true
+                mapCard.updateGpsTrackingState()
+                // Notify the foreground service to start GPS
+                RadiaCodeForegroundService.reloadDevices(this)
+            },
+            onCancel = {
+                // User cancelled - keep GPS tracking disabled
+                switchGpsTracking.isChecked = false
+            }
+        )
         dialog.show()
     }
 
@@ -738,6 +787,8 @@ class MainActivity : AppCompatActivity() {
         valueSoundSettings = findViewById(R.id.valueSoundSettings)
         
         // Map settings rows
+        rowGpsTracking = findViewById(R.id.rowGpsTracking)
+        switchGpsTracking = findViewById(R.id.switchGpsTracking)
         rowMapTheme = findViewById(R.id.rowMapTheme)
         valueMapTheme = findViewById(R.id.valueMapTheme)
         rowClearMapData = findViewById(R.id.rowClearMapData)
@@ -838,7 +889,21 @@ class MainActivity : AppCompatActivity() {
             showVegaIntro()
         }
         
-        // Map settings
+        // Map settings - GPS Tracking toggle
+        switchGpsTracking.isChecked = Prefs.isGpsTrackingEnabled(this)
+        switchGpsTracking.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                // Show warning dialog before enabling GPS tracking
+                showGpsTrackingWarningDialog()
+            } else {
+                // Disable GPS tracking immediately
+                Prefs.setGpsTrackingEnabled(this, false)
+                mapCard.updateGpsTrackingState()
+                // Notify the foreground service to stop GPS
+                RadiaCodeForegroundService.reloadDevices(this)
+            }
+        }
+        
         rowMapTheme.setOnClickListener {
             showMapThemeDialog()
         }
@@ -1058,12 +1123,25 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupMapCard() {
-        // Load existing data points
-        mapCard.loadDataPoints()
+        // Set up callback for when user clicks "enable GPS" in the disabled overlay
+        mapCard.onEnableGpsRequested = {
+            // Navigate to settings and show the GPS warning dialog
+            setPanel(Panel.Settings)
+            mainHandler.postDelayed({
+                // Scroll to map settings section (optional enhancement)
+                showGpsTrackingWarningDialog()
+            }, 300)
+        }
         
-        // Start location tracking if permission is granted
-        if (hasAllPermissions()) {
-            mapCard.startLocationTracking()
+        // Only load and track if GPS tracking is enabled
+        if (Prefs.isGpsTrackingEnabled(this)) {
+            // Load existing data points
+            mapCard.loadDataPoints()
+            
+            // Start location tracking if permission is granted
+            if (hasAllPermissions()) {
+                mapCard.startLocationTracking()
+            }
         }
     }
 

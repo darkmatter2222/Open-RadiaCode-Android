@@ -188,8 +188,14 @@ class RadiaCodeForegroundService : Service() {
         }
 
         // Single location owner for the entire app
+        // Only acquire if GPS tracking is enabled
         locationController = LocationController.getInstance(this)
-        backgroundLocationToken = locationController?.acquireBackground()
+        if (Prefs.isGpsTrackingEnabled(this)) {
+            backgroundLocationToken = locationController?.acquireBackground()
+            Log.d(TAG, "GPS tracking enabled - acquired background location token")
+        } else {
+            Log.d(TAG, "GPS tracking disabled - skipping location acquisition")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -206,6 +212,8 @@ class RadiaCodeForegroundService : Service() {
             ACTION_RELOAD_DEVICES -> {
                 deviceManager?.reloadDevices()
                 updateNotificationFromState(force = true)
+                // Re-evaluate GPS tracking state
+                updateGpsTrackingState()
                 return START_STICKY
             }
             ACTION_REFRESH_NOTIFICATION -> {
@@ -274,10 +282,33 @@ class RadiaCodeForegroundService : Service() {
         updateForeground("Connecting", "${devices.size} device(s)")
         deviceManager?.start()
         
-        // Prefetch map tiles in background for widget
-        MapTileLoader.prefetchTilesForWidget(this)
+        // Prefetch map tiles in background for widget (only if GPS tracking enabled)
+        if (Prefs.isGpsTrackingEnabled(this)) {
+            MapTileLoader.prefetchTilesForWidget(this)
+        }
         
         return START_STICKY
+    }
+    
+    /**
+     * Update GPS tracking state based on preference.
+     * Called when the user toggles GPS tracking in settings.
+     */
+    private fun updateGpsTrackingState() {
+        val gpsEnabled = Prefs.isGpsTrackingEnabled(this)
+        
+        if (gpsEnabled && backgroundLocationToken == null) {
+            // GPS was just enabled - acquire location
+            backgroundLocationToken = locationController?.acquireBackground()
+            Log.d(TAG, "GPS tracking enabled - acquired background location token")
+            // Prefetch map tiles
+            MapTileLoader.prefetchTilesForWidget(this)
+        } else if (!gpsEnabled && backgroundLocationToken != null) {
+            // GPS was just disabled - release location
+            locationController?.releaseBackground(backgroundLocationToken)
+            backgroundLocationToken = null
+            Log.d(TAG, "GPS tracking disabled - released background location token")
+        }
     }
 
     override fun onDestroy() {
@@ -397,7 +428,9 @@ class RadiaCodeForegroundService : Service() {
         }
 
         // Hold-last-fix strategy: attach most recent location fix to each reading.
-        val locationSnap = locationController?.getLastLocation()
+        // Only get location if GPS tracking is enabled
+        val gpsEnabled = Prefs.isGpsTrackingEnabled(this)
+        val locationSnap = if (gpsEnabled) locationController?.getLastLocation() else null
         
         // PRIORITY 1: Broadcast to UI immediately for responsive updates
         // This is the ONLY synchronous thing that happens on the BLE thread

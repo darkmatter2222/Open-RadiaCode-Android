@@ -1,75 +1,171 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:background="@drawable/card_background"
-    android:padding="12dp">
+    android:layout_height="wrap_content">
     
-    <!-- Header Row -->
+    <!-- Main map content -->
     <LinearLayout
-        android:id="@+id/headerRow"
+        android:id="@+id/mapContent"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true">
+        android:orientation="vertical"
+        android:background="@drawable/card_background"
+        android:padding="12dp">
         
-        <!-- Expand Icon -->
-        <ImageView
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginEnd="6dp"
-            android:src="@android:drawable/ic_menu_crop"
-            android:tint="@color/pro_cyan"
-            android:contentDescription="Expand to fullscreen" />
-        
-        <TextView
-            android:layout_width="0dp"
+        <!-- Header Row -->
+        <LinearLayout
+            android:id="@+id/headerRow"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="LIVE MAP"
-            android:textColor="@color/pro_text_muted"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.1" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <!-- Expand Icon -->
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
+                android:src="@android:drawable/ic_menu_crop"
+                android:tint="@color/pro_cyan"
+                android:contentDescription="Expand to fullscreen" />
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="LIVE MAP"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1" />
+            
+            <!-- Metric Selector -->
+            <Spinner
+                android:id="@+id/metricSelector"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:minHeight="32dp"
+                android:spinnerMode="dropdown" />
+            
+            <!-- Center on Location Button -->
+            <ImageButton
+                android:id="@+id/centerButton"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_mylocation"
+                android:contentDescription="Center on current location"
+                android:scaleType="centerInside"
+                android:padding="4dp" />
+        </LinearLayout>
         
-        <!-- Metric Selector -->
-        <Spinner
-            android:id="@+id/metricSelector"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:minHeight="32dp"
-            android:spinnerMode="dropdown" />
+        <!-- Map View -->
+        <org.osmdroid.views.MapView
+            android:id="@+id/mapView"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:background="@color/pro_surface" />
         
-        <!-- Center on Location Button -->
-        <ImageButton
-            android:id="@+id/centerButton"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_mylocation"
-            android:contentDescription="Center on current location"
-            android:scaleType="centerInside"
-            android:padding="4dp" />
+        <!-- Scale Bar (we'll draw this programmatically in the MapCardView) -->
+        <FrameLayout
+            android:id="@+id/scaleBarContainer"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="8dp" />
+        
     </LinearLayout>
     
-    <!-- Map View -->
-    <org.osmdroid.views.MapView
-        android:id="@+id/mapView"
+    <!-- Disabled Overlay (shown when GPS tracking is off) -->
+    <LinearLayout
+        android:id="@+id/disabledOverlay"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
-        android:background="@color/pro_surface" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/card_background"
+        android:padding="12dp"
+        android:visibility="gone">
+        
+        <!-- Header Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
+                android:src="@android:drawable/ic_menu_mapmode"
+                android:tint="@color/pro_text_muted"
+                android:contentDescription="Map disabled" />
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="LIVE MAP"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1" />
+        </LinearLayout>
+        
+        <!-- Disabled message area -->
+        <LinearLayout
+            android:id="@+id/disabledMessageContainer"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@color/pro_surface"
+            android:clickable="true"
+            android:focusable="true">
+            
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:src="@android:drawable/ic_menu_mylocation"
+                android:tint="@color/pro_text_muted"
+                android:alpha="0.5"
+                android:contentDescription="GPS disabled" />
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="GPS Tracking Disabled"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Battery saver mode active"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="13sp"
+                android:layout_marginBottom="16dp" />
+            
+            <TextView
+                android:id="@+id/enableGpsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap to enable GPS tracking"
+                android:textColor="@color/pro_cyan"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:background="?attr/selectableItemBackground" />
+        </LinearLayout>
+        
+    </LinearLayout>
     
-    <!-- Scale Bar (we'll draw this programmatically in the MapCardView) -->
-    <FrameLayout
-        android:id="@+id/scaleBarContainer"
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="8dp" />
-    
-</LinearLayout>
+</FrameLayout>

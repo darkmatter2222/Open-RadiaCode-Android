@@ -60,6 +60,7 @@ object Prefs {
     private const val KEY_MAP_GRID_ORIGIN_LAT = "map_grid_origin_lat"
     private const val KEY_MAP_GRID_ORIGIN_LNG = "map_grid_origin_lng"
     private const val KEY_MAP_THEME = "map_theme"
+    private const val KEY_GPS_TRACKING_ENABLED = "gps_tracking_enabled"
     private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
     
     // Intro/Welcome keys
@@ -1908,6 +1909,29 @@ object Prefs {
         prefs.edit()
             .putString(KEY_MAP_GRID_ORIGIN_LAT, latitude.toString())
             .putString(KEY_MAP_GRID_ORIGIN_LNG, longitude.toString())
+            .apply()
+    }
+    
+    // ========== GPS Tracking Toggle ==========
+    
+    /**
+     * Check if GPS tracking is enabled.
+     * GPS tracking is OFF by default to save battery.
+     * When disabled, no location data is collected or stored.
+     */
+    fun isGpsTrackingEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_GPS_TRACKING_ENABLED, false)  // OFF by default
+    }
+    
+    /**
+     * Enable or disable GPS tracking.
+     * When disabled, the app will not collect location data for the map.
+     */
+    fun setGpsTrackingEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_GPS_TRACKING_ENABLED, enabled)
             .apply()
     }
     

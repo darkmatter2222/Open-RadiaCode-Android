@@ -55,6 +55,14 @@ class MapCardView @JvmOverloads constructor(
     private lateinit var centerButton: ImageButton
     private lateinit var scaleBarView: ScaleBarView
     
+    // Disabled state overlay
+    private lateinit var mapContent: View
+    private lateinit var disabledOverlay: View
+    private lateinit var enableGpsButton: View
+    
+    // Callback for when user wants to enable GPS
+    var onEnableGpsRequested: (() -> Unit)? = null
+    
     // Overlays
     private var hexagonOverlay: HexagonOverlay? = null
     private var positionOverlay: PositionOverlay? = null
@@ -193,13 +201,25 @@ class MapCardView @JvmOverloads constructor(
         LayoutInflater.from(context).inflate(R.layout.view_map_card, this, true)
         
         setupViews()
-        setupMap()
-        setupMetricSelector()
-        setupCenterButton()
-        setupHeaderClick()
+        setupDisabledState()
+        
+        // Check if GPS tracking is enabled before setting up the map
+        if (Prefs.isGpsTrackingEnabled(context)) {
+            setupMap()
+            setupMetricSelector()
+            setupCenterButton()
+            setupHeaderClick()
+            showMapContent()
+        } else {
+            showDisabledOverlay()
+        }
     }
     
     private fun setupViews() {
+        mapContent = findViewById(R.id.mapContent)
+        disabledOverlay = findViewById(R.id.disabledOverlay)
+        enableGpsButton = findViewById(R.id.enableGpsButton)
+        
         mapView = findViewById(R.id.mapView)
         metricSelector = findViewById(R.id.metricSelector)
         centerButton = findViewById(R.id.centerButton)
@@ -208,6 +228,55 @@ class MapCardView @JvmOverloads constructor(
         val scaleBarContainer = findViewById<FrameLayout>(R.id.scaleBarContainer)
         scaleBarView = ScaleBarView(context)
         scaleBarContainer.addView(scaleBarView)
+    }
+    
+    private fun setupDisabledState() {
+        // Handle click on the disabled message container
+        val disabledMessageContainer = findViewById<View>(R.id.disabledMessageContainer)
+        disabledMessageContainer?.setOnClickListener {
+            onEnableGpsRequested?.invoke()
+        }
+        enableGpsButton.setOnClickListener {
+            onEnableGpsRequested?.invoke()
+        }
+    }
+    
+    /**
+     * Show the map content and hide the disabled overlay.
+     */
+    private fun showMapContent() {
+        mapContent.visibility = View.VISIBLE
+        disabledOverlay.visibility = View.GONE
+    }
+    
+    /**
+     * Show the disabled overlay and hide the map content.
+     */
+    private fun showDisabledOverlay() {
+        mapContent.visibility = View.GONE
+        disabledOverlay.visibility = View.VISIBLE
+    }
+    
+    /**
+     * Update the view based on GPS tracking enabled state.
+     * Call this when the GPS tracking setting changes.
+     */
+    fun updateGpsTrackingState() {
+        if (Prefs.isGpsTrackingEnabled(context)) {
+            // GPS tracking enabled - show map
+            setupMap()
+            setupMetricSelector()
+            setupCenterButton()
+            setupHeaderClick()
+            showMapContent()
+            // Start location tracking if we have permission
+            startLocationTracking()
+            loadDataPoints()
+        } else {
+            // GPS tracking disabled - show overlay and stop tracking
+            stopLocationTracking()
+            showDisabledOverlay()
+        }
     }
     
     private fun setupMap() {
