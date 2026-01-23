@@ -70,6 +70,31 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var predictiveDescription: TextView
     private lateinit var predictiveInfoBtn: ImageView
     
+    // Tier 3: Poisson
+    private lateinit var poissonToggle: SwitchMaterial
+    private lateinit var poissonDescription: TextView
+    private lateinit var poissonInfoBtn: ImageView
+    
+    // Tier 3: MA Crossover
+    private lateinit var maCrossoverToggle: SwitchMaterial
+    private lateinit var maCrossoverSection: LinearLayout
+    private lateinit var maShortWindowSeek: SeekBar
+    private lateinit var maShortWindowValue: TextView
+    private lateinit var maLongWindowSeek: SeekBar
+    private lateinit var maLongWindowValue: TextView
+    private lateinit var maCrossoverDescription: TextView
+    private lateinit var maCrossoverInfoBtn: ImageView
+    
+    // Tier 3: Bayesian
+    private lateinit var bayesianToggle: SwitchMaterial
+    private lateinit var bayesianDescription: TextView
+    private lateinit var bayesianInfoBtn: ImageView
+    
+    // Tier 3: Autocorrelation
+    private lateinit var autocorrToggle: SwitchMaterial
+    private lateinit var autocorrDescription: TextView
+    private lateinit var autocorrInfoBtn: ImageView
+    
     // Voice
     private lateinit var voiceToggle: SwitchMaterial
     private lateinit var voiceDescription: TextView
@@ -130,6 +155,31 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         predictiveDescription = findViewById(R.id.predictiveDescription)
         predictiveInfoBtn = findViewById(R.id.predictiveInfoBtn)
         
+        // Tier 3: Poisson
+        poissonToggle = findViewById(R.id.poissonToggle)
+        poissonDescription = findViewById(R.id.poissonDescription)
+        poissonInfoBtn = findViewById(R.id.poissonInfoBtn)
+        
+        // Tier 3: MA Crossover
+        maCrossoverToggle = findViewById(R.id.maCrossoverToggle)
+        maCrossoverSection = findViewById(R.id.maCrossoverSection)
+        maShortWindowSeek = findViewById(R.id.maShortWindowSeek)
+        maShortWindowValue = findViewById(R.id.maShortWindowValue)
+        maLongWindowSeek = findViewById(R.id.maLongWindowSeek)
+        maLongWindowValue = findViewById(R.id.maLongWindowValue)
+        maCrossoverDescription = findViewById(R.id.maCrossoverDescription)
+        maCrossoverInfoBtn = findViewById(R.id.maCrossoverInfoBtn)
+        
+        // Tier 3: Bayesian
+        bayesianToggle = findViewById(R.id.bayesianToggle)
+        bayesianDescription = findViewById(R.id.bayesianDescription)
+        bayesianInfoBtn = findViewById(R.id.bayesianInfoBtn)
+        
+        // Tier 3: Autocorrelation
+        autocorrToggle = findViewById(R.id.autocorrToggle)
+        autocorrDescription = findViewById(R.id.autocorrDescription)
+        autocorrInfoBtn = findViewById(R.id.autocorrInfoBtn)
+        
         // Voice
         voiceToggle = findViewById(R.id.voiceToggle)
         voiceDescription = findViewById(R.id.voiceDescription)
@@ -149,7 +199,11 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 Prefs.isStatisticalRocEnabled(this) ||
                 Prefs.isStatisticalCusumEnabled(this) ||
                 Prefs.isStatisticalForecastEnabled(this) ||
-                Prefs.isStatisticalPredictiveCrossingEnabled(this)
+                Prefs.isStatisticalPredictiveCrossingEnabled(this) ||
+                Prefs.isStatisticalPoissonEnabled(this) ||
+                Prefs.isStatisticalMACrossoverEnabled(this) ||
+                Prefs.isStatisticalBayesianEnabled(this) ||
+                Prefs.isStatisticalAutocorrEnabled(this)
         
         masterToggle.isChecked = anyEnabled
         settingsContainer.visibility = if (anyEnabled) View.VISIBLE else View.GONE
@@ -186,6 +240,25 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         updatePredictiveUI(predictiveSeconds)
         predictiveSection.visibility = if (predictiveToggle.isChecked) View.VISIBLE else View.GONE
         
+        // Tier 3: Poisson
+        poissonToggle.isChecked = Prefs.isStatisticalPoissonEnabled(this)
+        
+        // Tier 3: MA Crossover
+        maCrossoverToggle.isChecked = Prefs.isStatisticalMACrossoverEnabled(this)
+        val shortWindow = Prefs.getStatisticalMAShortWindow(this)
+        val longWindow = Prefs.getStatisticalMALongWindow(this)
+        maShortWindowSeek.progress = ((shortWindow - 5) / 5).coerceIn(0, 5)  // 5-30s
+        maLongWindowSeek.progress = ((longWindow - 30) / 30).coerceIn(0, 8)  // 30-300s
+        updateMAShortUI(shortWindow)
+        updateMALongUI(longWindow)
+        maCrossoverSection.visibility = if (maCrossoverToggle.isChecked) View.VISIBLE else View.GONE
+        
+        // Tier 3: Bayesian
+        bayesianToggle.isChecked = Prefs.isStatisticalBayesianEnabled(this)
+        
+        // Tier 3: Autocorrelation
+        autocorrToggle.isChecked = Prefs.isStatisticalAutocorrEnabled(this)
+        
         // Voice
         voiceToggle.isChecked = Prefs.isStatisticalVoiceEnabled(this)
     }
@@ -201,6 +274,10 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 Prefs.setStatisticalCusumEnabled(this, false)
                 Prefs.setStatisticalForecastEnabled(this, false)
                 Prefs.setStatisticalPredictiveCrossingEnabled(this, false)
+                Prefs.setStatisticalPoissonEnabled(this, false)
+                Prefs.setStatisticalMACrossoverEnabled(this, false)
+                Prefs.setStatisticalBayesianEnabled(this, false)
+                Prefs.setStatisticalAutocorrEnabled(this, false)
                 Prefs.setStatisticalVoiceEnabled(this, false)
                 
                 // Update toggles
@@ -209,6 +286,10 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 cusumToggle.isChecked = false
                 forecastToggle.isChecked = false
                 predictiveToggle.isChecked = false
+                poissonToggle.isChecked = false
+                maCrossoverToggle.isChecked = false
+                bayesianToggle.isChecked = false
+                autocorrToggle.isChecked = false
                 voiceToggle.isChecked = false
             }
         }
@@ -305,6 +386,55 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
             Prefs.setStatisticalVoiceEnabled(this, isChecked)
         }
         
+        // ========== Tier 3 Listeners ==========
+        
+        // Poisson toggle
+        poissonToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalPoissonEnabled(this, isChecked)
+        }
+        
+        // MA Crossover toggle
+        maCrossoverToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalMACrossoverEnabled(this, isChecked)
+            maCrossoverSection.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+        
+        // MA Short Window slider
+        maShortWindowSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val seconds = 5 + (progress * 5)  // 5-30 seconds
+                updateMAShortUI(seconds)
+                if (fromUser) {
+                    Prefs.setStatisticalMAShortWindow(this@VegaStatisticalSettingsActivity, seconds)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        
+        // MA Long Window slider
+        maLongWindowSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val seconds = 30 + (progress * 30)  // 30-300 seconds
+                updateMALongUI(seconds)
+                if (fromUser) {
+                    Prefs.setStatisticalMALongWindow(this@VegaStatisticalSettingsActivity, seconds)
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        
+        // Bayesian toggle
+        bayesianToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalBayesianEnabled(this, isChecked)
+        }
+        
+        // Autocorrelation toggle
+        autocorrToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalAutocorrEnabled(this, isChecked)
+        }
+        
         // Info button click handlers
         zScoreInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ZSCORE) 
@@ -320,6 +450,18 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         }
         predictiveInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.PREDICTIVE_CROSSING) 
+        }
+        poissonInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.POISSON)
+        }
+        maCrossoverInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.MA_CROSSOVER)
+        }
+        bayesianInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.BAYESIAN_CHANGEPOINT)
+        }
+        autocorrInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.AUTOCORRELATION)
         }
         voiceInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.VOICE) 
@@ -374,5 +516,18 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         }
         predictiveSecondsValue.text = display
         predictiveDescription.text = "Warn $display before crossing any active Smart Alert threshold"
+    }
+    
+    private fun updateMAShortUI(seconds: Int) {
+        maShortWindowValue.text = "${seconds}s"
+    }
+    
+    private fun updateMALongUI(seconds: Int) {
+        val display = when {
+            seconds < 60 -> "${seconds}s"
+            seconds == 60 -> "1 min"
+            else -> "${seconds / 60}:${String.format("%02d", seconds % 60)}"
+        }
+        maLongWindowValue.text = display
     }
 }

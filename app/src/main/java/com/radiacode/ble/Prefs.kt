@@ -110,6 +110,14 @@ object Prefs {
     private const val KEY_STATISTICAL_VOICE_ENABLED = "statistical_voice_enabled"
     private const val KEY_STATISTICAL_PREDICTIVE_CROSSING_ENABLED = "statistical_predictive_crossing_enabled"
     private const val KEY_STATISTICAL_PREDICTIVE_CROSSING_SECONDS = "statistical_predictive_crossing_seconds"
+    
+    // Tier 3: Advanced Statistical Analysis keys
+    private const val KEY_STATISTICAL_POISSON_ENABLED = "statistical_poisson_enabled"
+    private const val KEY_STATISTICAL_MA_CROSSOVER_ENABLED = "statistical_ma_crossover_enabled"
+    private const val KEY_STATISTICAL_MA_SHORT_WINDOW = "statistical_ma_short_window"
+    private const val KEY_STATISTICAL_MA_LONG_WINDOW = "statistical_ma_long_window"
+    private const val KEY_STATISTICAL_BAYESIAN_ENABLED = "statistical_bayesian_enabled"
+    private const val KEY_STATISTICAL_AUTOCORR_ENABLED = "statistical_autocorr_enabled"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -2508,6 +2516,106 @@ object Prefs {
         if (isStatisticalCusumEnabled(context)) enabled.add("CUSUM")
         if (isStatisticalForecastEnabled(context)) enabled.add("Forecast")
         if (isStatisticalPredictiveCrossingEnabled(context)) enabled.add("Predictive")
+        if (isStatisticalPoissonEnabled(context)) enabled.add("Poisson")
+        if (isStatisticalMACrossoverEnabled(context)) enabled.add("MA-Cross")
+        if (isStatisticalBayesianEnabled(context)) enabled.add("Bayesian")
+        if (isStatisticalAutocorrEnabled(context)) enabled.add("Autocorr")
         return if (enabled.isEmpty()) "All off" else enabled.joinToString(", ")
+    }
+    
+    // ========== Tier 3: Advanced Statistical Analysis Settings ==========
+    
+    /**
+     * Check if Poisson uncertainty quantification is enabled.
+     * Shows statistical uncertainty bounds for count rates.
+     */
+    fun isStatisticalPoissonEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_POISSON_ENABLED, false)
+    }
+    
+    fun setStatisticalPoissonEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_POISSON_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Check if Moving Average Crossover detection is enabled.
+     * Detects trend reversals when short-term MA crosses long-term MA.
+     */
+    fun isStatisticalMACrossoverEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_MA_CROSSOVER_ENABLED, false)
+    }
+    
+    fun setStatisticalMACrossoverEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_MA_CROSSOVER_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Get the short-term moving average window in seconds.
+     */
+    fun getStatisticalMAShortWindow(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_STATISTICAL_MA_SHORT_WINDOW, 10)
+    }
+    
+    fun setStatisticalMAShortWindow(context: Context, seconds: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_STATISTICAL_MA_SHORT_WINDOW, seconds.coerceIn(5, 30))
+            .apply()
+    }
+    
+    /**
+     * Get the long-term moving average window in seconds.
+     */
+    fun getStatisticalMALongWindow(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_STATISTICAL_MA_LONG_WINDOW, 60)
+    }
+    
+    fun setStatisticalMALongWindow(context: Context, seconds: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_STATISTICAL_MA_LONG_WINDOW, seconds.coerceIn(30, 300))
+            .apply()
+    }
+    
+    /**
+     * Check if Bayesian Changepoint detection is enabled.
+     * Detects regime changes with probability estimates.
+     */
+    fun isStatisticalBayesianEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_BAYESIAN_ENABLED, false)
+    }
+    
+    fun setStatisticalBayesianEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_BAYESIAN_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Check if Autocorrelation Pattern Recognition is enabled.
+     * Detects periodic patterns (HVAC, machinery cycles).
+     */
+    fun isStatisticalAutocorrEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_AUTOCORR_ENABLED, false)
+    }
+    
+    fun setStatisticalAutocorrEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_AUTOCORR_ENABLED, enabled)
+            .apply()
     }
 }

@@ -229,6 +229,167 @@ CONS
             """.trimIndent()
         ),
         
+        POISSON(
+            title = "Poisson Uncertainty Quantification",
+            audioResName = "vega_info_poisson",
+            explanation = """
+Poisson uncertainty quantification reveals the statistical confidence in your radiation measurements.
+
+THE FUNDAMENTAL PHYSICS
+Radioactive decay is inherently random, following Poisson statistics. This means even perfectly stable radiation produces varying counts. I calculate the mathematical uncertainty so you know which variations are real and which are just statistical noise.
+
+HOW IT WORKS
+For any count rate N, the statistical uncertainty is the square root of N. I express this as a percentage and show you confidence bounds. A reading of 100 counts per second has 10% uncertainty, while 10,000 CPS has only 1% uncertainty.
+
+THE DISPLAY
+When enabled, you'll see uncertainty bounds on your readings. For example, 25.3 plus or minus 2.1 microsieverts per hour. The percentage shows relative uncertainty. Lower percentages mean more confident measurements.
+
+SIGNIFICANCE DETECTION
+I flag when current readings exceed expected statistical bounds from baseline. If your reading is outside the 95% confidence interval of previous measurements, the variation is likely real, not just counting statistics.
+
+WHEN TO USE POISSON UNCERTAINTY
+This feature is essential when: comparing readings between locations, determining if a change is statistically significant, working with low count rates where uncertainty is large, and making decisions based on small differences.
+
+COMPARED TO OTHER VEGA FEATURES
+Z-Score uses empirical standard deviation from actual measurements. Poisson uncertainty uses theoretical bounds from counting statistics. Z-Score catches unusual readings compared to your recent history. Poisson tells you the fundamental measurement precision. Both are valuable for different questions.
+
+PROS
+• Shows measurement confidence
+• Grounded in physics
+• Essential for low count rates
+• Helps distinguish signal from noise
+
+CONS
+• Assumes pure Poisson process
+• Doesn't account for instrument effects
+• May be confusing for non-technical users
+• Additional display complexity
+            """.trimIndent()
+        ),
+        
+        MA_CROSSOVER(
+            title = "Moving Average Crossover Signals",
+            audioResName = "vega_info_macrossover",
+            explanation = """
+Moving Average Crossover analysis detects trend reversals using a technique borrowed from financial markets.
+
+HOW IT WORKS
+I calculate two moving averages: a fast short-term average and a slow long-term average. When the short average crosses above the long average, it signals an upward trend reversal. When it crosses below, a downward trend. These are called Golden Cross and Death Cross respectively.
+
+THE WINDOW SETTINGS
+Short Window (default 10 seconds): Responds quickly to recent changes. Smaller values increase sensitivity.
+Long Window (default 60 seconds): Represents the longer-term baseline. Larger values smooth out noise.
+
+The key is the ratio. A 10 to 60 second configuration is more sensitive than 30 to 300 seconds, which is more conservative.
+
+CROSSOVER TYPES
+Golden Cross: Short MA crosses above long MA. Radiation levels transitioning upward. Pay attention.
+Death Cross: Short MA crosses below long MA. Levels decreasing. The situation may be improving.
+
+DIVERGENCE STRENGTH
+I also measure how strongly the averages are separating after a cross. High divergence means the trend is accelerating. Low divergence suggests the trend may be temporary.
+
+WHEN TO USE MA CROSSOVER
+This technique excels at: identifying genuine trend changes versus noise, confirming whether a change is sustained, filtering out brief spikes that quickly reverse, and getting clear entry and exit signals during surveys.
+
+COMPARED TO OTHER VEGA FEATURES
+Rate of Change detects rapid movements. MA Crossover detects sustained directional changes. ROC might alert on a brief spike that reverses. MA Crossover waits for confirmation that a trend is real. CUSUM also detects persistent shifts but uses different mathematics.
+
+PROS
+• Filters out noise effectively
+• Clear directional signals
+• Adjustable sensitivity via windows
+• Well-understood technique
+
+CONS
+• Lags behind actual changes
+• May miss brief excursions
+• Two parameters to configure
+• Can produce false signals in ranging conditions
+            """.trimIndent()
+        ),
+        
+        BAYESIAN_CHANGEPOINT(
+            title = "Bayesian Changepoint Detection",
+            audioResName = "vega_info_bayesian",
+            explanation = """
+Bayesian Changepoint Detection identifies when the underlying radiation regime has fundamentally shifted.
+
+THE CONCEPT
+Most statistical methods assume a stable process. But radiation environments change: you enter a new room, approach a source, or background conditions shift. Bayesian changepoint detection explicitly looks for these regime transitions.
+
+HOW IT WORKS
+I continuously estimate the probability that a changepoint has occurred based on recent observations. The algorithm maintains a run length, which is how long since the last detected change. When new data is inconsistent with the current regime, changepoint probability rises.
+
+PROBABILITY INTERPRETATION
+The changepoint probability tells you how confident I am that conditions have genuinely changed. 80% or higher suggests a real regime shift. Below 50% suggests normal variation within the current regime.
+
+REGIME STATISTICS
+After detecting a changepoint, I show you the pre-change and post-change mean levels. This helps you understand what changed and by how much. A shift from 0.15 to 0.35 microsieverts per hour is meaningful. A shift from 0.15 to 0.16 might just be noise.
+
+WHEN TO USE BAYESIAN CHANGEPOINT
+This feature shines when: you need to know if you've entered a new radiation environment, distinguishing genuine shifts from random variation matters, documenting when conditions changed for record keeping, and operating in dynamic environments with distinct zones.
+
+COMPARED TO OTHER VEGA FEATURES
+CUSUM detects persistent drift from baseline. Bayesian changepoint detects discrete transitions between regimes. CUSUM asks "have levels been consistently elevated?" Bayesian asks "did conditions fundamentally change at a specific moment?"
+
+PROS
+• Probability-based confidence
+• Detects regime transitions
+• Shows before and after levels
+• Robust statistical foundation
+
+CONS
+• Computationally more intensive
+• Requires tuning the hazard parameter
+• May flag minor shifts as changepoints
+• More complex to interpret
+            """.trimIndent()
+        ),
+        
+        AUTOCORRELATION(
+            title = "Autocorrelation Pattern Recognition",
+            audioResName = "vega_info_autocorr",
+            explanation = """
+Autocorrelation Pattern Recognition discovers hidden periodic signals in your radiation data.
+
+THE CONCEPT
+Some radiation variations aren't random. HVAC systems cycle. Industrial equipment operates on schedules. Cosmic ray intensity varies with atmospheric pressure cycles. Autocorrelation finds these repeating patterns.
+
+HOW IT WORKS
+I calculate how similar your readings are to themselves at various time lags. A peak in the autocorrelation function at lag T means readings separated by T seconds tend to be similar. This reveals periodicities invisible to other methods.
+
+PATTERN TYPES DETECTED
+HIGH FREQUENCY (under 30 seconds): Equipment vibration, sensor oscillation, nearby machinery
+MEDIUM FREQUENCY (30 seconds to 5 minutes): HVAC cycles, ventilation systems, radon breathing
+LOW FREQUENCY (over 5 minutes): Longer industrial cycles, environmental patterns
+
+CONFIDENCE AND SIGNIFICANCE
+I report confidence in detected patterns based on how strong the autocorrelation peak is relative to noise. High confidence means the pattern is clearly present. Low confidence suggests possible periodicity that needs more data to confirm.
+
+SOURCE INFERENCE
+Based on the detected period and pattern characteristics, I attempt to infer the likely source. A 3-minute cycle in an office building is probably HVAC. A 10-second oscillation might be sensor-related. These inferences are educated guesses, not certainties.
+
+WHEN TO USE AUTOCORRELATION
+This feature is valuable when: investigating unexplained variations in readings, trying to identify environmental factors affecting measurements, separating periodic noise from true random variation, and understanding the temporal structure of your environment.
+
+COMPARED TO OTHER VEGA FEATURES
+Most VEGA features focus on amplitude: how high, how fast changing. Autocorrelation focuses on temporal structure: are there rhythms? This orthogonal perspective can explain variations that otherwise seem random.
+
+PROS
+• Finds hidden patterns
+• Helps identify environmental factors
+• Works without knowing what to look for
+• Provides source inference hints
+
+CONS
+• Requires extended observation periods
+• May find spurious patterns in noisy data
+• Computationally intensive
+• Inferences are probabilistic not definitive
+            """.trimIndent()
+        ),
+        
         VOICE(
             title = "VEGA Voice Announcements",
             audioResName = "vega_info_voice",

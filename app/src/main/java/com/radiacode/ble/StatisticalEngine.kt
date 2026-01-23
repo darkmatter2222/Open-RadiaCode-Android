@@ -235,8 +235,147 @@ class StatisticalEngine(private val context: Context) {
         val cusum: CusumResult,
         val forecast30s: ForecastResult,
         val forecast60s: ForecastResult,
-        val forecast300s: ForecastResult
+        val forecast300s: ForecastResult,
+        // Tier 3 additions
+        val poissonUncertainty: PoissonUncertaintyResult = PoissonUncertaintyResult.UNKNOWN,
+        val maCrossover: MACrossoverResult = MACrossoverResult.NONE,
+        val bayesianChangepoint: BayesianChangepointResult = BayesianChangepointResult.NONE,
+        val autocorrelation: AutocorrelationResult = AutocorrelationResult.NONE
     )
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 3: ADVANCED STATISTICAL ANALYSIS DATA STRUCTURES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Poisson uncertainty quantification result (Feature #9).
+     * Radioactive decay follows Poisson statistics - uncertainty = sqrt(N).
+     */
+    data class PoissonUncertaintyResult(
+        val countRate: Float,                    // CPS (counts per second)
+        val countsInWindow: Int,                 // Total counts in measurement window
+        val uncertainty: Float,                  // Absolute uncertainty (sqrt(N))
+        val relativeUncertaintyPercent: Float,   // Relative uncertainty (100 / sqrt(N))
+        val lowerBound: Float,                   // 1σ lower bound
+        val upperBound: Float,                   // 1σ upper bound
+        val isStatisticallySignificant: Boolean, // Is change > statistical uncertainty?
+        val significanceMultiple: Float          // How many σ above/below expected?
+    ) {
+        companion object {
+            val UNKNOWN = PoissonUncertaintyResult(0f, 0, 0f, 100f, 0f, 0f, false, 0f)
+        }
+        
+        /**
+         * Human-readable uncertainty string.
+         */
+        fun getUncertaintyString(): String {
+            return String.format("%.1f +/- %.1f (%.1f%%)", countRate, uncertainty, relativeUncertaintyPercent)
+        }
+    }
+
+    /**
+     * Moving Average Crossover result (Feature #10).
+     * Detects trend reversals when short-term MA crosses long-term MA.
+     */
+    data class MACrossoverResult(
+        val shortMA: Float,                      // Short-term moving average (e.g., 10s)
+        val longMA: Float,                       // Long-term moving average (e.g., 60s)
+        val crossoverType: CrossoverType,
+        val crossoverDetected: Boolean,
+        val timeSinceCrossoverMs: Long,          // How long ago crossover occurred
+        val crossoverStrength: Float             // Magnitude of divergence after cross (0-1)
+    ) {
+        enum class CrossoverType {
+            NONE,
+            GOLDEN_CROSS,    // Short crosses above long (bullish/rising)
+            DEATH_CROSS      // Short crosses below long (bearish/falling)
+        }
+        
+        companion object {
+            val NONE = MACrossoverResult(0f, 0f, CrossoverType.NONE, false, 0L, 0f)
+        }
+        
+        /**
+         * Get human-readable crossover description.
+         */
+        fun getDescription(): String {
+            return when (crossoverType) {
+                CrossoverType.GOLDEN_CROSS -> "Trend reversal: Rising"
+                CrossoverType.DEATH_CROSS -> "Trend reversal: Falling"
+                CrossoverType.NONE -> "No crossover"
+            }
+        }
+    }
+
+    /**
+     * Bayesian changepoint detection result (Feature #11).
+     * Probabilistic detection of regime changes.
+     */
+    data class BayesianChangepointResult(
+        val changepointDetected: Boolean,
+        val changepointProbability: Float,       // Probability that a change occurred (0-1)
+        val estimatedChangepointAgoMs: Long,     // When the change likely occurred
+        val preChangeMean: Float,                // Mean before the changepoint
+        val postChangeMean: Float,               // Mean after the changepoint
+        val changeMagnitude: Float,              // Absolute change magnitude
+        val runLength: Int                       // Current run length (readings since last change)
+    ) {
+        companion object {
+            val NONE = BayesianChangepointResult(false, 0f, 0L, 0f, 0f, 0f, 0)
+        }
+        
+        /**
+         * Get human-readable changepoint description.
+         */
+        fun getDescription(): String {
+            return if (changepointDetected) {
+                val secondsAgo = estimatedChangepointAgoMs / 1000
+                String.format("Change detected %ds ago (%.0f%% confident)", 
+                    secondsAgo, changepointProbability * 100)
+            } else {
+                "No regime change detected"
+            }
+        }
+    }
+
+    /**
+     * Autocorrelation pattern recognition result (Feature #12).
+     * Detects periodic patterns in readings (e.g., HVAC cycles, machinery).
+     */
+    data class AutocorrelationResult(
+        val patternDetected: Boolean,
+        val dominantPeriodSeconds: Float,        // Primary periodic component
+        val periodConfidence: Float,             // How confident in the period (0-1)
+        val amplitude: Float,                    // Oscillation amplitude
+        val secondaryPeriodSeconds: Float,       // Secondary periodic component (if any)
+        val patternType: PatternType,
+        val possibleSource: String               // Inferred source (HVAC, equipment, etc.)
+    ) {
+        enum class PatternType {
+            NONE,
+            PERIODIC,        // Regular repeating pattern
+            QUASI_PERIODIC,  // Nearly periodic with variation
+            RANDOM_WALK      // No pattern, random variation
+        }
+        
+        companion object {
+            val NONE = AutocorrelationResult(false, 0f, 0f, 0f, 0f, PatternType.NONE, "")
+        }
+        
+        /**
+         * Get human-readable pattern description.
+         */
+        fun getDescription(): String {
+            return if (patternDetected && dominantPeriodSeconds > 0) {
+                String.format("%.1fs cycle detected (%.0f%% confident)%s", 
+                    dominantPeriodSeconds, 
+                    periodConfidence * 100,
+                    if (possibleSource.isNotEmpty()) " - $possibleSource" else "")
+            } else {
+                "No periodic pattern detected"
+            }
+        }
+    }
 
     /**
      * Statistical alert trigger.
@@ -305,6 +444,31 @@ class StatisticalEngine(private val context: Context) {
     private val proximityReadings = ArrayDeque<TimestampedValue>(PROXIMITY_BUFFER_SIZE)
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 3 STATE - Advanced Statistical Analysis
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Moving average crossover (Feature #10)
+    private val shortMAWindow = 10      // 10 seconds
+    private val longMAWindow = 60       // 60 seconds  
+    private var lastShortMA: Float = 0f
+    private var lastLongMA: Float = 0f
+    private var lastCrossoverMs: Long = 0L
+    private var lastCrossoverType: MACrossoverResult.CrossoverType = MACrossoverResult.CrossoverType.NONE
+    
+    // Bayesian changepoint detection (Feature #11)
+    private var bayesianRunLength: Int = 0
+    private var bayesianMean: Float = 0f
+    private var bayesianVariance: Float = 0f
+    private var lastBayesianChangepointMs: Long = 0L
+    private var preChangeMean: Float = 0f
+    
+    // Autocorrelation state (Feature #12)
+    private val autocorrBuffer = RollingBuffer(MEDIUM_WINDOW_SIZE)  // 5 min for pattern detection
+    private var lastAutocorrAnalysisMs: Long = 0L
+    private var cachedAutocorrResult: AutocorrelationResult = AutocorrelationResult.NONE
+    private val AUTOCORR_ANALYSIS_INTERVAL_MS = 5000L  // Analyze every 5 seconds (expensive)
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC API
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -362,6 +526,25 @@ class StatisticalEngine(private val context: Context) {
         cpsRocDirection = updateDirectionCounter(cpsRocDirection, cpsRoc.trend)
         lastCpsReading = TimestampedValue(cps, timestampMs)
         
+        // ═══════════════════════════════════════════════════════════════════════
+        // TIER 3: ADVANCED STATISTICAL ANALYSIS
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        // Add to autocorrelation buffer
+        autocorrBuffer.add(TimestampedValue(doseRate, timestampMs))
+        
+        // Calculate Poisson uncertainty (Feature #9) - CPS is count data
+        val poissonResult = calculatePoissonUncertainty(cps, cpsBaseline, timestampMs)
+        
+        // Calculate Moving Average Crossover (Feature #10)
+        val maCrossoverResult = calculateMACrossover(doseRate, timestampMs)
+        
+        // Calculate Bayesian Changepoint Detection (Feature #11)
+        val bayesianResult = calculateBayesianChangepoint(doseRate, timestampMs)
+        
+        // Calculate Autocorrelation (Feature #12) - less frequent due to cost
+        val autocorrResult = calculateAutocorrelation(timestampMs)
+        
         val doseSnapshot = AnalysisSnapshot(
             timestampMs = timestampMs,
             currentValue = doseRate,
@@ -371,7 +554,11 @@ class StatisticalEngine(private val context: Context) {
             cusum = doseCusum,
             forecast30s = doseForecast30,
             forecast60s = doseForecast60,
-            forecast300s = doseForecast300
+            forecast300s = doseForecast300,
+            poissonUncertainty = poissonResult,
+            maCrossover = maCrossoverResult,
+            bayesianChangepoint = bayesianResult,
+            autocorrelation = autocorrResult
         )
         
         val cpsSnapshot = AnalysisSnapshot(
@@ -383,7 +570,11 @@ class StatisticalEngine(private val context: Context) {
             cusum = cpsCusum,
             forecast30s = cpsForecast30,
             forecast60s = cpsForecast60,
-            forecast300s = cpsForecast300
+            forecast300s = cpsForecast300,
+            poissonUncertainty = poissonResult,
+            maCrossover = maCrossoverResult,
+            bayesianChangepoint = bayesianResult,
+            autocorrelation = autocorrResult
         )
         
         return Pair(doseSnapshot, cpsSnapshot)
@@ -1088,6 +1279,347 @@ class StatisticalEngine(private val context: Context) {
             3 -> StatisticalTrigger.TriggerSeverity.ALERT
             else -> StatisticalTrigger.TriggerSeverity.CRITICAL
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 3: ADVANCED STATISTICAL ANALYSIS CALCULATIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Feature #9: Poisson Uncertainty Quantification
+     * 
+     * Radioactive decay follows Poisson statistics where uncertainty = sqrt(N).
+     * This properly quantifies measurement uncertainty and only flags changes
+     * that exceed statistical uncertainty.
+     */
+    private fun calculatePoissonUncertainty(
+        cps: Float, 
+        baseline: BaselineStats, 
+        timestampMs: Long
+    ): PoissonUncertaintyResult {
+        if (cps < 0.001f) return PoissonUncertaintyResult.UNKNOWN
+        
+        // Assume 1 second measurement window (typical for RadiaCode)
+        val measurementWindowSeconds = 1.0f
+        val countsInWindow = (cps * measurementWindowSeconds).toInt().coerceAtLeast(1)
+        
+        // Poisson uncertainty: σ = sqrt(N)
+        val uncertainty = sqrt(countsInWindow.toFloat())
+        
+        // Relative uncertainty (percentage)
+        val relativeUncertainty = (uncertainty / countsInWindow) * 100f
+        
+        // 1σ bounds
+        val lowerBound = (countsInWindow - uncertainty).coerceAtLeast(0f)
+        val upperBound = countsInWindow + uncertainty
+        
+        // Compare to expected baseline to see if change is statistically significant
+        var isSignificant = false
+        var significanceMultiple = 0f
+        
+        if (baseline.isValid()) {
+            val expectedCps = baseline.mean
+            val expectedCounts = expectedCps * measurementWindowSeconds
+            val expectedUncertainty = sqrt(expectedCounts.coerceAtLeast(1f))
+            
+            // Combined uncertainty (quadrature sum)
+            val combinedUncertainty = sqrt(uncertainty * uncertainty + expectedUncertainty * expectedUncertainty)
+            
+            // Calculate significance (how many σ away from expected)
+            val difference = abs(cps - expectedCps)
+            significanceMultiple = if (combinedUncertainty > 0.001f) {
+                difference / combinedUncertainty
+            } else 0f
+            
+            // Significant if > 2σ away from expected
+            isSignificant = significanceMultiple > 2.0f
+        }
+        
+        return PoissonUncertaintyResult(
+            countRate = cps,
+            countsInWindow = countsInWindow,
+            uncertainty = uncertainty,
+            relativeUncertaintyPercent = relativeUncertainty,
+            lowerBound = lowerBound,
+            upperBound = upperBound,
+            isStatisticallySignificant = isSignificant,
+            significanceMultiple = significanceMultiple
+        )
+    }
+
+    /**
+     * Feature #10: Moving Average Crossover Detection
+     * 
+     * Detects trend reversals when a short-term moving average crosses
+     * above or below a long-term moving average.
+     * - "Golden Cross": Short MA crosses above Long MA (trending up)
+     * - "Death Cross": Short MA crosses below Long MA (trending down)
+     */
+    private fun calculateMACrossover(value: Float, timestampMs: Long): MACrossoverResult {
+        val recentReadings = doseReadings.getRecent(longMAWindow)
+        if (recentReadings.size < longMAWindow / 2) {
+            return MACrossoverResult.NONE  // Not enough data
+        }
+        
+        // Calculate short-term MA
+        val shortReadings = recentReadings.takeLast(shortMAWindow.coerceAtMost(recentReadings.size))
+        val currentShortMA = if (shortReadings.isNotEmpty()) {
+            shortReadings.map { it.value }.average().toFloat()
+        } else return MACrossoverResult.NONE
+        
+        // Calculate long-term MA
+        val currentLongMA = recentReadings.map { it.value }.average().toFloat()
+        
+        // Detect crossover
+        var crossoverType = MACrossoverResult.CrossoverType.NONE
+        var crossoverDetected = false
+        
+        if (lastShortMA != 0f && lastLongMA != 0f) {
+            // Golden Cross: short crosses above long
+            if (lastShortMA <= lastLongMA && currentShortMA > currentLongMA) {
+                crossoverType = MACrossoverResult.CrossoverType.GOLDEN_CROSS
+                crossoverDetected = true
+                lastCrossoverMs = timestampMs
+                lastCrossoverType = crossoverType
+            }
+            // Death Cross: short crosses below long
+            else if (lastShortMA >= lastLongMA && currentShortMA < currentLongMA) {
+                crossoverType = MACrossoverResult.CrossoverType.DEATH_CROSS
+                crossoverDetected = true
+                lastCrossoverMs = timestampMs
+                lastCrossoverType = crossoverType
+            }
+            // Maintain previous crossover type if within recency window
+            else if (lastCrossoverType != MACrossoverResult.CrossoverType.NONE &&
+                     timestampMs - lastCrossoverMs < 60000) { // 1 minute recency
+                crossoverType = lastCrossoverType
+            }
+        }
+        
+        // Update state for next iteration
+        lastShortMA = currentShortMA
+        lastLongMA = currentLongMA
+        
+        // Calculate crossover strength (divergence)
+        val divergence = if (currentLongMA > 0.001f) {
+            abs(currentShortMA - currentLongMA) / currentLongMA
+        } else 0f
+        
+        val timeSinceCrossover = if (lastCrossoverMs > 0) timestampMs - lastCrossoverMs else 0L
+        
+        return MACrossoverResult(
+            shortMA = currentShortMA,
+            longMA = currentLongMA,
+            crossoverType = crossoverType,
+            crossoverDetected = crossoverDetected,
+            timeSinceCrossoverMs = timeSinceCrossover,
+            crossoverStrength = divergence.coerceIn(0f, 1f)
+        )
+    }
+
+    /**
+     * Feature #11: Bayesian Changepoint Detection
+     * 
+     * Online Bayesian changepoint detection using a simplified Adams & MacKay approach.
+     * Detects when the underlying generating process has changed (regime change).
+     */
+    private fun calculateBayesianChangepoint(value: Float, timestampMs: Long): BayesianChangepointResult {
+        // Simplified Bayesian changepoint using online parameter estimation
+        val hazardRate = 0.01f  // Prior probability of changepoint at any step
+        val priorScale = 1.0f   // Prior variance scale
+        
+        // Update run length and statistics
+        bayesianRunLength++
+        
+        // Online mean and variance update (Welford's algorithm)
+        if (bayesianRunLength == 1) {
+            bayesianMean = value
+            bayesianVariance = 0f
+            preChangeMean = doseBaseline.mean
+        } else {
+            val delta = value - bayesianMean
+            bayesianMean += delta / bayesianRunLength
+            val delta2 = value - bayesianMean
+            bayesianVariance += delta * delta2
+        }
+        
+        val currentVariance = if (bayesianRunLength > 2) {
+            bayesianVariance / (bayesianRunLength - 1)
+        } else priorScale
+        
+        // Calculate probability of changepoint using predictive likelihood
+        // Higher deviation from run's mean suggests changepoint
+        val runStdDev = sqrt(currentVariance.coerceAtLeast(0.0001f))
+        val deviationFromRunMean = abs(value - bayesianMean)
+        val zFromRun = deviationFromRunMean / runStdDev
+        
+        // Also compare to overall baseline
+        var changepointProbability = 0f
+        var changepointDetected = false
+        
+        if (doseBaseline.isValid()) {
+            val deviationFromBaseline = abs(bayesianMean - doseBaseline.mean)
+            val baselineZ = deviationFromBaseline / doseBaseline.standardDeviation.coerceAtLeast(0.0001f)
+            
+            // Combine evidence: high z from baseline suggests the run is in a new regime
+            // This is a simplified approximation of proper Bayesian inference
+            changepointProbability = when {
+                baselineZ > 3.0f -> 0.95f
+                baselineZ > 2.5f -> 0.85f
+                baselineZ > 2.0f -> 0.70f
+                baselineZ > 1.5f -> 0.50f
+                baselineZ > 1.0f -> 0.30f
+                else -> 0.10f
+            }
+            
+            // Detect changepoint if probability high and run length is short
+            // (short run at high probability = recent change)
+            if (changepointProbability > 0.75f && bayesianRunLength < 30) {
+                changepointDetected = true
+                if (lastBayesianChangepointMs == 0L || 
+                    timestampMs - lastBayesianChangepointMs > 30000) { // At least 30s between detections
+                    lastBayesianChangepointMs = timestampMs - (bayesianRunLength * 1000L)
+                    preChangeMean = doseBaseline.mean
+                }
+            }
+            
+            // Reset run if we've detected a clear changepoint
+            if (changepointDetected && zFromRun > 3.0f) {
+                // Start a new run
+                bayesianRunLength = 1
+                bayesianMean = value
+                bayesianVariance = 0f
+            }
+        }
+        
+        val timeSinceChange = if (lastBayesianChangepointMs > 0) {
+            timestampMs - lastBayesianChangepointMs
+        } else 0L
+        
+        return BayesianChangepointResult(
+            changepointDetected = changepointDetected,
+            changepointProbability = changepointProbability,
+            estimatedChangepointAgoMs = timeSinceChange,
+            preChangeMean = preChangeMean,
+            postChangeMean = bayesianMean,
+            changeMagnitude = abs(bayesianMean - preChangeMean),
+            runLength = bayesianRunLength
+        )
+    }
+
+    /**
+     * Feature #12: Autocorrelation Pattern Recognition
+     * 
+     * Detects periodic patterns in readings that might indicate
+     * HVAC systems, industrial equipment, or other cyclic sources.
+     */
+    private fun calculateAutocorrelation(timestampMs: Long): AutocorrelationResult {
+        // Only recalculate periodically (expensive operation)
+        if (timestampMs - lastAutocorrAnalysisMs < AUTOCORR_ANALYSIS_INTERVAL_MS) {
+            return cachedAutocorrResult
+        }
+        lastAutocorrAnalysisMs = timestampMs
+        
+        val readings = autocorrBuffer.getRecent(MEDIUM_WINDOW_SIZE)
+        if (readings.size < 60) {  // Need at least 60 samples
+            cachedAutocorrResult = AutocorrelationResult.NONE
+            return cachedAutocorrResult
+        }
+        
+        val values = readings.map { it.value }
+        val n = values.size
+        val mean = values.average().toFloat()
+        
+        // Remove mean (center the data)
+        val centered = values.map { it - mean }
+        
+        // Calculate variance
+        val variance = centered.map { it * it }.average().toFloat()
+        if (variance < 0.0001f) {
+            cachedAutocorrResult = AutocorrelationResult.NONE
+            return cachedAutocorrResult
+        }
+        
+        // Calculate autocorrelation for various lags
+        // Look for lags from 2s to 120s (assuming ~1 reading/second)
+        val maxLag = min(120, n / 2)
+        val autocorrelations = mutableListOf<Pair<Int, Float>>()
+        
+        for (lag in 2..maxLag) {
+            var sum = 0f
+            for (i in 0 until (n - lag)) {
+                sum += centered[i] * centered[i + lag]
+            }
+            val acf = sum / ((n - lag) * variance)
+            autocorrelations.add(lag to acf)
+        }
+        
+        // Find peaks in autocorrelation (potential periods)
+        // A peak is where ACF is higher than neighbors and > 0.3
+        val peaks = mutableListOf<Pair<Int, Float>>()
+        for (i in 1 until autocorrelations.size - 1) {
+            val (lag, acf) = autocorrelations[i]
+            val prevAcf = autocorrelations[i - 1].second
+            val nextAcf = autocorrelations[i + 1].second
+            
+            if (acf > 0.3f && acf > prevAcf && acf > nextAcf) {
+                peaks.add(lag to acf)
+            }
+        }
+        
+        // Sort peaks by strength
+        val sortedPeaks = peaks.sortedByDescending { it.second }
+        
+        if (sortedPeaks.isEmpty()) {
+            cachedAutocorrResult = AutocorrelationResult(
+                patternDetected = false,
+                dominantPeriodSeconds = 0f,
+                periodConfidence = 0f,
+                amplitude = 0f,
+                secondaryPeriodSeconds = 0f,
+                patternType = AutocorrelationResult.PatternType.RANDOM_WALK,
+                possibleSource = ""
+            )
+            return cachedAutocorrResult
+        }
+        
+        // Dominant period
+        val dominantLag = sortedPeaks[0].first
+        val dominantStrength = sortedPeaks[0].second
+        
+        // Secondary period (if exists)
+        val secondaryLag = if (sortedPeaks.size > 1) sortedPeaks[1].first else 0
+        
+        // Estimate amplitude from variance
+        val amplitude = sqrt(variance * 2)  // Rough estimate
+        
+        // Infer possible source based on period
+        val possibleSource = when {
+            dominantLag in 15..45 -> "Possible HVAC cycle"
+            dominantLag in 55..70 -> "Possible 1-minute equipment cycle"
+            dominantLag in 110..130 -> "Possible 2-minute cycle"
+            dominantLag < 10 -> "High-frequency oscillation"
+            else -> "Periodic equipment"
+        }
+        
+        // Determine pattern type
+        val patternType = when {
+            dominantStrength > 0.6f -> AutocorrelationResult.PatternType.PERIODIC
+            dominantStrength > 0.4f -> AutocorrelationResult.PatternType.QUASI_PERIODIC
+            else -> AutocorrelationResult.PatternType.RANDOM_WALK
+        }
+        
+        cachedAutocorrResult = AutocorrelationResult(
+            patternDetected = dominantStrength > 0.3f,
+            dominantPeriodSeconds = dominantLag.toFloat(),
+            periodConfidence = dominantStrength,
+            amplitude = amplitude,
+            secondaryPeriodSeconds = secondaryLag.toFloat(),
+            patternType = patternType,
+            possibleSource = if (dominantStrength > 0.4f) possibleSource else ""
+        )
+        
+        return cachedAutocorrResult
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

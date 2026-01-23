@@ -640,6 +640,354 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- ========== TIER 3: ADVANCED STATISTICAL ANALYSIS ========== -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="ADVANCED STATISTICAL ANALYSIS"
+                    android:textColor="@color/pro_magenta"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
+
+                <!-- Poisson Uncertainty Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Poisson Uncertainty"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Show statistical confidence bounds"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/poissonInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Poisson Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/poissonToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/poissonDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Displays uncertainty bounds based on counting statistics"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- MA Crossover Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Moving Average Crossover"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Detect trend reversals"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/maCrossoverInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="MA Crossover Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/maCrossoverToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <!-- MA Crossover config section -->
+                    <LinearLayout
+                        android:id="@+id/maCrossoverSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="12dp"
+                        android:visibility="gone">
+
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/pro_border"
+                            android:layout_marginBottom="12dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Short window"
+                                android:textColor="@color/pro_text_secondary"
+                                android:textSize="13sp" />
+
+                            <SeekBar
+                                android:id="@+id/maShortWindowSeek"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:layout_marginEnd="12dp"
+                                android:max="5"
+                                android:progress="1" />
+
+                            <TextView
+                                android:id="@+id/maShortWindowValue"
+                                android:layout_width="48dp"
+                                android:layout_height="wrap_content"
+                                android:text="10s"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="14sp"
+                                android:fontFamily="monospace"
+                                android:gravity="end" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Long window"
+                                android:textColor="@color/pro_text_secondary"
+                                android:textSize="13sp" />
+
+                            <SeekBar
+                                android:id="@+id/maLongWindowSeek"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:layout_marginEnd="12dp"
+                                android:max="8"
+                                android:progress="1" />
+
+                            <TextView
+                                android:id="@+id/maLongWindowValue"
+                                android:layout_width="48dp"
+                                android:layout_height="wrap_content"
+                                android:text="60s"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="14sp"
+                                android:fontFamily="monospace"
+                                android:gravity="end" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/maCrossoverDescription"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Detects Golden Cross (uptrend) and Death Cross (downtrend) signals"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Bayesian Changepoint Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Bayesian Changepoint"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Detect regime transitions"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/bayesianInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Bayesian Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/bayesianToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/bayesianDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Uses probability to identify when conditions fundamentally change"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Autocorrelation Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Autocorrelation Patterns"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Find periodic signals (HVAC, machinery)"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/autocorrInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Autocorrelation Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/autocorrToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/autocorrDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Discovers hidden periodic patterns in radiation data"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
                 <!-- ========== VOICE ========== -->
                 <TextView
                     android:layout_width="match_parent"
