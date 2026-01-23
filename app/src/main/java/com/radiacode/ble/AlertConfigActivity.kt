@@ -41,7 +41,7 @@ import java.util.UUID
 class AlertConfigActivity : AppCompatActivity() {
 
     companion object {
-        const val NOTIFICATION_CHANNEL_ID = "radiacode_alerts"
+        const val NOTIFICATION_CHANNEL_ID = "radiacode_alerts_v2"
         const val NOTIFICATION_CHANNEL_NAME = "RadiaCode Alerts"
         const val MAX_ALERTS = 10
         private const val REQUEST_NOTIFICATION_PERMISSION = 1001
@@ -112,6 +112,11 @@ class AlertConfigActivity : AppCompatActivity() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Delete old channel (had sound enabled) - can't modify channel settings once created
+            manager.deleteNotificationChannel("radiacode_alerts")
+            
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 NOTIFICATION_CHANNEL_NAME,
@@ -123,7 +128,6 @@ class AlertConfigActivity : AppCompatActivity() {
                 // Disable system sound - app plays its own sounds via SoundManager/VegaTTS
                 setSound(null, null)
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }

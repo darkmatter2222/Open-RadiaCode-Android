@@ -249,6 +249,9 @@ class DangerZoneWarning(private val context: Context) {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Delete old channel (had sound enabled) - can't modify channel settings once created
+            notificationManager.deleteNotificationChannel("radiation_alerts")
+            
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Radiation Alerts",
@@ -353,7 +356,7 @@ class DangerZoneWarning(private val context: Context) {
     }
 
     companion object {
-        private const val CHANNEL_ID = "radiation_alerts"
+        private const val CHANNEL_ID = "radiation_alerts_v2"
         private const val NOTIFICATION_ID = 2001
     }
 }
