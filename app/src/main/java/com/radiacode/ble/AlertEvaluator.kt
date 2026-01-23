@@ -1,11 +1,13 @@
 package com.radiacode.ble
 
 import android.Manifest
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -28,8 +30,60 @@ class AlertEvaluator(private val context: Context) {
         private const val ALERT_NOTIF_BASE_ID = 10000
     }
 
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
     // Track ongoing alert states (for duration tracking)
     private val alertStartTimes = mutableMapOf<String, Long>()
+    
+    init {
+        // Ensure notification channel exists on initialization
+        ensureNotificationChannel()
+    }
+    
+    /**
+     * Ensure the alert notification channel exists.
+     * Called on init and can be called to refresh channel settings.
+     */
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = AlertConfigActivity.NOTIFICATION_CHANNEL_ID
+            
+            // Check if channel already exists
+            val existingChannel = notificationManager.getNotificationChannel(channelId)
+            if (existingChannel != null) {
+                Log.d(TAG, "Notification channel $channelId already exists")
+                return
+            }
+            
+            // Create channel with appropriate sound settings
+            val enableSystemSound = Prefs.isNotificationSystemSoundEnabled(context)
+            val soundUri = if (enableSystemSound) {
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            } else {
+                null
+            }
+            
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            
+            val channel = NotificationChannel(
+                channelId,
+                "Radiation Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when radiation levels exceed configured thresholds"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 200, 500)
+                setSound(soundUri, audioAttributes)
+            }
+            
+            notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "Created notification channel $channelId (systemSound=$enableSystemSound)")
+        }
+    }
 
     /**
      * Evaluate all enabled alerts against current readings.
@@ -206,8 +260,6 @@ class AlertEvaluator(private val context: Context) {
             }
         }
 
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         // Build notification content
         val metricLabel = if (alert.metric == "dose") "Dose" else "Count"
         val currentValueText = when (alert.metric) {
@@ -237,6 +289,7 @@ class AlertEvaluator(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Build notification - sound is controlled by the channel, not the builder
         val notification = NotificationCompat.Builder(context, AlertConfigActivity.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notifications)
             .setContentTitle(title)
@@ -247,12 +300,12 @@ class AlertEvaluator(private val context: Context) {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setVibrate(longArrayOf(0, 500, 200, 500))
-            .setSound(null)  // Disable system sound - app plays its own sounds
             .build()
 
         // Use unique ID based on alert ID
         val notifId = ALERT_NOTIF_BASE_ID + kotlin.math.abs(alert.id.hashCode() % 1000)
         notificationManager.notify(notifId, notification)
+        Log.d(TAG, "Posted notification ID $notifId for alert '${alert.name}'")
     }
 
     /**
