@@ -40,6 +40,7 @@ object Prefs {
     private const val KEY_NOTIFICATION_SHOW_CONNECTION_STATUS = "notification_show_connection_status"
     private const val KEY_NOTIFICATION_SHOW_ALERTS = "notification_show_alerts"
     private const val KEY_NOTIFICATION_SHOW_ANOMALIES = "notification_show_anomalies"
+    private const val KEY_NOTIFICATION_SYSTEM_SOUND_ENABLED = "notification_system_sound_enabled"
     
     // Smart Alert keys
     private const val KEY_ALERTS_JSON = "alerts_json"
@@ -592,6 +593,22 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_NOTIFICATION_SHOW_ANOMALIES, enabled)
+            .apply()
+    }
+    
+    /**
+     * Whether to play Android system notification sound for alerts.
+     * Default is OFF - app plays its own VEGA/custom sounds.
+     */
+    fun isNotificationSystemSoundEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_SYSTEM_SOUND_ENABLED, false)  // Default OFF
+    }
+    
+    fun setNotificationSystemSoundEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_SYSTEM_SOUND_ENABLED, enabled)
             .apply()
     }
     

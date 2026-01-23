@@ -513,6 +513,76 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- ===== ALERT SOUND SECTION ===== -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="4dp">
+
+                <!-- Section Header -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="16dp"
+                    android:paddingTop="16dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="8dp"
+                    android:text="ALERT SOUND"
+                    android:textColor="@color/pro_yellow"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="16dp"
+                    android:background="@color/pro_border"
+                    android:alpha="0.5" />
+
+                <!-- Android System Sound Toggle -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Android System Sound"
+                            android:textColor="@color/pro_text_primary"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Play default Android notification sound alongside app alerts. Disable if you only want VEGA and custom sounds."
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switchSystemSound"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:thumbTint="@color/pro_yellow"
+                        app:trackTint="@color/pro_border" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- ===== PREVIEW SECTION ===== -->
             <LinearLayout
                 android:layout_width="match_parent"

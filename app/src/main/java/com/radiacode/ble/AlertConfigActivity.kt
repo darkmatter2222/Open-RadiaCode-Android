@@ -117,6 +117,17 @@ class AlertConfigActivity : AppCompatActivity() {
             // Delete old channel (had sound enabled) - can't modify channel settings once created
             manager.deleteNotificationChannel("radiacode_alerts")
             
+            // Check user preference for system sound
+            val enableSystemSound = Prefs.isNotificationSystemSoundEnabled(this)
+            val soundUri = if (enableSystemSound) {
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            } else null
+            
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 NOTIFICATION_CHANNEL_NAME,
@@ -125,8 +136,7 @@ class AlertConfigActivity : AppCompatActivity() {
                 description = "Radiation level alerts"
                 enableVibration(true)
                 enableLights(true)
-                // Disable system sound - app plays its own sounds via SoundManager/VegaTTS
-                setSound(null, null)
+                setSound(soundUri, audioAttributes)
             }
             manager.createNotificationChannel(channel)
         }

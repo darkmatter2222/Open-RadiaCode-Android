@@ -42,6 +42,9 @@ class NotificationSettingsActivity : AppCompatActivity() {
     private lateinit var switchShowAlerts: SwitchMaterial
     private lateinit var switchShowAnomalies: SwitchMaterial
     
+    // Alert sound options
+    private lateinit var switchSystemSound: SwitchMaterial
+    
     // Preview
     private lateinit var previewTitle: TextView
     private lateinit var previewContent: TextView
@@ -80,6 +83,9 @@ class NotificationSettingsActivity : AppCompatActivity() {
         switchShowAlerts = findViewById(R.id.switchShowAlerts)
         switchShowAnomalies = findViewById(R.id.switchShowAnomalies)
         
+        // Alert sound options
+        switchSystemSound = findViewById(R.id.switchSystemSound)
+        
         // Preview
         previewTitle = findViewById(R.id.previewTitle)
         previewContent = findViewById(R.id.previewContent)
@@ -103,6 +109,9 @@ class NotificationSettingsActivity : AppCompatActivity() {
         switchShowConnectionStatus.isChecked = Prefs.isNotificationShowConnectionStatus(this)
         switchShowAlerts.isChecked = Prefs.isNotificationShowAlerts(this)
         switchShowAnomalies.isChecked = Prefs.isNotificationShowAnomalies(this)
+        
+        // Load alert sound options
+        switchSystemSound.isChecked = Prefs.isNotificationSystemSoundEnabled(this)
         
         // Show/hide detailed options
         detailedOptionsSection.visibility = if (style == Prefs.NotificationStyle.DETAILED) View.VISIBLE else View.GONE
@@ -169,6 +178,63 @@ class NotificationSettingsActivity : AppCompatActivity() {
             Prefs.setNotificationShowAnomalies(this, isChecked)
             updatePreview()
             notifyServiceOfChange()
+        }
+        
+        // Alert sound toggle
+        switchSystemSound.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setNotificationSystemSoundEnabled(this, isChecked)
+            // Recreate notification channels with updated sound settings
+            recreateNotificationChannels(isChecked)
+        }
+    }
+    
+    /**
+     * Recreate notification channels with updated sound settings.
+     * Android caches channel settings, so we need to delete and recreate.
+     */
+    private fun recreateNotificationChannels(enableSound: Boolean) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            
+            // Delete old channels
+            manager.deleteNotificationChannel("radiacode_alerts_v2")
+            manager.deleteNotificationChannel("radiation_alerts_v2")
+            
+            // Recreate with updated sound setting
+            val soundUri = if (enableSound) {
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            } else null
+            
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            
+            // RadiaCode Alerts channel
+            val alertChannel = android.app.NotificationChannel(
+                "radiacode_alerts_v2",
+                "RadiaCode Alerts",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Radiation level alerts"
+                enableVibration(true)
+                enableLights(true)
+                setSound(soundUri, audioAttributes)
+            }
+            manager.createNotificationChannel(alertChannel)
+            
+            // Radiation Alerts channel (DangerZone)
+            val dangerChannel = android.app.NotificationChannel(
+                "radiation_alerts_v2",
+                "Radiation Alerts",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts for elevated radiation levels"
+                enableVibration(true)
+                enableLights(true)
+                setSound(soundUri, audioAttributes)
+            }
+            manager.createNotificationChannel(dangerChannel)
         }
     }
 

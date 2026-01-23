@@ -12,6 +12,7 @@ import android.os.*
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.MainActivity
+import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
 
 /**
@@ -252,6 +253,17 @@ class DangerZoneWarning(private val context: Context) {
             // Delete old channel (had sound enabled) - can't modify channel settings once created
             notificationManager.deleteNotificationChannel("radiation_alerts")
             
+            // Check user preference for system sound
+            val enableSystemSound = Prefs.isNotificationSystemSoundEnabled(context)
+            val soundUri = if (enableSystemSound) {
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            } else null
+            
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+            
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Radiation Alerts",
@@ -261,8 +273,7 @@ class DangerZoneWarning(private val context: Context) {
                 enableVibration(true)
                 enableLights(true)
                 lightColor = ContextCompat.getColor(context, R.color.pro_red)
-                // Disable system sound - app plays its own sounds via SoundManager/VegaTTS
-                setSound(null, null)
+                setSound(soundUri, audioAttributes)
             }
             notificationManager.createNotificationChannel(channel)
         }
