@@ -22,10 +22,10 @@ Transform Open RadiaCode from a **reactive alarm system** into a **proactive rad
 | 6 | Predictive Threshold Crossing | ✅ Implemented | Warns BEFORE hitting user thresholds |
 | 7 | Cumulative Dose Forecasting | ✅ Implemented | Tracks session dose, projects time-to-limit |
 | 8 | Source Proximity Estimation | ✅ Implemented | Inverse-square law distance estimation |
-| 9 | Poisson Uncertainty Quantification | ⬜ Not Started | |
-| 10 | Moving Average Crossover Signals | ⬜ Not Started | |
-| 11 | Bayesian Changepoint Detection | ⬜ Not Started | |
-| 12 | Autocorrelation Pattern Recognition | ⬜ Not Started | |
+| 9 | Poisson Uncertainty Quantification | ✅ Implemented | sqrt(N) uncertainty, confidence bounds |
+| 10 | Moving Average Crossover Signals | ✅ Implemented | Golden/Death cross detection, configurable windows |
+| 11 | Bayesian Changepoint Detection | ✅ Implemented | Online regime change detection with probability |
+| 12 | Autocorrelation Pattern Recognition | ✅ Implemented | ACF-based periodic pattern detection |
 | 13 | Location-Aware Anomaly Detection | ⬜ Not Started | |
 | 14 | Spatial Gradient Analysis | ⬜ Not Started | |
 | 15 | Hotspot Prediction & Interpolation | ⬜ Not Started | |
