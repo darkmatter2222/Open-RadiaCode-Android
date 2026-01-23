@@ -116,7 +116,7 @@ object VegaTTS {
                 Log.d(TAG, "VegaTTS: API call starting")
                 
                 val apiUrl = Prefs.getVegaTtsApiUrl(context)
-                val url = URL("$apiUrl/synthesize")
+                val url = URL("$apiUrl/api/tts/synthesize")
                 
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "POST"
