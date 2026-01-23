@@ -47,6 +47,13 @@ class VegaFeatureInfoDialog(
     private var scrollAnimator: ValueAnimator? = null
     private var waveformAnimator: ValueAnimator? = null
     private var audioDurationMs: Long = 0
+    private var userInterruptedScroll = false
+    
+    companion object {
+        // Static scroll rate: ~150 WPM speaking = ~45 pixels per second
+        // This keeps the text in sync with typical Vega speech
+        private const val SCROLL_PIXELS_PER_SECOND = 45f
+    }
     
     /**
      * Enum defining each VEGA Statistical Intelligence feature with its explanation.
@@ -551,8 +558,19 @@ CONS
                 0,
                 1f
             )
-            isVerticalScrollBarEnabled = false
-            setOnTouchListener { _, _ -> true }  // Disable manual scroll
+            isVerticalScrollBarEnabled = true
+            // Allow manual scroll - stop auto-scroll when user touches
+            setOnTouchListener { _, event ->
+                if (event.action == android.view.MotionEvent.ACTION_DOWN ||
+                    event.action == android.view.MotionEvent.ACTION_MOVE) {
+                    // User is scrolling manually - stop auto-scroll
+                    if (!userInterruptedScroll) {
+                        userInterruptedScroll = true
+                        scrollAnimator?.cancel()
+                    }
+                }
+                false  // Return false to allow normal scroll handling
+            }
             isVerticalFadingEdgeEnabled = true
             setFadingEdgeLength((48 * density).toInt())
         }
@@ -712,21 +730,24 @@ CONS
     }
     
     private fun startScrollAnimation(durationMs: Long) {
+        // Reset interrupt flag for new animation
+        userInterruptedScroll = false
+        
         handler.postDelayed({
             featureText.post {
                 val scrollDistance = featureText.height - textScrollView.height
-                if (scrollDistance > 0) {
-                    // Calculate minimum scroll time based on text length
-                    // Target ~50 pixels per second for comfortable reading
-                    val textLength = feature.explanation.length
-                    val minScrollTimeForText = (textLength * 30L).coerceIn(30000L, 120000L)  // 30-120 seconds
-                    val effectiveDuration = maxOf(durationMs, minScrollTimeForText)
+                if (scrollDistance > 0 && !userInterruptedScroll) {
+                    // Use static scroll rate: distance / rate = duration
+                    // This keeps text movement consistent with Vega's speaking pace
+                    val scrollDurationMs = ((scrollDistance / SCROLL_PIXELS_PER_SECOND) * 1000).toLong()
                     
                     scrollAnimator = ValueAnimator.ofInt(0, scrollDistance).apply {
-                        duration = effectiveDuration
+                        duration = scrollDurationMs
                         interpolator = android.view.animation.LinearInterpolator()
                         addUpdateListener { animation ->
-                            textScrollView.scrollTo(0, animation.animatedValue as Int)
+                            if (!userInterruptedScroll) {
+                                textScrollView.scrollTo(0, animation.animatedValue as Int)
+                            }
                         }
                         start()
                     }
