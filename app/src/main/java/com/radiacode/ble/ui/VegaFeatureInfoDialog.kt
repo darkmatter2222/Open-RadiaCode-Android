@@ -716,8 +716,14 @@ CONS
             featureText.post {
                 val scrollDistance = featureText.height - textScrollView.height
                 if (scrollDistance > 0) {
+                    // Calculate minimum scroll time based on text length
+                    // Target ~50 pixels per second for comfortable reading
+                    val textLength = feature.explanation.length
+                    val minScrollTimeForText = (textLength * 30L).coerceIn(30000L, 120000L)  // 30-120 seconds
+                    val effectiveDuration = maxOf(durationMs, minScrollTimeForText)
+                    
                     scrollAnimator = ValueAnimator.ofInt(0, scrollDistance).apply {
-                        duration = durationMs
+                        duration = effectiveDuration
                         interpolator = android.view.animation.LinearInterpolator()
                         addUpdateListener { animation ->
                             textScrollView.scrollTo(0, animation.animatedValue as Int)

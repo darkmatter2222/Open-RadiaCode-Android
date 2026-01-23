@@ -149,6 +149,19 @@ After completing a todo list:
 
 **Key principle:** We always commit and push to origin on a feature branch after completing work. The branch is always available on GitHub. Merging onto main requires explicit user instruction.
 
+## Completion Summary Format
+
+After completing a task and deploying, always end your response with a concise summary block:
+
+```
+**Version:** X.XX
+**Branch:** feature/description
+**Deployed:** Yes (phone restarted)
+**Pushed:** Yes
+```
+
+This provides immediate visibility into the deployment state without scrolling through logs.
+
 ## Prerequisites
 
 - Android SDK installed at `C:\Users\ryans\AppData\Local\Android\Sdk` (or set `ANDROID_SDK_ROOT`)
