@@ -988,6 +988,206 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
+                <!-- ========== TIER 4: GEOSPATIAL INTELLIGENCE ========== -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="TIER 4: GEOSPATIAL INTELLIGENCE"
+                    android:textColor="@color/pro_green"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.1" />
+
+                <!-- Location Anomaly Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Location-Aware Anomaly"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Compare to per-hexagon baselines"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/locationAnomalyInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Location Anomaly Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/locationAnomalyToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/locationAnomalyDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Detects readings unusual for THIS specific location"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Spatial Gradient Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Spatial Gradient Analysis"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Point toward radiation sources"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/spatialGradientInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Spatial Gradient Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/spatialGradientToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/spatialGradientDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Calculates direction toward increasing radiation"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Hotspot Prediction Card -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/card_background"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Hotspot Prediction"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="15sp" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Interpolate and predict hotspot locations"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/hotspotPredictionInfoBtn"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_info"
+                            android:padding="6dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:layout_marginEnd="8dp"
+                            android:contentDescription="Hotspot Prediction Info" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/hotspotPredictionToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/hotspotPredictionDescription"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Uses inverse-distance weighting to map radiation landscape"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
                 <!-- ========== VOICE ========== -->
                 <TextView
                     android:layout_width="match_parent"

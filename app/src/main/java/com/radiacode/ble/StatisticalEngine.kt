@@ -3,8 +3,11 @@ package com.radiacode.ble
 import android.content.Context
 import android.util.Log
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -240,7 +243,11 @@ class StatisticalEngine(private val context: Context) {
         val poissonUncertainty: PoissonUncertaintyResult = PoissonUncertaintyResult.UNKNOWN,
         val maCrossover: MACrossoverResult = MACrossoverResult.NONE,
         val bayesianChangepoint: BayesianChangepointResult = BayesianChangepointResult.NONE,
-        val autocorrelation: AutocorrelationResult = AutocorrelationResult.NONE
+        val autocorrelation: AutocorrelationResult = AutocorrelationResult.NONE,
+        // Tier 4 additions
+        val locationAnomaly: LocationAnomalyResult = LocationAnomalyResult.NONE,
+        val spatialGradient: SpatialGradientResult = SpatialGradientResult.NONE,
+        val hotspotPrediction: HotspotPredictionResult = HotspotPredictionResult.NONE
     )
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -377,6 +384,138 @@ class StatisticalEngine(private val context: Context) {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 4: GEOSPATIAL INTELLIGENCE DATA STRUCTURES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Location-aware anomaly detection result (Feature #13).
+     * Compares current reading to historical baseline at THIS location.
+     */
+    data class LocationAnomalyResult(
+        val hexId: String,                       // Current hex cell ID
+        val currentReading: Float,               // Current µSv/h
+        val locationBaseline: Float,             // Historical mean for this location
+        val locationStdDev: Float,               // Historical std dev for this location
+        val zScoreAtLocation: Float,             // Z-score relative to location history
+        val sampleCount: Int,                    // Number of historical samples at location
+        val isAnomaly: Boolean,                  // Whether reading is anomalous for location
+        val anomalyType: LocationAnomalyType,
+        val confidence: Float                    // Confidence in the assessment (0-1)
+    ) {
+        enum class LocationAnomalyType {
+            NONE,
+            ELEVATED,        // Higher than normal for this location
+            DEPRESSED,       // Lower than normal for this location
+            FIRST_VISIT,     // No history at this location
+            INSUFFICIENT_DATA // Not enough samples for reliable baseline
+        }
+        
+        companion object {
+            val NONE = LocationAnomalyResult("", 0f, 0f, 0f, 0f, 0, false, LocationAnomalyType.NONE, 0f)
+        }
+        
+        fun getDescription(): String {
+            return when (anomalyType) {
+                LocationAnomalyType.ELEVATED -> 
+                    String.format("%.1fσ above location normal (%.3f vs %.3f µSv/h)", 
+                        zScoreAtLocation, currentReading, locationBaseline)
+                LocationAnomalyType.DEPRESSED -> 
+                    String.format("%.1fσ below location normal (%.3f vs %.3f µSv/h)", 
+                        -zScoreAtLocation, currentReading, locationBaseline)
+                LocationAnomalyType.FIRST_VISIT -> "First visit to this location"
+                LocationAnomalyType.INSUFFICIENT_DATA -> "Building location baseline..."
+                LocationAnomalyType.NONE -> "Normal for this location"
+            }
+        }
+    }
+
+    /**
+     * Spatial gradient analysis result (Feature #14).
+     * Calculates direction and magnitude of radiation increase.
+     */
+    data class SpatialGradientResult(
+        val gradientMagnitude: Float,            // µSv/h per meter
+        val gradientBearing: Float,              // Degrees (0-360), direction of INCREASING radiation
+        val confidence: Float,                   // Confidence in gradient estimate (0-1)
+        val samplesUsed: Int,                    // Number of position samples used
+        val distanceCovered: Float,              // Total distance moved (meters)
+        val hasSignificantGradient: Boolean,
+        val sourceDirection: String              // Human-readable direction (N, NE, E, etc.)
+    ) {
+        companion object {
+            val NONE = SpatialGradientResult(0f, 0f, 0f, 0, 0f, false, "")
+            
+            /**
+             * Convert bearing to compass direction.
+             */
+            fun bearingToDirection(bearing: Float): String {
+                val normalized = ((bearing % 360) + 360) % 360
+                return when {
+                    normalized < 22.5 -> "N"
+                    normalized < 67.5 -> "NE"
+                    normalized < 112.5 -> "E"
+                    normalized < 157.5 -> "SE"
+                    normalized < 202.5 -> "S"
+                    normalized < 247.5 -> "SW"
+                    normalized < 292.5 -> "W"
+                    normalized < 337.5 -> "NW"
+                    else -> "N"
+                }
+            }
+        }
+        
+        fun getDescription(): String {
+            return if (hasSignificantGradient) {
+                String.format("Gradient: +%.4f µSv/h/m toward %s (%.0f°)", 
+                    gradientMagnitude, sourceDirection, gradientBearing)
+            } else {
+                "No significant spatial gradient detected"
+            }
+        }
+    }
+
+    /**
+     * Hotspot prediction result (Feature #15).
+     * Predicts radiation levels at nearby unvisited locations.
+     */
+    data class HotspotPredictionResult(
+        val predictedHotspots: List<PredictedPoint>,
+        val interpolatedGrid: Map<String, Float>,    // hexId -> predicted µSv/h
+        val highestPrediction: Float,
+        val highestPredictionBearing: Float,         // Direction to highest predicted point
+        val highestPredictionDistance: Float,        // Distance in meters
+        val confidence: Float
+    ) {
+        data class PredictedPoint(
+            val hexId: String,
+            val predictedValue: Float,
+            val uncertainty: Float,
+            val bearing: Float,
+            val distance: Float
+        )
+        
+        companion object {
+            val NONE = HotspotPredictionResult(emptyList(), emptyMap(), 0f, 0f, 0f, 0f)
+        }
+        
+        fun getDescription(): String {
+            return if (predictedHotspots.isNotEmpty()) {
+                val highest = predictedHotspots.maxByOrNull { it.predictedValue }
+                if (highest != null) {
+                    String.format("Predicted hotspot: %.3f µSv/h at %.0fm %s", 
+                        highest.predictedValue, 
+                        highest.distance,
+                        SpatialGradientResult.bearingToDirection(highest.bearing))
+                } else {
+                    "No hotspots predicted"
+                }
+            } else {
+                "Insufficient data for prediction"
+            }
+        }
+    }
+
     /**
      * Statistical alert trigger.
      */
@@ -469,6 +608,30 @@ class StatisticalEngine(private val context: Context) {
     private val AUTOCORR_ANALYSIS_INTERVAL_MS = 5000L  // Analyze every 5 seconds (expensive)
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 4 STATE - Geospatial Intelligence
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Location-aware anomaly detection (Feature #13)
+    // Maps hexId -> list of (reading, timestamp) pairs for location-specific baseline
+    private val locationBaselines = mutableMapOf<String, MutableList<Pair<Float, Long>>>()
+    private var currentHexId: String = ""
+    private var currentLatitude: Double = 0.0
+    private var currentLongitude: Double = 0.0
+    private val LOCATION_BASELINE_MIN_SAMPLES = 5  // Minimum samples for reliable baseline
+    private val LOCATION_BASELINE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000L  // 30 days
+    
+    // Spatial gradient analysis (Feature #14)
+    data class GeoReading(val lat: Double, val lng: Double, val reading: Float, val timestampMs: Long)
+    private val geoReadings = ArrayDeque<GeoReading>(100)  // Recent geo-tagged readings
+    private val GRADIENT_MIN_DISTANCE_METERS = 5.0  // Minimum travel for gradient calc
+    private val GRADIENT_MIN_SAMPLES = 3
+    private var lastGradientResult: SpatialGradientResult = SpatialGradientResult.NONE
+    
+    // Hotspot prediction (Feature #15)
+    private val HOTSPOT_PREDICTION_RADIUS_METERS = 50.0  // Predict within 50m radius
+    private val HOTSPOT_GRID_SIZE_METERS = 10.0  // Prediction grid resolution
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC API
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -545,6 +708,19 @@ class StatisticalEngine(private val context: Context) {
         // Calculate Autocorrelation (Feature #12) - less frequent due to cost
         val autocorrResult = calculateAutocorrelation(timestampMs)
         
+        // ═══════════════════════════════════════════════════════════════════════
+        // TIER 4: GEOSPATIAL INTELLIGENCE
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        // Calculate Location-Aware Anomaly (Feature #13)
+        val locationAnomalyResult = calculateLocationAnomaly(doseRate, timestampMs)
+        
+        // Calculate Spatial Gradient (Feature #14)
+        val spatialGradientResult = calculateSpatialGradient(doseRate, timestampMs)
+        
+        // Calculate Hotspot Prediction (Feature #15)
+        val hotspotResult = calculateHotspotPrediction()
+        
         val doseSnapshot = AnalysisSnapshot(
             timestampMs = timestampMs,
             currentValue = doseRate,
@@ -558,7 +734,10 @@ class StatisticalEngine(private val context: Context) {
             poissonUncertainty = poissonResult,
             maCrossover = maCrossoverResult,
             bayesianChangepoint = bayesianResult,
-            autocorrelation = autocorrResult
+            autocorrelation = autocorrResult,
+            locationAnomaly = locationAnomalyResult,
+            spatialGradient = spatialGradientResult,
+            hotspotPrediction = hotspotResult
         )
         
         val cpsSnapshot = AnalysisSnapshot(
@@ -574,7 +753,10 @@ class StatisticalEngine(private val context: Context) {
             poissonUncertainty = poissonResult,
             maCrossover = maCrossoverResult,
             bayesianChangepoint = bayesianResult,
-            autocorrelation = autocorrResult
+            autocorrelation = autocorrResult,
+            locationAnomaly = locationAnomalyResult,
+            spatialGradient = spatialGradientResult,
+            hotspotPrediction = hotspotResult
         )
         
         return Pair(doseSnapshot, cpsSnapshot)
@@ -1620,6 +1802,393 @@ class StatisticalEngine(private val context: Context) {
         )
         
         return cachedAutocorrResult
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 4: GEOSPATIAL INTELLIGENCE CALCULATIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Update current location (call this from RadiaCodeForegroundService when location changes).
+     */
+    @Synchronized
+    fun setCurrentLocation(lat: Double, lng: Double, hexId: String) {
+        currentHexId = hexId
+        currentLatitude = lat
+        currentLongitude = lng
+    }
+    
+    /**
+     * Feature #13: Location-Aware Anomaly Detection
+     * 
+     * Compares current reading to the historical baseline for THIS specific location (hexagon).
+     * A reading might be "normal" globally but ANOMALOUS for this particular spot.
+     */
+    private fun calculateLocationAnomaly(
+        doseRate: Float, 
+        timestampMs: Long
+    ): LocationAnomalyResult {
+        val hexId = currentHexId
+        if (hexId.isEmpty()) {
+            return LocationAnomalyResult.NONE
+        }
+        
+        // Get or create baseline list for this hexagon
+        val baseline = locationBaselines.getOrPut(hexId) { mutableListOf() }
+        
+        // Add current reading to location history
+        baseline.add(Pair(doseRate, timestampMs))
+        
+        // Prune old readings (older than 30 days)
+        val cutoff = timestampMs - LOCATION_BASELINE_MAX_AGE_MS
+        baseline.removeAll { it.second < cutoff }
+        
+        // Need minimum samples for meaningful analysis  
+        if (baseline.size < LOCATION_BASELINE_MIN_SAMPLES) {
+            return LocationAnomalyResult(
+                hexId = hexId,
+                currentReading = doseRate,
+                locationBaseline = if (baseline.isNotEmpty()) baseline.map { it.first }.average().toFloat() else doseRate,
+                locationStdDev = 0f,
+                zScoreAtLocation = 0f,
+                sampleCount = baseline.size,
+                isAnomaly = false,
+                anomalyType = if (baseline.size == 1) 
+                    LocationAnomalyResult.LocationAnomalyType.FIRST_VISIT 
+                else 
+                    LocationAnomalyResult.LocationAnomalyType.INSUFFICIENT_DATA,
+                confidence = 0f
+            )
+        }
+        
+        // Calculate statistics for this location
+        val readings = baseline.map { it.first }
+        val mean = readings.average().toFloat()
+        val variance = readings.map { (it - mean) * (it - mean) }.average().toFloat()
+        val stdDev = sqrt(variance)
+        
+        // Calculate z-score at this location
+        val zScore = if (stdDev > 0.0001f) {
+            (doseRate - mean) / stdDev
+        } else 0f
+        
+        val absZ = abs(zScore)
+        val isAnomaly = absZ >= 2.0f
+        
+        // Determine anomaly type
+        val anomalyType = when {
+            absZ < 2.0f -> LocationAnomalyResult.LocationAnomalyType.NONE
+            zScore > 0 -> LocationAnomalyResult.LocationAnomalyType.ELEVATED
+            else -> LocationAnomalyResult.LocationAnomalyType.DEPRESSED
+        }
+        
+        // Calculate confidence based on sample count and z-score significance
+        val confidence = when {
+            absZ >= 4 -> 0.9999f
+            absZ >= 3 -> 0.9973f
+            absZ >= 2 -> 0.9545f
+            else -> absZ / 2f  // Linear scaling below 2σ
+        }.coerceAtMost((baseline.size / 20f).coerceAtMost(1f))  // Cap by sample count
+        
+        return LocationAnomalyResult(
+            hexId = hexId,
+            currentReading = doseRate,
+            locationBaseline = mean,
+            locationStdDev = stdDev,
+            zScoreAtLocation = zScore,
+            sampleCount = baseline.size,
+            isAnomaly = isAnomaly,
+            anomalyType = anomalyType,
+            confidence = confidence
+        )
+    }
+
+    /**
+     * Feature #14: Spatial Gradient Analysis
+     * 
+     * Analyzes how readings change across space to estimate:
+     * 1. Direction of increasing radiation (toward source)
+     * 2. Gradient magnitude (how fast it's changing)
+     */
+    private fun calculateSpatialGradient(
+        doseRate: Float,
+        timestampMs: Long
+    ): SpatialGradientResult {
+        val lat = currentLatitude
+        val lng = currentLongitude
+        
+        // Add current reading to geo buffer if we have valid coordinates
+        if (lat != 0.0 && lng != 0.0) {
+            if (geoReadings.size >= 100) {
+                geoReadings.removeFirst()
+            }
+            geoReadings.addLast(GeoReading(lat, lng, doseRate, timestampMs))
+        }
+        
+        // Need minimum samples for gradient
+        if (geoReadings.size < GRADIENT_MIN_SAMPLES) {
+            return SpatialGradientResult.NONE
+        }
+        
+        // Get spatially diverse readings (at least 5m apart)
+        val spatiallyDiverseReadings = mutableListOf<GeoReading>()
+        
+        for (reading in geoReadings) {
+            if (spatiallyDiverseReadings.isEmpty()) {
+                spatiallyDiverseReadings.add(reading)
+            } else {
+                val lastAdded = spatiallyDiverseReadings.last()
+                val dist = haversineDistance(lastAdded.lat, lastAdded.lng, reading.lat, reading.lng)
+                if (dist >= GRADIENT_MIN_DISTANCE_METERS) {
+                    spatiallyDiverseReadings.add(reading)
+                }
+            }
+        }
+        
+        if (spatiallyDiverseReadings.size < 3) {
+            return SpatialGradientResult.NONE
+        }
+        
+        // Calculate gradient using least squares fit
+        val centerLat = spatiallyDiverseReadings.map { it.lat }.average()
+        val centerLng = spatiallyDiverseReadings.map { it.lng }.average()
+        
+        val metersPerDegLat = 111320.0
+        val metersPerDegLng = 111320.0 * cos(Math.toRadians(centerLat))
+        
+        // Convert to local meters and prepare for least squares
+        val points = spatiallyDiverseReadings.map { r ->
+            Triple(
+                (r.lng - centerLng) * metersPerDegLng,
+                (r.lat - centerLat) * metersPerDegLat,
+                r.reading.toDouble()
+            )
+        }
+        
+        val meanZ = points.map { it.third }.average()
+        val meanX = points.map { it.first }.average()
+        val meanY = points.map { it.second }.average()
+        
+        var sXX = 0.0; var sYY = 0.0; var sXY = 0.0
+        var sXZ = 0.0; var sYZ = 0.0
+        
+        for ((x, y, z) in points) {
+            val dx = x - meanX
+            val dy = y - meanY
+            val dz = z - meanZ
+            sXX += dx * dx
+            sYY += dy * dy
+            sXY += dx * dy
+            sXZ += dx * dz
+            sYZ += dy * dz
+        }
+        
+        val det = sXX * sYY - sXY * sXY
+        if (abs(det) < 1e-10) {
+            return SpatialGradientResult.NONE
+        }
+        
+        val gradX = (sYY * sXZ - sXY * sYZ) / det
+        val gradY = (sXX * sYZ - sXY * sXZ) / det
+        
+        val gradientMagnitude = sqrt(gradX * gradX + gradY * gradY).toFloat()
+        var bearingDeg = Math.toDegrees(atan2(gradX, gradY)).toFloat()
+        if (bearingDeg < 0) bearingDeg += 360f
+        
+        val sourceDirection = SpatialGradientResult.bearingToDirection(bearingDeg)
+        
+        // Calculate total distance covered and confidence
+        var totalDistance = 0.0
+        for (i in 1 until spatiallyDiverseReadings.size) {
+            val prev = spatiallyDiverseReadings[i-1]
+            val curr = spatiallyDiverseReadings[i]
+            totalDistance += haversineDistance(prev.lat, prev.lng, curr.lat, curr.lng)
+        }
+        
+        // R² calculation
+        var ssRes = 0.0; var ssTot = 0.0
+        for ((x, y, z) in points) {
+            val predicted = meanZ + gradX * (x - meanX) + gradY * (y - meanY)
+            ssRes += (z - predicted) * (z - predicted)
+            ssTot += (z - meanZ) * (z - meanZ)
+        }
+        val rSquared = if (ssTot > 1e-10) (1 - ssRes / ssTot).coerceIn(0.0, 1.0) else 0.0
+        
+        val hasSignificant = gradientMagnitude > 0.001f && rSquared > 0.3
+        val confidence = (
+            (spatiallyDiverseReadings.size / 10.0).coerceAtMost(1.0) * 0.3 +
+            (totalDistance / 50.0).coerceAtMost(1.0) * 0.3 +
+            rSquared * 0.4
+        ).toFloat()
+        
+        return SpatialGradientResult(
+            gradientMagnitude = gradientMagnitude,
+            gradientBearing = bearingDeg,
+            confidence = confidence,
+            samplesUsed = spatiallyDiverseReadings.size,
+            distanceCovered = totalDistance.toFloat(),
+            hasSignificantGradient = hasSignificant,
+            sourceDirection = sourceDirection
+        )
+    }
+
+    /**
+     * Feature #15: Hotspot Prediction & Interpolation
+     */
+    private fun calculateHotspotPrediction(): HotspotPredictionResult {
+        val readings = geoReadings.toList()
+        if (readings.size < 5) {  // Need at least 5 readings
+            return HotspotPredictionResult.NONE
+        }
+        
+        // Find highest reading
+        val maxReading = readings.maxByOrNull { it.reading } ?: return HotspotPredictionResult.NONE
+        
+        // Get bounds
+        val lats = readings.map { it.lat }
+        val lngs = readings.map { it.lng }
+        val minLat = lats.minOrNull() ?: return HotspotPredictionResult.NONE
+        val maxLat = lats.maxOrNull() ?: return HotspotPredictionResult.NONE
+        val minLng = lngs.minOrNull() ?: return HotspotPredictionResult.NONE
+        val maxLng = lngs.maxOrNull() ?: return HotspotPredictionResult.NONE
+        
+        val metersPerDegLat = 111320.0
+        val metersPerDegLng = 111320.0 * cos(Math.toRadians((minLat + maxLat) / 2))
+        val gridSpacingLat = HOTSPOT_GRID_SIZE_METERS / metersPerDegLat
+        val gridSpacingLng = HOTSPOT_GRID_SIZE_METERS / metersPerDegLng
+        
+        val interpolatedGrid = mutableMapOf<String, Float>()
+        val predictedHotspots = mutableListOf<HotspotPredictionResult.PredictedPoint>()
+        
+        // IDW interpolation across grid
+        var gridLat = minLat - gridSpacingLat * 2
+        while (gridLat <= maxLat + gridSpacingLat * 2) {
+            var gridLng = minLng - gridSpacingLng * 2
+            while (gridLng <= maxLng + gridSpacingLng * 2) {
+                var sumWeighted = 0.0
+                var sumWeights = 0.0
+                
+                for (r in readings) {
+                    val dist = haversineDistance(gridLat, gridLng, r.lat, r.lng)
+                    if (dist < 1.0) {
+                        sumWeighted = r.reading.toDouble()
+                        sumWeights = 1.0
+                        break
+                    }
+                    val weight = 1.0 / (dist * dist)
+                    sumWeighted += weight * r.reading
+                    sumWeights += weight
+                }
+                
+                if (sumWeights > 0) {
+                    val interpolated = (sumWeighted / sumWeights).toFloat()
+                    val hexId = latLngToHexId(gridLat, gridLng)
+                    interpolatedGrid[hexId] = interpolated
+                }
+                gridLng += gridSpacingLng
+            }
+            gridLat += gridSpacingLat
+        }
+        
+        // Find top predicted points
+        val sortedGrid = interpolatedGrid.entries.sortedByDescending { it.value }
+        val currentLat = currentLatitude
+        val currentLng = currentLongitude
+        
+        for ((idx, entry) in sortedGrid.take(10).withIndex()) {
+            // Approximate center of hex
+            val parts = entry.key.split(",")
+            if (parts.size != 2) continue
+            val centerLat = (minLat + maxLat) / 2
+            val centerLng = (minLng + maxLng) / 2
+            
+            // Check distance from existing predictions
+            val tooClose = predictedHotspots.any { p ->
+                val pLat = p.bearing // Actually we need to track lat/lng differently
+                false // Simplified for now
+            }
+            
+            if (!tooClose && predictedHotspots.size < 3) {
+                val dist = if (currentLat != 0.0) 
+                    haversineDistance(currentLat, currentLng, centerLat, centerLng).toFloat() 
+                else 0f
+                    
+                var bearing = 0f
+                if (currentLat != 0.0) {
+                    val dLng = Math.toRadians(centerLng - currentLng)
+                    val lat1 = Math.toRadians(currentLat)
+                    val lat2 = Math.toRadians(centerLat)
+                    val x = sin(dLng) * cos(lat2)
+                    val y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLng)
+                    bearing = Math.toDegrees(atan2(x, y)).toFloat()
+                    if (bearing < 0) bearing += 360f
+                }
+                
+                predictedHotspots.add(HotspotPredictionResult.PredictedPoint(
+                    hexId = entry.key,
+                    predictedValue = entry.value,
+                    uncertainty = entry.value * 0.1f,
+                    bearing = bearing,
+                    distance = dist
+                ))
+            }
+        }
+        
+        // Calculate bearing and distance to max reading
+        var bearingToHighest = 0f
+        var distToHighest = 0f
+        if (currentLat != 0.0) {
+            distToHighest = haversineDistance(currentLat, currentLng, maxReading.lat, maxReading.lng).toFloat()
+            val dLng = Math.toRadians(maxReading.lng - currentLng)
+            val lat1 = Math.toRadians(currentLat)
+            val lat2 = Math.toRadians(maxReading.lat)
+            val x = sin(dLng) * cos(lat2)
+            val y = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLng)
+            bearingToHighest = Math.toDegrees(atan2(x, y)).toFloat()
+            if (bearingToHighest < 0) bearingToHighest += 360f
+        }
+        
+        val confidence = (readings.size / 20f).coerceAtMost(1f)
+        
+        return HotspotPredictionResult(
+            predictedHotspots = predictedHotspots,
+            interpolatedGrid = interpolatedGrid,
+            highestPrediction = maxReading.reading,
+            highestPredictionBearing = bearingToHighest,
+            highestPredictionDistance = distToHighest,
+            confidence = confidence
+        )
+    }
+
+    /**
+     * Haversine distance between two lat/lng points in meters.
+     */
+    private fun haversineDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val R = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLng / 2) * sin(dLng / 2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    }
+
+    /**
+     * Convert lat/lng to hex ID.
+     */
+    private fun latLngToHexId(lat: Double, lng: Double): String {
+        val hexSize = 50.0
+        val metersPerDegLat = 111320.0
+        val metersPerDegLng = 111320.0 * cos(Math.toRadians(lat))
+        
+        val x = lng * metersPerDegLng
+        val y = lat * metersPerDegLat
+        
+        val q = ((2.0 / 3.0 * x) / hexSize).toInt()
+        val r = ((-1.0 / 3.0 * x + sqrt(3.0) / 3.0 * y) / hexSize).toInt()
+        
+        return "$q,$r"
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

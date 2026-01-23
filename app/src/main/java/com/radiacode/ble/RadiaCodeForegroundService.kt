@@ -477,6 +477,13 @@ class RadiaCodeForegroundService : Service() {
         
         // PRIORITY 2: Statistical analysis - feed data to VEGA engine
         // This is fast (just math) and runs on the calling thread
+        
+        // Update statistical engine with current location for Tier 4 geospatial intelligence
+        if (locationSnap != null) {
+            val hexId = latLngToHexId(locationSnap.latitude, locationSnap.longitude)
+            statisticalEngine.setCurrentLocation(locationSnap.latitude, locationSnap.longitude, hexId)
+        }
+        
         val (doseSnapshot, cpsSnapshot) = try {
             statisticalEngine.addReading(uSvPerHour, cps, timestampMs)
         } catch (t: Throwable) {
@@ -941,5 +948,24 @@ class RadiaCodeForegroundService : Service() {
         } else {
             true
         }
+    }
+    
+    /**
+     * Convert lat/lng to hex ID for Tier 4 geospatial intelligence.
+     * Matches the hexagon system used in MapCardView.
+     */
+    private fun latLngToHexId(lat: Double, lng: Double): String {
+        val hexSize = 50.0  // 50 meter hexagons
+        val metersPerDegLat = 111320.0
+        val metersPerDegLng = 111320.0 * kotlin.math.cos(Math.toRadians(lat))
+        
+        val x = lng * metersPerDegLng
+        val y = lat * metersPerDegLat
+        
+        // Flat-top hexagon conversion to axial coordinates
+        val q = ((2.0 / 3.0 * x) / hexSize).toInt()
+        val r = ((-1.0 / 3.0 * x + kotlin.math.sqrt(3.0) / 3.0 * y) / hexSize).toInt()
+        
+        return "$q,$r"
     }
 }

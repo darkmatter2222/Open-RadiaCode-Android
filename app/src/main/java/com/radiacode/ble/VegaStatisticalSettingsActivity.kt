@@ -95,6 +95,21 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
     private lateinit var autocorrDescription: TextView
     private lateinit var autocorrInfoBtn: ImageView
     
+    // Tier 4: Location Anomaly
+    private lateinit var locationAnomalyToggle: SwitchMaterial
+    private lateinit var locationAnomalyDescription: TextView
+    private lateinit var locationAnomalyInfoBtn: ImageView
+    
+    // Tier 4: Spatial Gradient
+    private lateinit var spatialGradientToggle: SwitchMaterial
+    private lateinit var spatialGradientDescription: TextView
+    private lateinit var spatialGradientInfoBtn: ImageView
+    
+    // Tier 4: Hotspot Prediction
+    private lateinit var hotspotPredictionToggle: SwitchMaterial
+    private lateinit var hotspotPredictionDescription: TextView
+    private lateinit var hotspotPredictionInfoBtn: ImageView
+    
     // Voice
     private lateinit var voiceToggle: SwitchMaterial
     private lateinit var voiceDescription: TextView
@@ -180,6 +195,21 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         autocorrDescription = findViewById(R.id.autocorrDescription)
         autocorrInfoBtn = findViewById(R.id.autocorrInfoBtn)
         
+        // Tier 4: Location Anomaly
+        locationAnomalyToggle = findViewById(R.id.locationAnomalyToggle)
+        locationAnomalyDescription = findViewById(R.id.locationAnomalyDescription)
+        locationAnomalyInfoBtn = findViewById(R.id.locationAnomalyInfoBtn)
+        
+        // Tier 4: Spatial Gradient
+        spatialGradientToggle = findViewById(R.id.spatialGradientToggle)
+        spatialGradientDescription = findViewById(R.id.spatialGradientDescription)
+        spatialGradientInfoBtn = findViewById(R.id.spatialGradientInfoBtn)
+        
+        // Tier 4: Hotspot Prediction
+        hotspotPredictionToggle = findViewById(R.id.hotspotPredictionToggle)
+        hotspotPredictionDescription = findViewById(R.id.hotspotPredictionDescription)
+        hotspotPredictionInfoBtn = findViewById(R.id.hotspotPredictionInfoBtn)
+        
         // Voice
         voiceToggle = findViewById(R.id.voiceToggle)
         voiceDescription = findViewById(R.id.voiceDescription)
@@ -203,7 +233,10 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 Prefs.isStatisticalPoissonEnabled(this) ||
                 Prefs.isStatisticalMACrossoverEnabled(this) ||
                 Prefs.isStatisticalBayesianEnabled(this) ||
-                Prefs.isStatisticalAutocorrEnabled(this)
+                Prefs.isStatisticalAutocorrEnabled(this) ||
+                Prefs.isStatisticalLocationAnomalyEnabled(this) ||
+                Prefs.isStatisticalSpatialGradientEnabled(this) ||
+                Prefs.isStatisticalHotspotPredictionEnabled(this)
         
         masterToggle.isChecked = anyEnabled
         settingsContainer.visibility = if (anyEnabled) View.VISIBLE else View.GONE
@@ -259,6 +292,15 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         // Tier 3: Autocorrelation
         autocorrToggle.isChecked = Prefs.isStatisticalAutocorrEnabled(this)
         
+        // Tier 4: Location Anomaly
+        locationAnomalyToggle.isChecked = Prefs.isStatisticalLocationAnomalyEnabled(this)
+        
+        // Tier 4: Spatial Gradient
+        spatialGradientToggle.isChecked = Prefs.isStatisticalSpatialGradientEnabled(this)
+        
+        // Tier 4: Hotspot Prediction
+        hotspotPredictionToggle.isChecked = Prefs.isStatisticalHotspotPredictionEnabled(this)
+        
         // Voice
         voiceToggle.isChecked = Prefs.isStatisticalVoiceEnabled(this)
     }
@@ -278,6 +320,9 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 Prefs.setStatisticalMACrossoverEnabled(this, false)
                 Prefs.setStatisticalBayesianEnabled(this, false)
                 Prefs.setStatisticalAutocorrEnabled(this, false)
+                Prefs.setStatisticalLocationAnomalyEnabled(this, false)
+                Prefs.setStatisticalSpatialGradientEnabled(this, false)
+                Prefs.setStatisticalHotspotPredictionEnabled(this, false)
                 Prefs.setStatisticalVoiceEnabled(this, false)
                 
                 // Update toggles
@@ -290,6 +335,9 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
                 maCrossoverToggle.isChecked = false
                 bayesianToggle.isChecked = false
                 autocorrToggle.isChecked = false
+                locationAnomalyToggle.isChecked = false
+                spatialGradientToggle.isChecked = false
+                hotspotPredictionToggle.isChecked = false
                 voiceToggle.isChecked = false
             }
         }
@@ -435,6 +483,23 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
             Prefs.setStatisticalAutocorrEnabled(this, isChecked)
         }
         
+        // ========== Tier 4 Listeners ==========
+        
+        // Location Anomaly toggle
+        locationAnomalyToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalLocationAnomalyEnabled(this, isChecked)
+        }
+        
+        // Spatial Gradient toggle
+        spatialGradientToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalSpatialGradientEnabled(this, isChecked)
+        }
+        
+        // Hotspot Prediction toggle
+        hotspotPredictionToggle.setOnCheckedChangeListener { _, isChecked ->
+            Prefs.setStatisticalHotspotPredictionEnabled(this, isChecked)
+        }
+        
         // Info button click handlers
         zScoreInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ZSCORE) 
@@ -462,6 +527,15 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         }
         autocorrInfoBtn.setOnClickListener {
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.AUTOCORRELATION)
+        }
+        locationAnomalyInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.LOCATION_ANOMALY)
+        }
+        spatialGradientInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.SPATIAL_GRADIENT)
+        }
+        hotspotPredictionInfoBtn.setOnClickListener {
+            showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.HOTSPOT_PREDICTION)
         }
         voiceInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.VOICE) 

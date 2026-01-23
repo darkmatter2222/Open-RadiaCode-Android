@@ -433,6 +433,132 @@ CONS
 • Audio can't convey numerical precision like display
 • Social situations may require muting
             """.trimIndent()
+        ),
+        
+        LOCATION_ANOMALY(
+            title = "Location-Aware Anomaly Detection",
+            audioResName = "vega_info_location_anomaly",
+            explanation = """
+Location-Aware Anomaly Detection compares readings to per-location baselines, revealing what's unusual for THIS specific spot.
+
+THE CONCEPT
+A reading of 0.25 microsieverts per hour might be perfectly normal in one area but highly unusual in another. By maintaining separate baselines for each hexagon on your map, I can detect when a location shows readings that deviate from ITS historical norm, not just the global average.
+
+HOW IT WORKS
+As you collect readings across different locations, I build and maintain a statistical baseline for each hexagon cell. When you return to a previously visited location, I compare current readings to what's typical for that specific spot. A significant deviation triggers an alert, even if the absolute reading seems normal globally.
+
+HEXAGON-BASED ANALYSIS
+Your map is divided into hexagonal cells, each approximately 100 meters across. Every hexagon accumulates its own mean, variance, and sample count. This spatial granularity lets me distinguish between areas with naturally different background levels.
+
+ANOMALY TYPES DETECTED
+• ELEVATED: Current reading is significantly higher than this location's historical baseline. Something may have changed since your last visit.
+• DEPRESSED: Current reading is significantly lower than expected. While less common, this can indicate source removal, shielding changes, or measurement issues.
+• FIRST VISIT: No prior data for this hexagon. I'm establishing a baseline.
+• INSUFFICIENT DATA: Not enough samples yet for reliable comparison. Keep collecting.
+
+WHEN TO USE LOCATION ANOMALY
+This feature excels when: revisiting previously surveyed areas, detecting environmental changes over time, identifying localized contamination that wouldn't trigger global alerts, and building comprehensive area profiles.
+
+COMPARED TO OTHER VEGA FEATURES
+Standard Z-Score compares to a global baseline. Location-aware anomaly compares to location-specific baselines. A school playground baseline differs from a hospital basement baseline. This spatial awareness catches anomalies that global analysis would miss.
+
+PROS
+• Spatially intelligent
+• Detects localized changes
+• Builds location profiles over time
+• Catches what global methods miss
+
+CONS
+• Requires revisiting locations to build history
+• Memory intensive for many hexagons
+• First visits provide no anomaly detection
+• Less useful for single-visit surveys
+            """.trimIndent()
+        ),
+        
+        SPATIAL_GRADIENT(
+            title = "Spatial Gradient Analysis",
+            audioResName = "vega_info_spatial_gradient",
+            explanation = """
+Spatial Gradient Analysis reveals the direction toward radiation sources by analyzing how readings change across space.
+
+THE PHYSICS
+Radiation intensity decreases with distance from a source, roughly following the inverse-square law. By measuring at multiple locations, the mathematical gradient points toward higher intensity, which typically means toward the source.
+
+HOW IT WORKS
+I analyze your recent geo-tagged readings to compute the spatial rate of change in radiation levels. Using least-squares fitting, I determine the gradient vector: its magnitude tells you how quickly levels are changing with distance, and its direction points toward increasing radiation.
+
+GRADIENT MAGNITUDE
+Measured in microsieverts per hour per meter. A high gradient magnitude indicates radiation is changing rapidly with distance, suggesting a nearby localized source. A near-zero gradient suggests uniform background or a very distant source.
+
+DIRECTION AND BEARING
+I provide both a compass bearing (degrees from north) and a cardinal direction label (North, Northeast, etc.). This tells you which direction to move to find increasing radiation. Walk the opposite direction to move away from the source.
+
+CONFIDENCE AND REQUIREMENTS
+Gradient calculation requires spatially diverse readings. If you've only collected data in a small area, or all your points are in a line, confidence will be low. Moving around and collecting readings from multiple directions improves the estimate.
+
+WHEN TO USE SPATIAL GRADIENT
+This feature shines when: hunting for the location of an unknown source, conducting directional surveys, determining if you should proceed or retreat, and triangulating source positions.
+
+COMPARED TO OTHER VEGA FEATURES
+Source Proximity estimates how close you are based on temporal changes as you approach. Spatial Gradient uses your spatial position history to compute the actual direction. They complement each other: Proximity tells you "closer", Gradient tells you "which way".
+
+PROS
+• Points toward sources
+• Quantifies spatial change rate
+• Works without knowing source location
+• Compass-ready direction output
+
+CONS
+• Requires movement and diverse positions
+• Less accurate with few data points
+• Assumes relatively stable source
+• Complex terrain can confound results
+            """.trimIndent()
+        ),
+        
+        HOTSPOT_PREDICTION(
+            title = "Hotspot Prediction and Interpolation",
+            audioResName = "vega_info_hotspot_prediction",
+            explanation = """
+Hotspot Prediction interpolates radiation levels across your surveyed area to predict where the highest concentrations likely exist.
+
+THE APPROACH
+Using inverse distance weighting interpolation, I estimate radiation levels at locations you haven't directly measured. This creates a continuous surface from your discrete measurement points, revealing the probable radiation landscape between and beyond your data.
+
+HOW IT WORKS
+For any point on the map, I calculate a weighted average of nearby measurements. Closer readings have more influence than distant ones. The weighting follows an inverse-square relationship, making this physically motivated for radiation mapping.
+
+PREDICTED HOTSPOTS
+Based on the interpolated surface, I identify local maxima, locations where predicted values are higher than surrounding areas. These predicted hotspots are ranked by confidence, which depends on how many nearby measurements support the prediction.
+
+INTERPOLATED GRID
+The full interpolated grid shows estimated values across the surveyed region. Areas with dense measurements have reliable estimates. Areas with sparse data show interpolated guesses that should be verified with additional measurements.
+
+NAVIGATION GUIDANCE
+I provide bearing and distance to the highest known reading and to predicted hotspots. This helps you navigate toward or away from elevated areas, whether for investigation or avoidance.
+
+CONFIDENCE LEVELS
+Predictions near actual measurements have high confidence. Predictions far from any data points have low confidence. I distinguish between "measured high" and "predicted high" so you know when to trust the numbers.
+
+WHEN TO USE HOTSPOT PREDICTION
+This feature is invaluable when: planning survey routes to efficiently cover an area, identifying locations that need closer investigation, visualizing the radiation landscape, and finding sources in cluttered environments.
+
+COMPARED TO OTHER VEGA FEATURES
+Location Anomaly tells you if a specific spot is unusual for that spot. Spatial Gradient tells you the direction of change. Hotspot Prediction synthesizes all your spatial data to show where hotspots likely exist, even in unmeasured locations.
+
+PROS
+• Reveals radiation landscape
+• Predicts between measurements
+• Identifies survey priorities
+• Navigation-ready output
+
+CONS
+• Predictions are estimates, not measurements
+• Accuracy depends on data density
+• Can miss localized sources between points
+• Memory and computation intensive
+            """.trimIndent()
         );
         
         companion object {

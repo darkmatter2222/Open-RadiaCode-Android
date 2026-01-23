@@ -118,6 +118,11 @@ object Prefs {
     private const val KEY_STATISTICAL_MA_LONG_WINDOW = "statistical_ma_long_window"
     private const val KEY_STATISTICAL_BAYESIAN_ENABLED = "statistical_bayesian_enabled"
     private const val KEY_STATISTICAL_AUTOCORR_ENABLED = "statistical_autocorr_enabled"
+    
+    // Tier 4: Geospatial Intelligence keys
+    private const val KEY_STATISTICAL_LOCATION_ANOMALY_ENABLED = "statistical_location_anomaly_enabled"
+    private const val KEY_STATISTICAL_SPATIAL_GRADIENT_ENABLED = "statistical_spatial_gradient_enabled"
+    private const val KEY_STATISTICAL_HOTSPOT_PREDICTION_ENABLED = "statistical_hotspot_prediction_enabled"
 
     enum class DoseUnit { USV_H, NSV_H }
     enum class CountUnit { CPS, CPM }
@@ -2616,6 +2621,58 @@ object Prefs {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_STATISTICAL_AUTOCORR_ENABLED, enabled)
+            .apply()
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TIER 4: GEOSPATIAL INTELLIGENCE PREFERENCES
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Check if Location-Aware Anomaly Detection is enabled.
+     * Compares readings to per-hexagon baselines to detect location-specific anomalies.
+     */
+    fun isStatisticalLocationAnomalyEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_LOCATION_ANOMALY_ENABLED, false)
+    }
+    
+    fun setStatisticalLocationAnomalyEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_LOCATION_ANOMALY_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Check if Spatial Gradient Analysis is enabled.
+     * Analyzes how radiation changes across space to point toward sources.
+     */
+    fun isStatisticalSpatialGradientEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_SPATIAL_GRADIENT_ENABLED, false)
+    }
+    
+    fun setStatisticalSpatialGradientEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_SPATIAL_GRADIENT_ENABLED, enabled)
+            .apply()
+    }
+    
+    /**
+     * Check if Hotspot Prediction is enabled.
+     * Interpolates radiation levels and predicts hotspot locations.
+     */
+    fun isStatisticalHotspotPredictionEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_STATISTICAL_HOTSPOT_PREDICTION_ENABLED, false)
+    }
+    
+    fun setStatisticalHotspotPredictionEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_STATISTICAL_HOTSPOT_PREDICTION_ENABLED, enabled)
             .apply()
     }
 }
