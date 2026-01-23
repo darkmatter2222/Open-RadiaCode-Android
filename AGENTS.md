@@ -488,9 +488,22 @@ See [docs/UI.md](docs/UI.md) for the canonical UI/UX spec including:
 
 Vega is the app's radiological awareness AI companion. She provides voice guidance, warnings, and context throughout the user experience.
 
+### Vega API Gateway
+
+**Base URL:** `http://99.122.58.29:443`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tts/synthesize` | POST | Text-to-Speech (returns WAV audio) |
+| `/api/tts/synthesize/b64` | POST | TTS with base64 response (JSON with `audio_base64`, `duration_seconds`) |
+| `/api/tts/health` | GET | TTS service health check |
+| `/api/llm/chat` | POST | LLM chat completion |
+| `/api/llm/generate` | POST | LLM text generation |
+| `/api/llm/health` | GET | LLM service health check |
+
 ### Vega TTS API
 
-**Endpoint:** `http://99.122.58.29:443/synthesize`  
+**Endpoint:** `http://99.122.58.29:443/api/tts/synthesize`  
 **Method:** POST  
 **Content-Type:** `application/json`  
 **Body:** `{"text": "Your message here"}`  
@@ -507,7 +520,7 @@ For modal dialogs and predictable UI flows, **pre-bake audio files** instead of 
    $json | Out-File -FilePath "request.json" -Encoding utf8 -NoNewline
    
    # Call Vega TTS API
-   curl.exe -X POST "http://99.122.58.29:443/synthesize" `
+   curl.exe -X POST "http://99.122.58.29:443/api/tts/synthesize" `
      -H "Content-Type: application/json" `
      -d "@request.json" `
      -o "app/src/main/res/raw/vega_your_audio.wav"
