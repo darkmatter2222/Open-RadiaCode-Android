@@ -896,13 +896,33 @@ class SpectrumHistogramView @JvmOverloads constructor(
         val energy = xToEnergy(x)
         var channel = energyToChannel(energy)
         
-        if (snapToPeak && peakChannels.isNotEmpty()) {
-            // Find nearest peak within snapping distance (e.g., 20 channels)
-            val snapDistance = 20
-            val nearestPeak = peakChannels.minByOrNull { kotlin.math.abs(it - channel) }
-            if (nearestPeak != null && kotlin.math.abs(nearestPeak - channel) <= snapDistance) {
-                channel = nearestPeak
+        if (snapToPeak) {
+            // Use the currently displayed data (smoothed if smoothing is on)
+            val displayCounts = smoothedCounts ?: spectrumCounts
+            
+            // Find the nearest local maximum within a search window
+            val searchRadius = 30  // Search 30 channels in each direction
+            val minCh = (channel - searchRadius).coerceAtLeast(0)
+            val maxCh = (channel + searchRadius).coerceAtMost(displayCounts.size - 2)  // Exclude ch 1023
+            
+            // Find the channel with maximum count in the search window
+            var bestChannel = channel
+            var bestCount = displayCounts.getOrElse(channel) { 0 }
+            
+            for (ch in minCh..maxCh) {
+                val count = displayCounts.getOrElse(ch) { 0 }
+                if (count > bestCount) {
+                    // Verify it's actually a local maximum (peak top)
+                    val prev = displayCounts.getOrElse(ch - 1) { 0 }
+                    val next = displayCounts.getOrElse(ch + 1) { 0 }
+                    if (count >= prev && count >= next) {
+                        bestCount = count
+                        bestChannel = ch
+                    }
+                }
             }
+            
+            channel = bestChannel
         }
         
         cursorChannel = channel
