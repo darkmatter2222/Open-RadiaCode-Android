@@ -1284,6 +1284,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             .setPositiveButton("Clear") { _, _ ->
                 deviceId?.let { id ->
                     SpectrogramRepository.getInstance(this).clearDeviceData(id)
+                    // Explicitly clear chart in both modes
+                    histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
+                    waterfallView.setSnapshots(emptyList())
                     refreshData()
                     Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
                 }
@@ -1336,16 +1339,16 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     
     private fun refreshData() {
         val deviceId = this.deviceId ?: return
-        
+
         val source = SpectrogramPrefs.getSpectrumSource(this)
         val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
         val startTime = System.currentTimeMillis() - historyMs
-        
+
         val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
         val snapshots = SpectrogramRepository.getInstance(this)
             .getSnapshots(deviceId, startTime, System.currentTimeMillis())
             .filter { it.isDifferential == wantDifferential }
-        
+
         if (wantDifferential) {
             waterfallView.setSnapshots(snapshots)
             if (snapshots.isNotEmpty()) {
@@ -1354,22 +1357,32 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
         } else {
             if (snapshots.isNotEmpty()) {
-                val latest = snapshots.last()
+                // Sum all accumulated spectra in the window
+                val channelCount = snapshots.last().spectrumData.counts.size
+                val summed = IntArray(channelCount) { 0 }
+                var a0 = 0f; var a1 = 3f; var a2 = 0f
+                for (snap in snapshots) {
+                    for (i in snap.spectrumData.counts.indices) {
+                        summed[i] += snap.spectrumData.counts[i]
+                    }
+                    // Use calibration from latest
+                    a0 = snap.spectrumData.a0; a1 = snap.spectrumData.a1; a2 = snap.spectrumData.a2
+                }
                 histogramView.setSpectrum(
-                    counts = latest.spectrumData.counts,
-                    a0 = latest.spectrumData.a0,
-                    a1 = latest.spectrumData.a1,
-                    a2 = latest.spectrumData.a2
+                    counts = summed,
+                    a0 = a0,
+                    a1 = a1,
+                    a2 = a2
                 )
             } else {
                 histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
             }
         }
-        
+
         if (!isRecording) {
             updateStatus("${snapshots.size} snapshots")
         }
-        
+
         if (SpectrogramPrefs.isBackgroundSubtractionEnabled(this)) {
             val bgId = SpectrogramPrefs.getSelectedBackgroundId(this)
             if (bgId != null) {

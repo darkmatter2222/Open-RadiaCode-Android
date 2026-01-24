@@ -973,19 +973,20 @@ class SpectrumHistogramView @JvmOverloads constructor(
     private fun drawInfo(canvas: Canvas) {
         // Info text ABOVE the chart area (not inside it)
         val infoY = chartRect.top - 15  // Position above chart
-        
+
         // Scale indicator (left)
         val scaleText = if (useLogScale) "LOG" else "LIN"
         textPaint.textAlign = Paint.Align.LEFT
         textPaint.textSize = 20f
         textPaint.color = colorMuted
         canvas.drawText("Scale: $scaleText", chartRect.left, infoY, textPaint)
-        
-        // Total counts (right)
+
+        // Total counts and samples (right)
         val totalCounts = spectrumCounts.take(1023).sum()  // Exclude ch 1023
+        val totalSamples = if (spectrumCounts.isNotEmpty()) spectrumCounts.size - 1 else 0
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Total: ${formatCount(totalCounts)}", chartRect.right, infoY, textPaint)
-        
+        canvas.drawText("Total counts: ${formatCount(totalCounts)}  |  Samples: $totalSamples", chartRect.right, infoY, textPaint)
+
         textPaint.color = colorText  // Reset
     }
     
