@@ -70,4 +70,23 @@
         <item name="android:windowIsTranslucent">true</item>
     </style>
 
+    <!-- Bottom sheet theme -->
+    <style name="Theme.RadiaCodeBLE.BottomSheet" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:colorBackground">@color/pro_surface</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="bottomSheetStyle">@style/BottomSheetStyle</item>
+    </style>
+
+    <style name="BottomSheetStyle" parent="Widget.Material3.BottomSheet">
+        <item name="backgroundTint">@color/pro_surface</item>
+        <item name="shapeAppearance">@style/BottomSheetShape</item>
+    </style>
+
+    <style name="BottomSheetShape" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
 </resources>

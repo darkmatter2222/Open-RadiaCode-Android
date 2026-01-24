@@ -1,12 +1,15 @@
 package com.radiacode.ble.spectrogram
 
+import android.animation.ValueAnimator
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
@@ -14,16 +17,12 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
-import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
 import com.radiacode.ble.RadiaCodeForegroundService
@@ -34,14 +33,12 @@ import java.util.*
 /**
  * Vega Spectral Analysis Activity
  * 
- * Main screen for the spectrogram waterfall feature.
- * Shows spectrum data over time as a heatmap with:
- * - Toggle between accumulated/differential spectrum
- * - Recording start/stop control
- * - Timeline showing connected/disconnected periods
- * - Export functionality
- * - Background subtraction
- * - Isotope markers
+ * Professional spectrum analysis UI with maximum chart real estate.
+ * Features:
+ * - Full-bleed chart display (waterfall for differential, histogram for accumulated)
+ * - Minimal floating controls that don't obscure the chart
+ * - Settings bottom sheet for all configuration options
+ * - Optimized for both portrait and landscape orientations
  */
 class VegaSpectralAnalysisActivity : AppCompatActivity() {
 
@@ -51,6 +48,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     
     private val colorBackground = Color.parseColor("#0D0D0F")
     private val colorSurface = Color.parseColor("#1A1A1E")
+    private val colorSurfaceElevated = Color.parseColor("#222228")
     private val colorBorder = Color.parseColor("#2A2A2E")
     private val colorCyan = Color.parseColor("#00E5FF")
     private val colorMagenta = Color.parseColor("#E040FB")
@@ -58,41 +56,33 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private val colorRed = Color.parseColor("#FF5252")
     private val colorYellow = Color.parseColor("#FFD600")
     private val colorText = Color.parseColor("#FFFFFF")
+    private val colorTextSecondary = Color.parseColor("#9E9EA8")
     private val colorMuted = Color.parseColor("#6E6E78")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEWS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private lateinit var toolbar: MaterialToolbar
+    private lateinit var rootLayout: FrameLayout
+    private lateinit var chartContainer: FrameLayout
     private lateinit var waterfallView: SpectrogramWaterfallView
     private lateinit var histogramView: SpectrumHistogramView
-    private lateinit var chartContainer: FrameLayout
-    private lateinit var timelineView: SpectrogramTimelineView
     
-    // Recording controls
-    private lateinit var recordToggle: MaterialButton
-    private lateinit var recordingDuration: TextView
-    private lateinit var recordingIndicator: View
+    // Floating toolbar
+    private lateinit var toolbarOverlay: LinearLayout
+    private lateinit var backButton: ImageButton
+    private lateinit var titleText: TextView
+    private lateinit var settingsButton: ImageButton
+    private lateinit var recordButton: FrameLayout
+    private lateinit var recordDot: View
+    private lateinit var recordRing: View
     
-    // Source toggle
-    private lateinit var sourceChipGroup: ChipGroup
-    private lateinit var chipAccumulated: Chip
-    private lateinit var chipDifferential: Chip
-    
-    // Scale toggle (for histogram)
-    private lateinit var chipLogScale: Chip
-    
-    // Settings chips
-    private lateinit var chipIsotopes: Chip
-    private lateinit var chipBackground: Chip
-    private lateinit var chipSettings: Chip
-    private lateinit var chipExport: Chip
-    private lateinit var chipClear: Chip
-    
-    // Status display
+    // Bottom control bar
+    private lateinit var bottomBar: LinearLayout
+    private lateinit var sourceSelector: LinearLayout
+    private lateinit var sourceLabel: TextView
+    private lateinit var scaleToggle: TextView
     private lateinit var statusText: TextView
-    private lateinit var snapshotCount: TextView
     
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
@@ -101,10 +91,12 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private var deviceId: String? = null
     private var isRecording = false
     private var currentSource = SpectrumSourceType.DIFFERENTIAL
+    private var isLogScale = true
+    private var showIsotopes = false
     
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var updateRunnable: Runnable? = null
     private var durationUpdateRunnable: Runnable? = null
+    private var pulseAnimator: ValueAnimator? = null
     
     // ═══════════════════════════════════════════════════════════════════════════
     // BROADCAST RECEIVER
@@ -113,16 +105,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private val spectrumReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                ACTION_SPECTRUM_SNAPSHOT -> {
-                    // New snapshot available - refresh view
-                    refreshData()
-                }
-                RadiaCodeForegroundService.ACTION_CONNECTED -> {
-                    updateConnectionStatus(true)
-                }
-                RadiaCodeForegroundService.ACTION_DISCONNECTED -> {
-                    updateConnectionStatus(false)
-                }
+                ACTION_SPECTRUM_SNAPSHOT -> refreshData()
+                RadiaCodeForegroundService.ACTION_CONNECTED -> updateStatus("Connected")
+                RadiaCodeForegroundService.ACTION_DISCONNECTED -> updateStatus("Disconnected")
             }
         }
     }
@@ -139,435 +124,373 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Support both portrait and landscape
+        // Allow both orientations
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         
-        // Build UI programmatically
+        // Edge-to-edge display
+        @Suppress("DEPRECATION")
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+        
+        // Build UI
         setContentView(buildLayout())
         
-        // Get device ID (use the device's UUID, not MAC address)
+        // Get device ID
         val macAddress = Prefs.getPreferredAddress(this)
         deviceId = macAddress?.let { Prefs.getDeviceByMac(this, it)?.id }
         
-        // Setup components
-        setupToolbar()
-        setupRecordingControls()
-        setupSourceToggle()
-        setupSettingsChips()
-        setupWaterfallView()
-        setupTimelineView()
-        
-        // Load initial data
+        // Setup interactions
+        setupControls()
         loadPreferences()
         refreshData()
-        
-        // Start duration updates
         startDurationUpdates()
     }
     
     override fun onResume() {
         super.onResume()
-        
-        // Register receivers
         val filter = IntentFilter().apply {
             addAction(ACTION_SPECTRUM_SNAPSHOT)
             addAction(RadiaCodeForegroundService.ACTION_CONNECTED)
             addAction(RadiaCodeForegroundService.ACTION_DISCONNECTED)
         }
         registerReceiver(spectrumReceiver, filter, RECEIVER_NOT_EXPORTED)
-        
-        // Refresh data
         refreshData()
     }
     
     override fun onPause() {
         super.onPause()
-        try {
-            unregisterReceiver(spectrumReceiver)
-        } catch (e: Exception) { }
+        try { unregisterReceiver(spectrumReceiver) } catch (e: Exception) { }
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        updateRunnable?.let { mainHandler.removeCallbacks(it) }
         durationUpdateRunnable?.let { mainHandler.removeCallbacks(it) }
+        pulseAnimator?.cancel()
+    }
+    
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        adjustLayoutForOrientation(newConfig.orientation)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // UI BUILDING
+    // UI BUILDING - MAIN LAYOUT
     // ═══════════════════════════════════════════════════════════════════════════
     
     private fun buildLayout(): View {
         val density = resources.displayMetrics.density
         
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        rootLayout = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(colorBackground)
             
-            // Toolbar
-            toolbar = MaterialToolbar(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    (56 * density).toInt()
-                )
-                setBackgroundColor(colorSurface)
-                title = "Vega Spectral Analysis"
-                setTitleTextColor(colorText)
-                setNavigationIcon(R.drawable.ic_arrow_back)
-            }
-            addView(toolbar)
-            
-            // Recording controls card
-            addView(buildRecordingCard(density))
-            
-            // Source toggle and settings row
-            addView(buildControlsRow(density))
-            
-            // Chart container (holds either waterfall or histogram)
+            // Full-bleed chart container (bottom layer)
             chartContainer = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(
+                layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    0,
-                    1f  // Take remaining space
-                ).apply {
-                    setMargins(
-                        (12 * density).toInt(),
-                        (8 * density).toInt(),
-                        (12 * density).toInt(),
-                        (8 * density).toInt()
-                    )
-                }
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
                 
-                // Waterfall view (for differential mode - shows time evolution)
+                // Waterfall view (for differential mode)
                 waterfallView = SpectrogramWaterfallView(this@VegaSpectralAnalysisActivity).apply {
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    visibility = View.VISIBLE  // Default visible
+                    visibility = View.VISIBLE
                 }
                 addView(waterfallView)
                 
-                // Histogram view (for accumulated mode - classic spectrum display)
+                // Histogram view (for accumulated mode)
                 histogramView = SpectrumHistogramView(this@VegaSpectralAnalysisActivity).apply {
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    visibility = View.GONE  // Hidden by default
+                    visibility = View.GONE
                 }
                 addView(histogramView)
             }
             addView(chartContainer)
             
-            // Timeline view (bottom)
-            timelineView = SpectrogramTimelineView(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    (80 * density).toInt()
-                ).apply {
-                    setMargins(
-                        (12 * density).toInt(),
-                        0,
-                        (12 * density).toInt(),
-                        (12 * density).toInt()
-                    )
-                }
-            }
-            addView(timelineView)
+            // Floating toolbar overlay (top layer)
+            addView(buildToolbarOverlay(density))
             
-            // Status bar
-            addView(buildStatusBar(density))
+            // Bottom control bar (top layer)
+            addView(buildBottomBar(density))
         }
+        
+        return rootLayout
     }
     
-    private fun buildRecordingCard(density: Float): MaterialCardView {
-        return MaterialCardView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
+    private fun buildToolbarOverlay(density: Float): LinearLayout {
+        toolbarOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                (56 * density).toInt()
             ).apply {
-                setMargins(
-                    (12 * density).toInt(),
-                    (8 * density).toInt(),
-                    (12 * density).toInt(),
-                    (4 * density).toInt()
-                )
+                gravity = Gravity.TOP
+                topMargin = getStatusBarHeight()
             }
-            setCardBackgroundColor(colorSurface)
-            strokeColor = colorBorder
-            strokeWidth = (1 * density).toInt()
-            radius = 12 * density
+            setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
             
-            addView(LinearLayout(this@VegaSpectralAnalysisActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(
-                    (16 * density).toInt(),
-                    (12 * density).toInt(),
-                    (16 * density).toInt(),
-                    (12 * density).toInt()
+            // Semi-transparent gradient background
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(
+                    Color.argb(200, 13, 13, 15),
+                    Color.argb(150, 13, 13, 15),
+                    Color.TRANSPARENT
                 )
+            )
+            
+            // Back button
+            backButton = ImageButton(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (40 * density).toInt(),
+                    (40 * density).toInt()
+                )
+                setImageResource(R.drawable.ic_arrow_back)
+                setColorFilter(colorText)
+                background = createCircleRipple(density)
+                scaleType = ImageView.ScaleType.CENTER
+            }
+            addView(backButton)
+            
+            // Title
+            titleText = TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = (8 * density).toInt()
+                }
+                text = "Spectral Analysis"
+                setTextColor(colorText)
+                textSize = 18f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            addView(titleText)
+            
+            // Settings button
+            settingsButton = ImageButton(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (40 * density).toInt(),
+                    (40 * density).toInt()
+                ).apply {
+                    rightMargin = (8 * density).toInt()
+                }
+                setImageResource(R.drawable.ic_settings)
+                setColorFilter(colorText)
+                background = createCircleRipple(density)
+                scaleType = ImageView.ScaleType.CENTER
+            }
+            addView(settingsButton)
+            
+            // Record button (small indicator)
+            recordButton = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (40 * density).toInt(),
+                    (40 * density).toInt()
+                )
+                background = createCircleRipple(density)
                 
-                // Recording indicator dot
-                recordingIndicator = View(this@VegaSpectralAnalysisActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(
+                // Outer ring (shows when recording)
+                recordRing = View(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        (24 * density).toInt(),
+                        (24 * density).toInt()
+                    ).apply {
+                        gravity = Gravity.CENTER
+                    }
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setStroke((2 * density).toInt(), colorRed)
+                        setColor(Color.TRANSPARENT)
+                    }
+                    alpha = 0f
+                }
+                addView(recordRing)
+                
+                // Inner dot
+                recordDot = View(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(
                         (12 * density).toInt(),
                         (12 * density).toInt()
                     ).apply {
-                        rightMargin = (12 * density).toInt()
+                        gravity = Gravity.CENTER
                     }
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
                         setColor(colorMuted)
                     }
                 }
-                addView(recordingIndicator)
-                
-                // Recording status and duration
-                addView(LinearLayout(this@VegaSpectralAnalysisActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    
-                    addView(TextView(this@VegaSpectralAnalysisActivity).apply {
-                        text = "Spectrum Recording"
-                        setTextColor(colorText)
-                        textSize = 16f
-                    })
-                    
-                    recordingDuration = TextView(this@VegaSpectralAnalysisActivity).apply {
-                        text = "Not recording"
-                        setTextColor(colorMuted)
-                        textSize = 14f
-                    }
-                    addView(recordingDuration)
-                })
-                
-                // Record toggle button
-                recordToggle = MaterialButton(this@VegaSpectralAnalysisActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        (48 * density).toInt()
-                    )
-                    text = "START"
-                    setTextColor(colorText)
-                    setBackgroundColor(colorGreen)
-                    cornerRadius = (24 * density).toInt()
-                }
-                addView(recordToggle)
-            })
-        }
-    }
-    
-    private fun buildControlsRow(density: Float): HorizontalScrollView {
-        return HorizontalScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            isHorizontalScrollBarEnabled = false
-            
-            addView(LinearLayout(this@VegaSpectralAnalysisActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(
-                    (12 * density).toInt(),
-                    (4 * density).toInt(),
-                    (12 * density).toInt(),
-                    (4 * density).toInt()
-                )
-                
-                // Source toggle chip group
-                sourceChipGroup = ChipGroup(this@VegaSpectralAnalysisActivity).apply {
-                    isSingleSelection = true
-                    layoutParams = LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        rightMargin = (16 * density).toInt()
-                    }
-                    
-                    chipAccumulated = Chip(this@VegaSpectralAnalysisActivity).apply {
-                        text = "Accumulated"
-                        isCheckable = true
-                        setChipBackgroundColorResource(R.color.pro_surface)
-                        setTextColor(colorText)
-                    }
-                    addView(chipAccumulated)
-                    
-                    chipDifferential = Chip(this@VegaSpectralAnalysisActivity).apply {
-                        text = "Differential"
-                        isCheckable = true
-                        isChecked = true
-                        setChipBackgroundColorResource(R.color.pro_surface)
-                        setTextColor(colorText)
-                    }
-                    addView(chipDifferential)
-                }
-                addView(sourceChipGroup)
-                
-                // Separator
-                addView(View(this@VegaSpectralAnalysisActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        (1 * density).toInt(),
-                        (32 * density).toInt()
-                    ).apply {
-                        rightMargin = (16 * density).toInt()
-                        gravity = Gravity.CENTER_VERTICAL
-                    }
-                    setBackgroundColor(colorBorder)
-                })
-                
-                // Settings chips
-                chipIsotopes = createChip("Isotopes", false)
-                addView(chipIsotopes)
-                
-                chipLogScale = createChip("Log Scale", true)  // Default to log scale
-                addView(chipLogScale)
-                
-                chipBackground = createChip("Background", false)
-                addView(chipBackground)
-                
-                chipSettings = createChip("Settings", false)
-                addView(chipSettings)
-                
-                chipExport = createChip("Export", false)
-                addView(chipExport)
-                
-                chipClear = createChip("Clear", false)
-                addView(chipClear)
-            })
-        }
-    }
-    
-    private fun createChip(text: String, isChecked: Boolean): Chip {
-        val density = resources.displayMetrics.density
-        return Chip(this).apply {
-            this.text = text
-            isCheckable = true
-            this.isChecked = isChecked
-            setChipBackgroundColorResource(R.color.pro_surface)
-            setTextColor(colorText)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                rightMargin = (8 * density).toInt()
+                addView(recordDot)
             }
+            addView(recordButton)
         }
+        return toolbarOverlay
     }
     
-    private fun buildStatusBar(density: Float): LinearLayout {
-        return LinearLayout(this).apply {
+    private fun buildBottomBar(density: Float): LinearLayout {
+        bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(
-                (16 * density).toInt(),
-                (8 * density).toInt(),
-                (16 * density).toInt(),
-                (12 * density).toInt()
-            )
-            setBackgroundColor(colorSurface)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (48 * density).toInt()
+            ).apply {
+                gravity = Gravity.BOTTOM
+                bottomMargin = getNavigationBarHeight()
+            }
+            setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
             
+            // Semi-transparent gradient background
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(
+                    Color.argb(220, 13, 13, 15),
+                    Color.argb(180, 13, 13, 15),
+                    Color.TRANSPARENT
+                )
+            )
+            
+            // Source selector (dropdown style)
+            sourceSelector = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    (36 * density).toInt()
+                )
+                setPadding((12 * density).toInt(), 0, (8 * density).toInt(), 0)
+                background = createPillBackground(density, colorSurface, colorBorder)
+                
+                sourceLabel = TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "Differential"
+                    setTextColor(colorText)
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                addView(sourceLabel)
+                
+                // Dropdown arrow
+                addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        (20 * density).toInt(),
+                        (20 * density).toInt()
+                    ).apply {
+                        leftMargin = (4 * density).toInt()
+                    }
+                    setImageResource(R.drawable.ic_arrow_down)
+                    setColorFilter(colorMuted)
+                })
+            }
+            addView(sourceSelector)
+            
+            // Spacer
+            addView(View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams((12 * density).toInt(), 0)
+            })
+            
+            // Scale toggle button
+            scaleToggle = TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    (36 * density).toInt()
+                )
+                setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
+                gravity = Gravity.CENTER
+                text = "LOG"
+                setTextColor(colorCyan)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                background = createPillBackground(density, colorSurface, colorCyan)
+            }
+            addView(scaleToggle)
+            
+            // Flexible spacer
+            addView(View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
+            })
+            
+            // Status text
             statusText = TextView(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 text = "Ready"
                 setTextColor(colorMuted)
                 textSize = 12f
             }
             addView(statusText)
-            
-            snapshotCount = TextView(this@VegaSpectralAnalysisActivity).apply {
-                text = "0 snapshots"
-                setTextColor(colorMuted)
-                textSize = 12f
-            }
-            addView(snapshotCount)
+        }
+        return bottomBar
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HELPER UI METHODS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private fun createCircleRipple(density: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.TRANSPARENT)
+        }
+    }
+    
+    private fun createPillBackground(density: Float, fillColor: Int, strokeColor: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 18 * density
+            setColor(fillColor)
+            setStroke((1 * density).toInt(), strokeColor)
+        }
+    }
+    
+    private fun getStatusBarHeight(): Int {
+        val resourceId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    }
+    
+    private fun getNavigationBarHeight(): Int {
+        val resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (resourceId > 0) resources.getDimensionPixelSize(resourceId) else 0
+    }
+    
+    private fun adjustLayoutForOrientation(orientation: Int) {
+        val density = resources.displayMetrics.density
+        
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            toolbarOverlay.setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
+            bottomBar.setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
+        } else {
+            toolbarOverlay.setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
+            bottomBar.setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
         }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // SETUP
+    // CONTROL SETUP
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private fun setupToolbar() {
-        toolbar.setNavigationOnClickListener { finish() }
-    }
-    
-    private fun setupRecordingControls() {
-        recordToggle.setOnClickListener {
-            toggleRecording()
-        }
+    private fun setupControls() {
+        backButton.setOnClickListener { finish() }
+        settingsButton.setOnClickListener { showSettingsSheet() }
         
-        updateRecordingState()
-    }
-    
-    private fun setupSourceToggle() {
-        chipAccumulated.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                currentSource = SpectrumSourceType.ACCUMULATED
-                SpectrogramPrefs.setSpectrumSource(this, SpectrumSourceType.ACCUMULATED)
-                // Show histogram, hide waterfall
-                waterfallView.visibility = View.GONE
-                histogramView.visibility = View.VISIBLE
-                refreshData()
-            }
-        }
-        
-        chipDifferential.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                currentSource = SpectrumSourceType.DIFFERENTIAL
-                SpectrogramPrefs.setSpectrumSource(this, SpectrumSourceType.DIFFERENTIAL)
-                // Show waterfall, hide histogram
-                waterfallView.visibility = View.VISIBLE
-                histogramView.visibility = View.GONE
-                refreshData()
-            }
-        }
-    }
-    
-    private fun setupSettingsChips() {
-        chipIsotopes.setOnCheckedChangeListener { _, isChecked ->
-            SpectrogramPrefs.setShowIsotopeMarkers(this, isChecked)
-            waterfallView.setShowIsotopeMarkers(isChecked)
-            histogramView.setShowIsotopeMarkers(isChecked)
-        }
-        
-        chipLogScale.setOnCheckedChangeListener { _, isChecked ->
-            histogramView.setLogScale(isChecked)
-        }
-        
-        chipBackground.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                showBackgroundMenu()
+        recordButton.setOnClickListener {
+            if (isRecording) {
+                showStopRecordingConfirmation()
             } else {
-                SpectrogramPrefs.setBackgroundSubtractionEnabled(this, false)
-                waterfallView.setShowBackgroundSubtraction(false)
+                startRecording()
             }
         }
         
-        chipSettings.setOnClickListener {
-            chipSettings.isChecked = false
-            showSettingsDialog()
-        }
+        sourceSelector.setOnClickListener { showSourcePicker() }
+        scaleToggle.setOnClickListener { toggleScale() }
         
-        chipExport.setOnClickListener {
-            chipExport.isChecked = false
-            showExportDialog()
-        }
-        
-        chipClear.setOnClickListener {
-            chipClear.isChecked = false
-            showClearConfirmation()
-        }
-    }
-    
-    private fun setupWaterfallView() {
         waterfallView.onSnapshotTapListener = { snapshot, energy ->
-            // Show info about tapped point - use spectrumData for channel conversion
             val channel = snapshot.spectrumData.energyToChannel(energy)
             val count = if (channel in snapshot.spectrumData.counts.indices) {
                 snapshot.spectrumData.counts[channel]
@@ -578,90 +501,189 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             
             Toast.makeText(
                 this,
-                "Time: $timeStr\nEnergy: ${energy.toInt()} keV\nCounts: $count",
+                "Time: $timeStr | ${energy.toInt()} keV | $count counts",
                 Toast.LENGTH_SHORT
             ).show()
         }
     }
     
-    private fun setupTimelineView() {
-        timelineView.onSegmentSelectedListener = { segment ->
-            // Scroll waterfall to show this segment
-            val sdf = SimpleDateFormat("HH:mm:ss", Locale.US)
-            val startStr = sdf.format(Date(segment.startMs))
-            val endStr = segment.endMs?.let { sdf.format(Date(it)) } ?: "now"
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SOURCE SELECTION
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private fun showSourcePicker() {
+        val density = resources.displayMetrics.density
+        
+        val popup = PopupWindow(this).apply {
+            val content = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(colorSurface)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 12 * density
+                    setColor(colorSurface)
+                    setStroke((1 * density).toInt(), colorBorder)
+                }
+                setPadding((4 * density).toInt(), (8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt())
+                
+                addView(createSourceOption("Differential", currentSource == SpectrumSourceType.DIFFERENTIAL) {
+                    setSource(SpectrumSourceType.DIFFERENTIAL)
+                    dismiss()
+                })
+                
+                addView(createSourceOption("Accumulated", currentSource == SpectrumSourceType.ACCUMULATED) {
+                    setSource(SpectrumSourceType.ACCUMULATED)
+                    dismiss()
+                })
+            }
             
-            val isConnected = segment.type == ConnectionSegmentType.CONNECTED
-            statusText.text = if (isConnected) {
-                "Segment: $startStr - $endStr (connected)"
-            } else {
-                "Gap: $startStr - $endStr"
+            contentView = content
+            width = (160 * density).toInt()
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            isFocusable = true
+            elevation = 8 * density
+        }
+        
+        popup.showAsDropDown(sourceSelector, 0, (4 * density).toInt())
+    }
+    
+    private fun createSourceOption(label: String, isSelected: Boolean, onClick: () -> Unit): LinearLayout {
+        val density = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (44 * density).toInt()
+            )
+            setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
+            
+            addView(View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (8 * density).toInt(),
+                    (8 * density).toInt()
+                ).apply {
+                    rightMargin = (12 * density).toInt()
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (isSelected) colorCyan else Color.TRANSPARENT)
+                }
+            })
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                text = label
+                setTextColor(if (isSelected) colorCyan else colorText)
+                textSize = 14f
+            })
+            
+            setOnClickListener { onClick() }
+        }
+    }
+    
+    private fun setSource(source: SpectrumSourceType) {
+        currentSource = source
+        SpectrogramPrefs.setSpectrumSource(this, source)
+        
+        sourceLabel.text = when (source) {
+            SpectrumSourceType.DIFFERENTIAL -> "Differential"
+            SpectrumSourceType.ACCUMULATED -> "Accumulated"
+        }
+        
+        when (source) {
+            SpectrumSourceType.DIFFERENTIAL -> {
+                waterfallView.visibility = View.VISIBLE
+                histogramView.visibility = View.GONE
+            }
+            SpectrumSourceType.ACCUMULATED -> {
+                waterfallView.visibility = View.GONE
+                histogramView.visibility = View.VISIBLE
             }
         }
+        
+        refreshData()
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SCALE TOGGLE
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private fun toggleScale() {
+        val density = resources.displayMetrics.density
+        isLogScale = !isLogScale
+        
+        scaleToggle.text = if (isLogScale) "LOG" else "LIN"
+        scaleToggle.setTextColor(if (isLogScale) colorCyan else colorMagenta)
+        scaleToggle.background = createPillBackground(
+            density,
+            colorSurface,
+            if (isLogScale) colorCyan else colorMagenta
+        )
+        
+        histogramView.setLogScale(isLogScale)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
     // RECORDING CONTROL
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private fun toggleRecording() {
-        isRecording = !isRecording
-        SpectrogramPrefs.setRecordingEnabled(this, isRecording)
+    private fun startRecording() {
+        isRecording = true
+        SpectrogramPrefs.setRecordingEnabled(this, true)
         
-        // Notify service
-        val action = if (isRecording) "START_SPECTRUM_RECORDING" else "STOP_SPECTRUM_RECORDING"
         val intent = Intent(this, RadiaCodeForegroundService::class.java).apply {
-            this.action = action
+            action = "START_SPECTRUM_RECORDING"
         }
         startService(intent)
         
-        updateRecordingState()
+        updateRecordingUI()
     }
     
-    private fun updateRecordingState() {
-        isRecording = SpectrogramPrefs.isRecordingEnabled(this)
+    private fun showStopRecordingConfirmation() {
+        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
+            .setTitle("Stop Recording?")
+            .setMessage("Are you sure you want to stop spectrum recording?")
+            .setPositiveButton("Stop") { _, _ -> stopRecording() }
+            .setNegativeButton("Continue", null)
+            .show()
+    }
+    
+    private fun stopRecording() {
+        isRecording = false
+        SpectrogramPrefs.setRecordingEnabled(this, false)
         
+        val intent = Intent(this, RadiaCodeForegroundService::class.java).apply {
+            action = "STOP_SPECTRUM_RECORDING"
+        }
+        startService(intent)
+        
+        updateRecordingUI()
+    }
+    
+    private fun updateRecordingUI() {
         if (isRecording) {
-            recordToggle.text = "STOP"
-            recordToggle.setBackgroundColor(colorRed)
-            recordingIndicator.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(colorRed)
-            }
-            // Start pulsing animation
+            (recordDot.background as GradientDrawable).setColor(colorRed)
+            recordRing.alpha = 1f
             startRecordingPulse()
         } else {
-            recordToggle.text = "START"
-            recordToggle.setBackgroundColor(colorGreen)
-            recordingIndicator.background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(colorMuted)
-            }
-            recordingDuration.text = "Not recording"
-            stopRecordingPulse()
+            (recordDot.background as GradientDrawable).setColor(colorMuted)
+            recordRing.alpha = 0f
+            pulseAnimator?.cancel()
         }
     }
     
     private fun startRecordingPulse() {
-        // Simple pulse animation using alpha
-        recordingIndicator.animate()
-            .alpha(0.3f)
-            .setDuration(500)
-            .withEndAction {
-                if (isRecording) {
-                    recordingIndicator.animate()
-                        .alpha(1f)
-                        .setDuration(500)
-                        .withEndAction { startRecordingPulse() }
-                        .start()
-                }
+        pulseAnimator = ValueAnimator.ofFloat(1f, 1.3f, 1f).apply {
+            duration = 1000
+            repeatCount = ValueAnimator.INFINITE
+            addUpdateListener { animator ->
+                val scale = animator.animatedValue as Float
+                recordRing.scaleX = scale
+                recordRing.scaleY = scale
+                recordRing.alpha = 2f - scale
             }
-            .start()
-    }
-    
-    private fun stopRecordingPulse() {
-        recordingIndicator.animate().cancel()
-        recordingIndicator.alpha = 1f
+            start()
+        }
     }
     
     private fun startDurationUpdates() {
@@ -690,140 +712,361 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             String.format("%d:%02d", minutes, seconds)
         }
         
-        recordingDuration.text = "Recording: $durationStr"
+        statusText.text = "REC $durationStr"
+        statusText.setTextColor(colorRed)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // DATA LOADING
+    // SETTINGS BOTTOM SHEET
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private fun loadPreferences() {
-        // Load source type and set correct view visibility
-        val source = SpectrogramPrefs.getSpectrumSource(this)
-        currentSource = source
-        when (source) {
-            SpectrumSourceType.ACCUMULATED -> {
-                chipAccumulated.isChecked = true
-                waterfallView.visibility = View.GONE
-                histogramView.visibility = View.VISIBLE
-            }
-            SpectrumSourceType.DIFFERENTIAL -> {
-                chipDifferential.isChecked = true
-                waterfallView.visibility = View.VISIBLE
-                histogramView.visibility = View.GONE
-            }
-        }
+    private fun showSettingsSheet() {
+        val density = resources.displayMetrics.density
         
-        // Load settings
-        chipIsotopes.isChecked = SpectrogramPrefs.isShowIsotopeMarkers(this)
-        waterfallView.setShowIsotopeMarkers(chipIsotopes.isChecked)
-        histogramView.setShowIsotopeMarkers(chipIsotopes.isChecked)
+        val dialog = BottomSheetDialog(this, R.style.Theme_RadiaCodeBLE_BottomSheet)
         
-        // Log scale is on by default
-        chipLogScale.isChecked = true
-        histogramView.setLogScale(true)
-        
-        val bgEnabled = SpectrogramPrefs.isBackgroundSubtractionEnabled(this)
-        chipBackground.isChecked = bgEnabled
-        waterfallView.setShowBackgroundSubtraction(bgEnabled)
-        
-        // Load color scheme
-        waterfallView.setColorScheme(SpectrogramPrefs.getColorScheme(this))
-    }
-    
-    private fun refreshData() {
-        val deviceId = this.deviceId ?: return
-        
-        // Load snapshots from repository
-        val source = SpectrogramPrefs.getSpectrumSource(this)
-        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
-        val startTime = System.currentTimeMillis() - historyMs
-        
-        // Filter by source type (differential vs accumulated based on source preference)
-        val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
-        val snapshots = SpectrogramRepository.getInstance(this)
-            .getSnapshots(deviceId, startTime, System.currentTimeMillis())
-            .filter { it.isDifferential == wantDifferential }
-        
-        // Update the appropriate view based on source type
-        if (wantDifferential) {
-            // Differential mode - use waterfall view
-            waterfallView.setSnapshots(snapshots)
+        val content = ScrollView(this).apply {
+            setBackgroundColor(colorSurface)
             
-            // Apply calibration from first snapshot
-            if (snapshots.isNotEmpty()) {
-                val first = snapshots.first()
-                waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
+            addView(LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (16 * density).toInt(), 0, (24 * density).toInt())
+                
+                // Handle bar
+                addView(View(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        (40 * density).toInt(),
+                        (4 * density).toInt()
+                    ).apply {
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        bottomMargin = (16 * density).toInt()
+                    }
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = 2 * density
+                        setColor(colorBorder)
+                    }
+                })
+                
+                // Title
+                addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "Settings"
+                    setTextColor(colorText)
+                    textSize = 20f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setPadding((20 * density).toInt(), 0, (20 * density).toInt(), (16 * density).toInt())
+                })
+                
+                addView(createDivider(density))
+                
+                // DISPLAY section
+                addView(createSectionHeader("Display", density))
+                
+                addView(createToggleRow("Isotope Markers", showIsotopes, density) { enabled ->
+                    showIsotopes = enabled
+                    SpectrogramPrefs.setShowIsotopeMarkers(this@VegaSpectralAnalysisActivity, enabled)
+                    waterfallView.setShowIsotopeMarkers(enabled)
+                    histogramView.setShowIsotopeMarkers(enabled)
+                })
+                
+                addView(createPickerRow("Color Scheme", SpectrogramPrefs.getColorScheme(this@VegaSpectralAnalysisActivity).label, density) {
+                    dialog.dismiss()
+                    showColorSchemePicker()
+                })
+                
+                addView(createDivider(density))
+                
+                // RECORDING section
+                addView(createSectionHeader("Recording", density))
+                
+                addView(createPickerRow("Update Interval", 
+                    SpectrogramPrefs.UpdateInterval.fromMs(SpectrogramPrefs.getUpdateIntervalMs(this@VegaSpectralAnalysisActivity)).label, 
+                    density) {
+                    dialog.dismiss()
+                    showUpdateIntervalPicker()
+                })
+                
+                addView(createPickerRow("History Depth",
+                    SpectrogramPrefs.HistoryDepth.fromMs(SpectrogramPrefs.getHistoryDepthMs(this@VegaSpectralAnalysisActivity)).label,
+                    density) {
+                    dialog.dismiss()
+                    showHistoryDepthPicker()
+                })
+                
+                addView(createDivider(density))
+                
+                // BACKGROUND section
+                addView(createSectionHeader("Background Subtraction", density))
+                
+                val bgEnabled = SpectrogramPrefs.isBackgroundSubtractionEnabled(this@VegaSpectralAnalysisActivity)
+                addView(createToggleRow("Enable Subtraction", bgEnabled, density) { enabled ->
+                    SpectrogramPrefs.setBackgroundSubtractionEnabled(this@VegaSpectralAnalysisActivity, enabled)
+                    waterfallView.setShowBackgroundSubtraction(enabled)
+                    if (enabled && SpectrogramPrefs.getSelectedBackgroundId(this@VegaSpectralAnalysisActivity) == null) {
+                        dialog.dismiss()
+                        showBackgroundPicker()
+                    }
+                })
+                
+                addView(createActionRow("Select Background", density) {
+                    dialog.dismiss()
+                    showBackgroundPicker()
+                })
+                
+                addView(createActionRow("Save Current as Background", density) {
+                    dialog.dismiss()
+                    saveCurrentAsBackground()
+                })
+                
+                addView(createDivider(density))
+                
+                // DATA section
+                addView(createSectionHeader("Data", density))
+                
+                addView(createActionRow("Export Data", density) {
+                    dialog.dismiss()
+                    showExportDialog()
+                })
+                
+                addView(createDangerRow("Clear All Data", density) {
+                    dialog.dismiss()
+                    showClearConfirmation()
+                })
+            })
+        }
+        
+        dialog.setContentView(content)
+        dialog.show()
+    }
+    
+    private fun createSectionHeader(text: String, density: Float): TextView {
+        return TextView(this).apply {
+            this.text = text.uppercase()
+            setTextColor(colorMuted)
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.1f
+            setPadding((20 * density).toInt(), (16 * density).toInt(), (20 * density).toInt(), (8 * density).toInt())
+        }
+    }
+    
+    private fun createToggleRow(label: String, initialState: Boolean, density: Float, onToggle: (Boolean) -> Unit): LinearLayout {
+        var isOn = initialState
+        
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (52 * density).toInt()
+            )
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                this.text = label
+                setTextColor(colorText)
+                textSize = 15f
+            })
+            
+            val toggleBg = View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams((44 * density).toInt(), (24 * density).toInt())
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 12 * density
+                    setColor(if (isOn) colorCyan else colorBorder)
+                }
             }
-        } else {
-            // Accumulated mode - use histogram view showing the most recent accumulated spectrum
-            if (snapshots.isNotEmpty()) {
-                val latest = snapshots.last()  // Most recent accumulated spectrum
-                histogramView.setSpectrum(
-                    counts = latest.spectrumData.counts,
-                    a0 = latest.spectrumData.a0,
-                    a1 = latest.spectrumData.a1,
-                    a2 = latest.spectrumData.a2
+            
+            val toggleDot = View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    (20 * density).toInt(),
+                    (20 * density).toInt()
+                ).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    leftMargin = if (isOn) (22 * density).toInt() else (2 * density).toInt()
+                }
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(colorText)
+                }
+            }
+            
+            val toggleContainer = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams((44 * density).toInt(), (24 * density).toInt())
+                addView(toggleBg)
+                addView(toggleDot)
+            }
+            addView(toggleContainer)
+            
+            setOnClickListener {
+                isOn = !isOn
+                (toggleBg.background as GradientDrawable).setColor(if (isOn) colorCyan else colorBorder)
+                (toggleDot.layoutParams as FrameLayout.LayoutParams).leftMargin = 
+                    if (isOn) (22 * density).toInt() else (2 * density).toInt()
+                toggleDot.requestLayout()
+                onToggle(isOn)
+            }
+        }
+    }
+    
+    private fun createPickerRow(label: String, value: String, density: Float, onClick: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (52 * density).toInt()
+            )
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                this.text = label
+                setTextColor(colorText)
+                textSize = 15f
+            })
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                this.text = value
+                setTextColor(colorMuted)
+                textSize = 14f
+            })
+            
+            addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (20 * density).toInt(),
+                    (20 * density).toInt()
+                ).apply {
+                    leftMargin = (8 * density).toInt()
+                }
+                setImageResource(R.drawable.ic_arrow_right)
+                setColorFilter(colorMuted)
+            })
+            
+            setOnClickListener { onClick() }
+        }
+    }
+    
+    private fun createActionRow(label: String, density: Float, onClick: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (52 * density).toInt()
+            )
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                this.text = label
+                setTextColor(colorCyan)
+                textSize = 15f
+            })
+            
+            addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    (20 * density).toInt(),
+                    (20 * density).toInt()
                 )
-            } else {
-                // Clear histogram if no data
-                histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
-            }
-        }
-        
-        // Load connection segments
-        val segments = SpectrogramRepository.getInstance(this)
-            .getConnectionSegments(deviceId)
-        timelineView.setSegments(segments)
-        
-        // Update status
-        snapshotCount.text = "${snapshots.size} snapshots"
-        statusText.text = if (snapshots.isEmpty()) {
-            "No data - start recording to capture spectrum"
-        } else {
-            "Showing ${source.name.lowercase()} spectrum"
-        }
-        
-        // Legacy: apply calibration for waterfall if needed (for backwards compat)
-        if (wantDifferential && snapshots.isNotEmpty()) {
-            val first = snapshots.first()
-            waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
-        }
-        
-        // Load background if enabled
-        if (SpectrogramPrefs.isBackgroundSubtractionEnabled(this)) {
-            val bgId = SpectrogramPrefs.getSelectedBackgroundId(this)
-            if (bgId != null) {
-                val bg = SpectrogramRepository.getInstance(this).getBackgrounds()
-                    .find { it.id == bgId }
-                waterfallView.setBackgroundSpectrum(bg)
-            }
+                setImageResource(R.drawable.ic_arrow_right)
+                setColorFilter(colorMuted)
+            })
+            
+            setOnClickListener { onClick() }
         }
     }
     
-    private fun updateConnectionStatus(connected: Boolean) {
-        statusText.text = if (connected) {
-            "Device connected"
-        } else {
-            "Device disconnected"
+    private fun createDangerRow(label: String, density: Float, onClick: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (52 * density).toInt()
+            )
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
+            
+            addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                this.text = label
+                setTextColor(colorRed)
+                textSize = 15f
+            })
+            
+            setOnClickListener { onClick() }
+        }
+    }
+    
+    private fun createDivider(density: Float): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (1 * density).toInt()
+            ).apply {
+                topMargin = (8 * density).toInt()
+            }
+            setBackgroundColor(colorBorder)
         }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
-    // DIALOGS
+    // PICKER DIALOGS
     // ═══════════════════════════════════════════════════════════════════════════
     
-    private fun showBackgroundMenu() {
+    private fun showUpdateIntervalPicker() {
+        val intervals = SpectrogramPrefs.UpdateInterval.values()
+        val names = intervals.map { it.label }.toTypedArray()
+        val current = SpectrogramPrefs.UpdateInterval.fromMs(SpectrogramPrefs.getUpdateIntervalMs(this))
+        
+        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
+            .setTitle("Update Interval")
+            .setSingleChoiceItems(names, intervals.indexOf(current)) { dialog, which ->
+                SpectrogramPrefs.setUpdateIntervalMs(this, intervals[which].ms)
+                dialog.dismiss()
+            }
+            .show()
+    }
+    
+    private fun showHistoryDepthPicker() {
+        val depths = SpectrogramPrefs.HistoryDepth.values()
+        val names = depths.map { it.label }.toTypedArray()
+        val current = SpectrogramPrefs.HistoryDepth.fromMs(SpectrogramPrefs.getHistoryDepthMs(this))
+        
+        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
+            .setTitle("History Depth")
+            .setSingleChoiceItems(names, depths.indexOf(current)) { dialog, which ->
+                SpectrogramPrefs.setHistoryDepthMs(this, depths[which].ms)
+                refreshData()
+                dialog.dismiss()
+            }
+            .show()
+    }
+    
+    private fun showColorSchemePicker() {
+        val schemes = SpectrogramPrefs.ColorScheme.values()
+        val names = schemes.map { it.label }.toTypedArray()
+        val current = SpectrogramPrefs.getColorScheme(this)
+        
+        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
+            .setTitle("Color Scheme")
+            .setSingleChoiceItems(names, schemes.indexOf(current)) { dialog, which ->
+                SpectrogramPrefs.setColorScheme(this, schemes[which])
+                waterfallView.setColorScheme(schemes[which])
+                dialog.dismiss()
+            }
+            .show()
+    }
+    
+    private fun showBackgroundPicker() {
         val backgrounds = SpectrogramRepository.getInstance(this).getBackgrounds()
         
         if (backgrounds.isEmpty()) {
             AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
                 .setTitle("No Backgrounds")
-                .setMessage("You haven't saved any background spectra yet. Capture a spectrum in a low-radiation environment and use 'Save as Background' to create one.")
-                .setPositiveButton("OK") { d: DialogInterface, _: Int -> 
-                    d.dismiss()
-                    chipBackground.isChecked = false
-                }
+                .setMessage("Save a spectrum as background first.")
+                .setPositiveButton("OK", null)
                 .show()
             return
         }
@@ -845,38 +1088,23 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 waterfallView.setShowBackgroundSubtraction(true)
                 dialog.dismiss()
             }
-            .setNeutralButton("Save Current as Background") { d: DialogInterface, _: Int ->
-                d.dismiss()
-                saveCurrentAsBackground()
-            }
-            .setNegativeButton("Cancel") { d: DialogInterface, _: Int ->
-                d.dismiss()
-                chipBackground.isChecked = false
-            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
     
     private fun saveCurrentAsBackground() {
-        // Get current spectrum and save as background
         val deviceId = this.deviceId ?: return
         val snapshots = SpectrogramRepository.getInstance(this)
             .getSnapshots(deviceId, 0, System.currentTimeMillis())
+            .filter { !it.isDifferential }
         
         if (snapshots.isEmpty()) {
-            Toast.makeText(this, "No spectrum data to save", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // Use most recent accumulated spectrum (isDifferential = false means accumulated)
-        val latest = snapshots.filter { !it.isDifferential }
-            .maxByOrNull { it.timestampMs }
-        
-        if (latest == null) {
             Toast.makeText(this, "No accumulated spectrum available", Toast.LENGTH_SHORT).show()
             return
         }
         
-        // Prompt for name
+        val latest = snapshots.maxByOrNull { it.timestampMs } ?: return
+        
         val input = EditText(this).apply {
             hint = "Background name"
             setText("Background ${SimpleDateFormat("MM/dd HH:mm", Locale.US).format(Date())}")
@@ -898,88 +1126,13 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             .show()
     }
     
-    private fun showSettingsDialog() {
-        val settings = arrayOf(
-            "Update Interval",
-            "History Depth",
-            "Color Scheme"
-        )
-        
-        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
-            .setTitle("Settings")
-            .setItems(settings) { _, which ->
-                when (which) {
-                    0 -> showUpdateIntervalPicker()
-                    1 -> showHistoryDepthPicker()
-                    2 -> showColorSchemePicker()
-                }
-            }
-            .show()
-    }
-    
-    private fun showUpdateIntervalPicker() {
-        val intervals = SpectrogramPrefs.UpdateInterval.values()
-        val names = intervals.map { it.label }.toTypedArray()
-        val current = SpectrogramPrefs.UpdateInterval.fromMs(
-            SpectrogramPrefs.getUpdateIntervalMs(this)
-        )
-        val selectedIndex = intervals.indexOf(current)
-        
-        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
-            .setTitle("Update Interval")
-            .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
-                SpectrogramPrefs.setUpdateIntervalMs(this, intervals[which].ms)
-                dialog.dismiss()
-            }
-            .show()
-    }
-    
-    private fun showHistoryDepthPicker() {
-        val depths = SpectrogramPrefs.HistoryDepth.values()
-        val names = depths.map { it.label }.toTypedArray()
-        val current = SpectrogramPrefs.HistoryDepth.fromMs(
-            SpectrogramPrefs.getHistoryDepthMs(this)
-        )
-        val selectedIndex = depths.indexOf(current)
-        
-        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
-            .setTitle("History Depth")
-            .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
-                SpectrogramPrefs.setHistoryDepthMs(this, depths[which].ms)
-                refreshData()
-                dialog.dismiss()
-            }
-            .show()
-    }
-    
-    private fun showColorSchemePicker() {
-        val schemes = SpectrogramPrefs.ColorScheme.values()
-        val names = schemes.map { it.label }.toTypedArray()
-        val current = SpectrogramPrefs.getColorScheme(this)
-        val selectedIndex = schemes.indexOf(current)
-        
-        AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
-            .setTitle("Color Scheme")
-            .setSingleChoiceItems(names, selectedIndex) { dialog, which ->
-                SpectrogramPrefs.setColorScheme(this, schemes[which])
-                waterfallView.setColorScheme(schemes[which])
-                dialog.dismiss()
-            }
-            .show()
-    }
-    
     private fun showExportDialog() {
-        val options = arrayOf(
-            "Export as CSV",
-            "Export as RadiaCode (.rctrk)"
-        )
-        
         AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
             .setTitle("Export Data")
-            .setItems(options) { _, which ->
+            .setItems(arrayOf("Export as CSV", "Export as RadiaCode (.rctrk)")) { _, which ->
                 when (which) {
                     0 -> exportAsCsv()
-                    1 -> exportAsRctrk()
+                    1 -> Toast.makeText(this, "RadiaCode format coming soon", Toast.LENGTH_SHORT).show()
                 }
             }
             .show()
@@ -995,18 +1148,14 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             return
         }
         
-        // Build CSV
         val sb = StringBuilder()
         sb.append("timestamp_ms,source_type,integration_s,channel_count")
-        
-        // Add channel headers
         val channelCount = snapshots.first().spectrumData.counts.size
         for (i in 0 until channelCount) {
             sb.append(",ch_$i")
         }
         sb.append("\n")
         
-        // Add rows
         for (snapshot in snapshots) {
             sb.append(snapshot.timestampMs)
             sb.append(",")
@@ -1022,39 +1171,23 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             sb.append("\n")
         }
         
-        // Save and share
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val file = File(cacheDir, "spectrogram_$timestamp.csv")
         file.writeText(sb.toString())
         
-        shareFile(file, "text/csv")
-    }
-    
-    private fun exportAsRctrk() {
-        // TODO: Implement RadiaCode .rctrk format export
-        Toast.makeText(this, "RadiaCode format export coming soon", Toast.LENGTH_SHORT).show()
-    }
-    
-    private fun shareFile(file: File, mimeType: String) {
-        val uri = FileProvider.getUriForFile(
-            this,
-            "${packageName}.fileprovider",
-            file
-        )
-        
+        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = mimeType
+            type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        
         startActivity(Intent.createChooser(intent, "Export Spectrogram"))
     }
     
     private fun showClearConfirmation() {
         AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
             .setTitle("Clear Data")
-            .setMessage("This will delete all recorded spectrum data for this device. This cannot be undone.")
+            .setMessage("Delete all recorded spectrum data? This cannot be undone.")
             .setPositiveButton("Clear") { _, _ ->
                 deviceId?.let { id ->
                     SpectrogramRepository.getInstance(this).clearDeviceData(id)
@@ -1064,5 +1197,96 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DATA LOADING
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private fun loadPreferences() {
+        currentSource = SpectrogramPrefs.getSpectrumSource(this)
+        sourceLabel.text = when (currentSource) {
+            SpectrumSourceType.DIFFERENTIAL -> "Differential"
+            SpectrumSourceType.ACCUMULATED -> "Accumulated"
+        }
+        
+        when (currentSource) {
+            SpectrumSourceType.DIFFERENTIAL -> {
+                waterfallView.visibility = View.VISIBLE
+                histogramView.visibility = View.GONE
+            }
+            SpectrumSourceType.ACCUMULATED -> {
+                waterfallView.visibility = View.GONE
+                histogramView.visibility = View.VISIBLE
+            }
+        }
+        
+        showIsotopes = SpectrogramPrefs.isShowIsotopeMarkers(this)
+        waterfallView.setShowIsotopeMarkers(showIsotopes)
+        histogramView.setShowIsotopeMarkers(showIsotopes)
+        
+        isLogScale = true
+        histogramView.setLogScale(true)
+        
+        val bgEnabled = SpectrogramPrefs.isBackgroundSubtractionEnabled(this)
+        waterfallView.setShowBackgroundSubtraction(bgEnabled)
+        
+        waterfallView.setColorScheme(SpectrogramPrefs.getColorScheme(this))
+        
+        isRecording = SpectrogramPrefs.isRecordingEnabled(this)
+        updateRecordingUI()
+    }
+    
+    private fun refreshData() {
+        val deviceId = this.deviceId ?: return
+        
+        val source = SpectrogramPrefs.getSpectrumSource(this)
+        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+        val startTime = System.currentTimeMillis() - historyMs
+        
+        val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
+        val snapshots = SpectrogramRepository.getInstance(this)
+            .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+            .filter { it.isDifferential == wantDifferential }
+        
+        if (wantDifferential) {
+            waterfallView.setSnapshots(snapshots)
+            if (snapshots.isNotEmpty()) {
+                val first = snapshots.first()
+                waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
+            }
+        } else {
+            if (snapshots.isNotEmpty()) {
+                val latest = snapshots.last()
+                histogramView.setSpectrum(
+                    counts = latest.spectrumData.counts,
+                    a0 = latest.spectrumData.a0,
+                    a1 = latest.spectrumData.a1,
+                    a2 = latest.spectrumData.a2
+                )
+            } else {
+                histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
+            }
+        }
+        
+        if (!isRecording) {
+            updateStatus("${snapshots.size} snapshots")
+        }
+        
+        if (SpectrogramPrefs.isBackgroundSubtractionEnabled(this)) {
+            val bgId = SpectrogramPrefs.getSelectedBackgroundId(this)
+            if (bgId != null) {
+                val bg = SpectrogramRepository.getInstance(this).getBackgrounds()
+                    .find { it.id == bgId }
+                waterfallView.setBackgroundSpectrum(bg)
+            }
+        }
+    }
+    
+    private fun updateStatus(text: String) {
+        if (!isRecording) {
+            statusText.text = text
+            statusText.setTextColor(colorMuted)
+        }
     }
 }
