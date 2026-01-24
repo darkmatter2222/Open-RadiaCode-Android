@@ -289,28 +289,34 @@ class SpectrumHistogramView @JvmOverloads constructor(
      * as it's a dedicated accumulation channel, not valid spectral data.
      */
     fun setSpectrum(counts: IntArray, a0: Float, a1: Float, a2: Float) {
-        this.spectrumCounts = counts.copyOf()
-        this.channelCount = counts.size
+        // Always use a 1024-length array for spectrumCounts
+        if (counts.size == 1024) {
+            this.spectrumCounts = counts.copyOf()
+        } else if (counts.isEmpty()) {
+            this.spectrumCounts = IntArray(1024) { 0 }
+        } else {
+            // Defensive: pad or truncate to 1024
+            this.spectrumCounts = IntArray(1024) { i -> if (i < counts.size) counts[i] else 0 }
+        }
+        this.channelCount = 1024
         this.calibrationA0 = a0
         this.calibrationA1 = a1
         this.calibrationA2 = a2
-        
+
         // Zero out channel 1023 (last channel) - it's accumulation data, not spectral
-        if (spectrumCounts.size >= 1024) {
-            spectrumCounts[1023] = 0
-        }
-        
+        this.spectrumCounts[1023] = 0
+
         // Apply smoothing if set
         applySmoothing()
-        
+
         // Only reset view on first load (when visible range is default/zero)
         // This preserves user's zoom when new readings come in
-        val maxEnergy = channelToEnergy((channelCount - 2).coerceAtLeast(1))  // Exclude ch 1023
+        val maxEnergy = channelToEnergy(1022)  // Exclude ch 1023
         if (visibleMaxEnergy <= 0f || visibleMaxEnergy > maxEnergy * 1.1f) {
             visibleMinEnergy = 0f
             visibleMaxEnergy = maxEnergy
         }
-        
+
         invalidate()
     }
     
@@ -411,14 +417,17 @@ class SpectrumHistogramView @JvmOverloads constructor(
     
     private fun countToY(count: Int): Float {
         if (count <= 0) return chartRect.bottom
-        
-        val maxCount = spectrumCounts.maxOrNull() ?: 1
-        
+
+        // Use only channels 0..1022 for Y axis scaling
+        val maxCount = spectrumCounts.take(1023).maxOrNull() ?: 1
+        // If all counts are zero, avoid division by zero and keep chart flat
+        if (maxCount <= 0) return chartRect.bottom
+
         return if (useLogScale) {
             // Logarithmic scale
             val logMax = log10(maxCount.toFloat().coerceAtLeast(1f))
             val logCount = log10(count.toFloat().coerceAtLeast(1f))
-            val ratio = logCount / logMax
+            val ratio = if (logMax > 0f) logCount / logMax else 0f
             chartRect.bottom - ratio * chartRect.height()
         } else {
             // Linear scale
