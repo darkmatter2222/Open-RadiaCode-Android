@@ -88,6 +88,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private lateinit var smoothingSlider: SeekBar
     private lateinit var smoothingLabel: TextView
     
+    // AI Isotope Analysis button
+    private lateinit var aiAnalysisButton: FrameLayout
+    
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
     // ═══════════════════════════════════════════════════════════════════════════
@@ -224,6 +227,34 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                     visibility = View.GONE
                 }
                 addView(histogramView)
+                
+                // AI Isotope Analysis button (floating, bottom-right)
+                aiAnalysisButton = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        (52 * density).toInt(),
+                        (52 * density).toInt()
+                    ).apply {
+                        gravity = Gravity.BOTTOM or Gravity.END
+                        rightMargin = (16 * density).toInt()
+                        bottomMargin = (16 * density).toInt()
+                    }
+                    background = createAiButtonBackground(density)
+                    elevation = 8 * density
+                    
+                    addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            (28 * density).toInt(),
+                            (28 * density).toInt()
+                        ).apply {
+                            gravity = Gravity.CENTER
+                        }
+                        setImageResource(R.drawable.ic_vega_ai)
+                        setColorFilter(colorCyan)
+                    })
+                    
+                    setOnClickListener { performIsotopeAnalysis() }
+                }
+                addView(aiAnalysisButton)
             }
             addView(chartContainer)
             
@@ -492,6 +523,14 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         return GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.TRANSPARENT)
+        }
+    }
+    
+    private fun createAiButtonBackground(density: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(colorSurface)
+            setStroke((2 * density).toInt(), colorCyan)
         }
     }
     
@@ -1311,6 +1350,76 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AI ISOTOPE ANALYSIS
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    private fun performIsotopeAnalysis() {
+        val deviceId = this.deviceId
+        if (deviceId == null) {
+            Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Get the current spectrum data based on mode
+        val source = SpectrogramPrefs.getSpectrumSource(this)
+        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+        val startTime = System.currentTimeMillis() - historyMs
+        
+        val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
+        val snapshots = SpectrogramRepository.getInstance(this)
+            .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+            .filter { it.isDifferential == wantDifferential }
+        
+        if (snapshots.isEmpty()) {
+            Toast.makeText(this, "No spectrum data available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Get the spectrum to analyze
+        val spectrumToAnalyze: IntArray = if (wantDifferential) {
+            // Differential mode: sum all snapshots
+            VegaIsotopeApiClient.combineSnapshots(snapshots)
+        } else {
+            // Accumulated mode: use the latest snapshot
+            val latest = snapshots.last()
+            var displayCounts = latest.spectrumData.counts
+            
+            // Subtract baseline if set
+            val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
+            if (baseline != null && baseline.size == displayCounts.size) {
+                displayCounts = IntArray(displayCounts.size) { i ->
+                    maxOf(0, displayCounts[i] - baseline[i])
+                }
+            }
+            displayCounts
+        }
+        
+        val totalCounts = spectrumToAnalyze.sum()
+        if (totalCounts < 100) {
+            Toast.makeText(this, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Show the results dialog
+        val dialog = VegaIsotopeResultDialog(this)
+        dialog.show()
+        
+        // Call the API
+        VegaIsotopeApiClient.identifyIsotopes(
+            spectrum = spectrumToAnalyze,
+            threshold = 0.3f,  // Lower threshold for sensitivity
+            returnAll = false
+        ) { response ->
+            // Update UI on main thread
+            mainHandler.post {
+                if (dialog.isShowing) {
+                    dialog.showResults(response)
+                }
+            }
+        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
