@@ -478,6 +478,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
         // Draw cursor
         if (showCursor && cursorChannel >= 0) {
             drawCursor(canvas)
+            drawZoomInset(canvas)  // Picture-in-picture zoom around cursor
         }
         
         // Draw title/info
@@ -778,6 +779,168 @@ class SpectrumHistogramView @JvmOverloads constructor(
         infoPaint.textSize = 18f
         infoPaint.color = colorMuted
         canvas.drawText(line3, textX, textY, infoPaint)
+    }
+    
+    /**
+     * Draw a picture-in-picture zoom inset in the bottom-left corner
+     * showing a magnified view around the cursor position.
+     */
+    private fun drawZoomInset(canvas: Canvas) {
+        val displayCounts = smoothedCounts ?: spectrumCounts
+        if (displayCounts.isEmpty() || cursorChannel < 0) return
+        
+        // Inset dimensions
+        val insetSize = 140f  // Square size
+        val insetMargin = 15f
+        val insetLeft = chartRect.left + insetMargin
+        val insetTop = chartRect.bottom - insetSize - insetMargin
+        val insetRect = RectF(insetLeft, insetTop, insetLeft + insetSize, insetTop + insetSize)
+        
+        // Background with border
+        val bgPaint = Paint().apply {
+            color = Color.argb(240, 13, 13, 15)  // Near-opaque dark background
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint().apply {
+            color = colorYellow
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
+        
+        canvas.drawRoundRect(insetRect, 8f, 8f, bgPaint)
+        canvas.drawRoundRect(insetRect, 8f, 8f, borderPaint)
+        
+        // Clip to inset area
+        canvas.save()
+        canvas.clipRect(insetRect)
+        
+        // Zoomed range: show ~50 channels around cursor
+        val zoomChannels = 25  // 25 channels each side = 50 total
+        val zoomMinCh = (cursorChannel - zoomChannels).coerceAtLeast(0)
+        val zoomMaxCh = (cursorChannel + zoomChannels).coerceAtMost(displayCounts.size - 2)
+        
+        // Find max count in zoomed range for Y scaling
+        var zoomMaxCount = 1
+        for (ch in zoomMinCh..zoomMaxCh) {
+            val c = displayCounts.getOrElse(ch) { 0 }
+            if (c > zoomMaxCount) zoomMaxCount = c
+        }
+        
+        // Draw zoomed spectrum
+        val zoomSpectrumPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorCyan
+            style = Paint.Style.FILL
+        }
+        val zoomLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorCyan
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f
+        }
+        
+        val path = Path()
+        var started = false
+        val channelWidth = insetRect.width() / (zoomMaxCh - zoomMinCh + 1).toFloat()
+        
+        for (ch in zoomMinCh..zoomMaxCh) {
+            val count = displayCounts.getOrElse(ch) { 0 }
+            val x = insetRect.left + (ch - zoomMinCh) * channelWidth
+            
+            // Y position with log scale support
+            val y = if (useLogScale && count > 0 && zoomMaxCount > 1) {
+                val logMax = log10(zoomMaxCount.toFloat())
+                val logCount = log10(count.toFloat().coerceAtLeast(1f))
+                val ratio = logCount / logMax
+                insetRect.bottom - ratio * insetRect.height() * 0.85f  // Leave some margin
+            } else {
+                val ratio = count.toFloat() / zoomMaxCount
+                insetRect.bottom - ratio * insetRect.height() * 0.85f
+            }
+            
+            if (!started) {
+                path.moveTo(x, insetRect.bottom)
+                path.lineTo(x, y)
+                started = true
+            } else {
+                path.lineTo(x, y)
+            }
+        }
+        
+        // Close and fill
+        if (started) {
+            path.lineTo(insetRect.right, insetRect.bottom)
+            path.close()
+            
+            // Gradient fill
+            val gradientPaint = Paint(zoomSpectrumPaint)
+            gradientPaint.shader = LinearGradient(
+                0f, insetRect.top, 0f, insetRect.bottom,
+                Color.argb(180, 0, 229, 255),
+                Color.argb(40, 0, 229, 255),
+                Shader.TileMode.CLAMP
+            )
+            canvas.drawPath(path, gradientPaint)
+        }
+        
+        // Draw line on top
+        val linePath = Path()
+        started = false
+        for (ch in zoomMinCh..zoomMaxCh) {
+            val count = displayCounts.getOrElse(ch) { 0 }
+            val x = insetRect.left + (ch - zoomMinCh) * channelWidth
+            val y = if (useLogScale && count > 0 && zoomMaxCount > 1) {
+                val logMax = log10(zoomMaxCount.toFloat())
+                val logCount = log10(count.toFloat().coerceAtLeast(1f))
+                val ratio = logCount / logMax
+                insetRect.bottom - ratio * insetRect.height() * 0.85f
+            } else {
+                val ratio = count.toFloat() / zoomMaxCount
+                insetRect.bottom - ratio * insetRect.height() * 0.85f
+            }
+            if (!started) {
+                linePath.moveTo(x, y)
+                started = true
+            } else {
+                linePath.lineTo(x, y)
+            }
+        }
+        canvas.drawPath(linePath, zoomLinePaint)
+        
+        // Draw cursor line in inset
+        val cursorX = insetRect.left + (cursorChannel - zoomMinCh) * channelWidth
+        if (cursorX >= insetRect.left && cursorX <= insetRect.right) {
+            val cursorInsetPaint = Paint().apply {
+                color = colorYellow
+                style = Paint.Style.STROKE
+                strokeWidth = 2f
+            }
+            canvas.drawLine(cursorX, insetRect.top + 5, cursorX, insetRect.bottom - 5, cursorInsetPaint)
+            
+            // Small dot at the peak
+            val cursorCount = displayCounts.getOrElse(cursorChannel) { 0 }
+            val cursorY = if (useLogScale && cursorCount > 0 && zoomMaxCount > 1) {
+                val logMax = log10(zoomMaxCount.toFloat())
+                val logCount = log10(cursorCount.toFloat().coerceAtLeast(1f))
+                val ratio = logCount / logMax
+                insetRect.bottom - ratio * insetRect.height() * 0.85f
+            } else {
+                val ratio = cursorCount.toFloat() / zoomMaxCount
+                insetRect.bottom - ratio * insetRect.height() * 0.85f
+            }
+            canvas.drawCircle(cursorX, cursorY, 4f, Paint().apply {
+                color = colorYellow
+                style = Paint.Style.FILL
+            })
+        }
+        
+        canvas.restore()
+        
+        // Label
+        val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorMuted
+            textSize = 16f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("ZOOM", insetRect.centerX(), insetRect.top - 4, labelPaint)
     }
     
     private fun drawInfo(canvas: Canvas) {
