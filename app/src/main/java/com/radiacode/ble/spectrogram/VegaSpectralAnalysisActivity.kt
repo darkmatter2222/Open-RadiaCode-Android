@@ -82,9 +82,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private lateinit var recordDot: View
     private lateinit var recordRing: View
     
-    // Bottom status bar
+    // Bottom controls
     private lateinit var bottomBar: LinearLayout
-    private lateinit var statusText: TextView
     private lateinit var smoothingContainer: LinearLayout
     private lateinit var smoothingSlider: SeekBar
     private lateinit var smoothingLabel: TextView
@@ -201,9 +200,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 ).apply {
-                    // Leave room for title bar, smoothing slider and status bar
+                    // Leave room for title bar and smoothing slider only (no status bar)
                     topMargin = getStatusBarHeight() + (56 * density).toInt()
-                    bottomMargin = getNavigationBarHeight() + (80 * density).toInt()
+                    bottomMargin = getNavigationBarHeight() + (52 * density).toInt()  // Reduced from 80
                 }
                 
                 // Waterfall view (for differential mode)
@@ -470,23 +469,15 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             addView(smoothingContainer)
             
-            // Status bar row
+            // Status bar row - minimal, just for potential future use
             bottomBar = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    (36 * density).toInt()
+                    (4 * density).toInt()  // Minimal height - just a spacer now
                 )
-                setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
-                
-                statusText = TextView(this@VegaSpectralAnalysisActivity).apply {
-                    text = "Ready"
-                    setTextColor(colorMuted)
-                    textSize = 12f
-                    gravity = Gravity.CENTER
-                }
-                addView(statusText)
+                // No status text - removed recording timer to save real estate
             }
             addView(bottomBar)
         }
@@ -814,8 +805,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             String.format("%d:%02d", minutes, seconds)
         }
         
-        statusText.text = "REC $durationStr"
-        statusText.setTextColor(colorRed)
+        // Recording duration shown in title or as toast instead of status bar
+        // (status bar removed for more chart real estate)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1390,9 +1381,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     }
     
     private fun updateStatus(text: String) {
-        if (!isRecording) {
-            statusText.text = text
-            statusText.setTextColor(colorMuted)
-        }
+        // Status bar removed for more chart real estate
+        // Could show toast or update title if needed
     }
 }

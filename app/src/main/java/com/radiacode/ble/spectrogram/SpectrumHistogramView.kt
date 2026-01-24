@@ -106,6 +106,11 @@ class SpectrumHistogramView @JvmOverloads constructor(
     // Peak snapping
     private var snapToPeakEnabled = true  // Enable/disable snap to peak feature
     
+    // Interactive areas (for tap detection)
+    private var infoBoxRect = RectF()      // Yellow info box - tap to close
+    private var zoomInsetRect = RectF()    // Zoom inset box - tap to zoom in
+    private var closeButtonRect = RectF()  // Close X button on info box
+    
     // Smoothing
     private var smoothingFactor = 0        // 0 = no smoothing, higher = more smoothing
     private var smoothedCounts: IntArray? = null
@@ -209,7 +214,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
     private val padding = 16f
     private val leftAxisWidth = 80f
     private val bottomAxisHeight = 60f
-    private val topPadding = 40f
+    private val topPadding = 60f  // Extra room for info text above chart
     
     // ═══════════════════════════════════════════════════════════════════════════
     // GESTURE DETECTION
@@ -741,7 +746,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
             infoPaint.measureText(line3)
         )
         
-        val boxWidth = maxTextWidth + 24f  // Add padding
+        val boxWidth = maxTextWidth + 40f  // Extra padding for close button
         val boxHeight = 78f
         val boxPadding = 15f
         
@@ -764,10 +769,28 @@ class SpectrumHistogramView @JvmOverloads constructor(
         val clampedBoxX = boxX.coerceIn(chartRect.left + 5, chartRect.right - boxWidth - 5)
         val clampedBoxY = boxY.coerceIn(chartRect.top + 5, chartRect.bottom - boxHeight - 5)
         
+        // Store rect for tap detection
+        infoBoxRect.set(clampedBoxX, clampedBoxY, clampedBoxX + boxWidth, clampedBoxY + boxHeight)
+        
         // Draw box with border
-        val boxRect = RectF(clampedBoxX, clampedBoxY, clampedBoxX + boxWidth, clampedBoxY + boxHeight)
-        canvas.drawRoundRect(boxRect, 8f, 8f, boxPaint)
-        canvas.drawRoundRect(boxRect, 8f, 8f, boxBorderPaint)
+        canvas.drawRoundRect(infoBoxRect, 8f, 8f, boxPaint)
+        canvas.drawRoundRect(infoBoxRect, 8f, 8f, boxBorderPaint)
+        
+        // Draw close button (X) in top-right corner of box
+        val closeSize = 18f
+        val closePadding = 6f
+        val closeX = clampedBoxX + boxWidth - closeSize - closePadding
+        val closeY = clampedBoxY + closePadding
+        closeButtonRect.set(closeX - 4, closeY - 4, closeX + closeSize + 4, closeY + closeSize + 4)
+        
+        val closePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorMuted
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            strokeCap = Paint.Cap.ROUND
+        }
+        canvas.drawLine(closeX, closeY, closeX + closeSize, closeY + closeSize, closePaint)
+        canvas.drawLine(closeX + closeSize, closeY, closeX, closeY + closeSize, closePaint)
         
         // Draw text inside box
         val textX = clampedBoxX + 12
@@ -784,6 +807,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
     /**
      * Draw a picture-in-picture zoom inset in the bottom-left corner
      * showing a magnified view around the cursor position.
+     * Tap on this inset to zoom the main chart to this area.
      */
     private fun drawZoomInset(canvas: Canvas) {
         val displayCounts = smoothedCounts ?: spectrumCounts
@@ -795,6 +819,9 @@ class SpectrumHistogramView @JvmOverloads constructor(
         val insetLeft = chartRect.left + insetMargin
         val insetTop = chartRect.bottom - insetSize - insetMargin
         val insetRect = RectF(insetLeft, insetTop, insetLeft + insetSize, insetTop + insetSize)
+        
+        // Store for tap detection
+        zoomInsetRect.set(insetRect)
         
         // Background with border
         val bgPaint = Paint().apply {
@@ -944,17 +971,20 @@ class SpectrumHistogramView @JvmOverloads constructor(
     }
     
     private fun drawInfo(canvas: Canvas) {
-        // Scale indicator
+        // Info text ABOVE the chart area (not inside it)
+        val infoY = chartRect.top - 15  // Position above chart
+        
+        // Scale indicator (left)
         val scaleText = if (useLogScale) "LOG" else "LIN"
         textPaint.textAlign = Paint.Align.LEFT
-        textPaint.textSize = 24f
+        textPaint.textSize = 20f
         textPaint.color = colorMuted
-        canvas.drawText("Y-Scale: $scaleText", chartRect.left + 10, chartRect.top + 25, textPaint)
+        canvas.drawText("Scale: $scaleText", chartRect.left, infoY, textPaint)
         
-        // Total counts
-        val totalCounts = spectrumCounts.sum()
+        // Total counts (right)
+        val totalCounts = spectrumCounts.take(1023).sum()  // Exclude ch 1023
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Total: ${formatCount(totalCounts)}", chartRect.right - 10, chartRect.top + 25, textPaint)
+        canvas.drawText("Total: ${formatCount(totalCounts)}", chartRect.right, infoY, textPaint)
         
         textPaint.color = colorText  // Reset
     }
@@ -1031,9 +1061,29 @@ class SpectrumHistogramView @JvmOverloads constructor(
                 val dy = event.y - touchStartY
                 val dragDistance = kotlin.math.sqrt(dx * dx + dy * dy)
                 
-                // Quick tap with minimal movement - show cursor at exact position (no snapping)
-                if (!isMultiTouch && elapsed < 250 && dragDistance < 20 && chartRect.contains(event.x, event.y)) {
-                    updateCursorPositionWithSnapping(event.x, false)  // No snapping on tap
+                // Quick tap with minimal movement
+                if (!isMultiTouch && elapsed < 250 && dragDistance < 20) {
+                    // Check if tap is on close button (X)
+                    if (showCursor && closeButtonRect.contains(event.x, event.y)) {
+                        showCursor = false
+                        cursorChannel = -1
+                        infoBoxRect.setEmpty()
+                        zoomInsetRect.setEmpty()
+                        closeButtonRect.setEmpty()
+                        invalidate()
+                    }
+                    // Check if tap is on zoom inset (zoom to that area)
+                    else if (showCursor && zoomInsetRect.contains(event.x, event.y)) {
+                        zoomToCursor()
+                    }
+                    // Check if tap is on info box (do nothing, just consume)
+                    else if (showCursor && infoBoxRect.contains(event.x, event.y)) {
+                        // Consumed - don't create new cursor
+                    }
+                    // Otherwise, show cursor at tap position
+                    else if (chartRect.contains(event.x, event.y)) {
+                        updateCursorPositionWithSnapping(event.x, false)  // No snapping on tap
+                    }
                 }
                 isDraggingCursor = false
                 isMultiTouch = false
@@ -1090,6 +1140,23 @@ class SpectrumHistogramView @JvmOverloads constructor(
         
         cursorChannel = channel
         showCursor = true
+        invalidate()
+    }
+    
+    /**
+     * Zoom the main chart to center on the cursor position.
+     * Shows approximately the same range as the zoom inset (~50 channels).
+     */
+    private fun zoomToCursor() {
+        if (cursorChannel < 0) return
+        
+        val zoomChannels = 25  // Same as zoom inset
+        val minCh = (cursorChannel - zoomChannels).coerceAtLeast(0)
+        val maxCh = (cursorChannel + zoomChannels).coerceAtMost(channelCount - 2)
+        
+        visibleMinEnergy = channelToEnergy(minCh)
+        visibleMaxEnergy = channelToEnergy(maxCh)
+        
         invalidate()
     }
     
