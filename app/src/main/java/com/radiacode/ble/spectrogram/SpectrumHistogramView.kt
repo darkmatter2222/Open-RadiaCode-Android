@@ -23,7 +23,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
      * Clear all chart state: data, overlays, cursor, zoom, info box, etc.
      */
     fun clearAll() {
-        setSpectrum(intArrayOf(), 0f, 3f, 0f)
+        setSpectrum(intArrayOf(), 0f, 3f, 0f, sampleCount = 0)
         showCursor = false
         cursorChannel = -1
         infoBoxRect.setEmpty()
@@ -57,6 +57,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
     private var spectrumCounts: IntArray = IntArray(1024)
     private var backgroundCounts: IntArray? = null
     private var channelCount = 1024
+    private var sampleCount = 0  // Number of snapshots that contributed to this spectrum
     
     // Energy calibration: E(keV) = a0 + a1*channel + a2*channel^2
     private var calibrationA0 = 0f
@@ -287,8 +288,12 @@ class SpectrumHistogramView @JvmOverloads constructor(
      * Set the spectrum data to display.
      * NOTE: Channel 1023 (the 1024th channel) is excluded from display
      * as it's a dedicated accumulation channel, not valid spectral data.
+     * @param sampleCount Number of snapshots contributing to this data (for display purposes)
      */
-    fun setSpectrum(counts: IntArray, a0: Float, a1: Float, a2: Float) {
+    fun setSpectrum(counts: IntArray, a0: Float, a1: Float, a2: Float, sampleCount: Int = 1) {
+        // Store the sample count
+        this.sampleCount = sampleCount
+        
         // Always use a 1024-length array for spectrumCounts
         if (counts.size == 1024) {
             this.spectrumCounts = counts.copyOf()
@@ -984,10 +989,11 @@ class SpectrumHistogramView @JvmOverloads constructor(
         canvas.drawText("Scale: $scaleText", chartRect.left, infoY, textPaint)
 
         // Total counts and samples (right)
-        val totalCounts = spectrumCounts.take(1023).sum()  // Exclude ch 1023
-        val totalSamples = if (spectrumCounts.isNotEmpty()) spectrumCounts.size - 1 else 0
+        // Use Long to avoid overflow - spectrumCounts can sum to billions
+        val totalCounts = spectrumCounts.take(1023).sumOf { it.toLong() }  // Exclude ch 1023
+        val displaySamples = sampleCount  // Use the actual sample count passed in
         textPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Total counts: ${formatCount(totalCounts)}  |  Samples: $totalSamples", chartRect.right, infoY, textPaint)
+        canvas.drawText("Total counts: ${formatCountLong(totalCounts)}  |  Samples: $displaySamples", chartRect.right, infoY, textPaint)
 
         textPaint.color = colorText  // Reset
     }
@@ -1015,6 +1021,15 @@ class SpectrumHistogramView @JvmOverloads constructor(
         return when {
             count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000f)
             count >= 1_000 -> String.format("%.1fK", count / 1_000f)
+            else -> count.toString()
+        }
+    }
+    
+    private fun formatCountLong(count: Long): String {
+        return when {
+            count >= 1_000_000_000 -> String.format("%.1fB", count / 1_000_000_000.0)
+            count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
+            count >= 1_000 -> String.format("%.1fK", count / 1_000.0)
             else -> count.toString()
         }
     }

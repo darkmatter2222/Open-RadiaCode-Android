@@ -1356,26 +1356,20 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
             }
         } else {
+            // ACCUMULATED mode: Use the LATEST snapshot only, don't sum!
+            // Each accumulated spectrum already contains the device's total lifetime counts.
+            // Summing multiple accumulated snapshots would multiply the counts incorrectly.
             if (snapshots.isNotEmpty()) {
-                // Sum all accumulated spectra in the window
-                val channelCount = snapshots.last().spectrumData.counts.size
-                val summed = IntArray(channelCount) { 0 }
-                var a0 = 0f; var a1 = 3f; var a2 = 0f
-                for (snap in snapshots) {
-                    for (i in snap.spectrumData.counts.indices) {
-                        summed[i] += snap.spectrumData.counts[i]
-                    }
-                    // Use calibration from latest
-                    a0 = snap.spectrumData.a0; a1 = snap.spectrumData.a1; a2 = snap.spectrumData.a2
-                }
+                val latest = snapshots.last()
                 histogramView.setSpectrum(
-                    counts = summed,
-                    a0 = a0,
-                    a1 = a1,
-                    a2 = a2
+                    counts = latest.spectrumData.counts,
+                    a0 = latest.spectrumData.a0,
+                    a1 = latest.spectrumData.a1,
+                    a2 = latest.spectrumData.a2,
+                    sampleCount = snapshots.size
                 )
             } else {
-                histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
+                histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f, sampleCount = 0)
             }
         }
 
