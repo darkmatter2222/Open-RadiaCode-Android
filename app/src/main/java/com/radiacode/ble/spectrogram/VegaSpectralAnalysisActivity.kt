@@ -66,6 +66,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     
     private lateinit var toolbar: MaterialToolbar
     private lateinit var waterfallView: SpectrogramWaterfallView
+    private lateinit var histogramView: SpectrumHistogramView
+    private lateinit var chartContainer: FrameLayout
     private lateinit var timelineView: SpectrogramTimelineView
     
     // Recording controls
@@ -77,6 +79,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private lateinit var sourceChipGroup: ChipGroup
     private lateinit var chipAccumulated: Chip
     private lateinit var chipDifferential: Chip
+    
+    // Scale toggle (for histogram)
+    private lateinit var chipLogScale: Chip
     
     // Settings chips
     private lateinit var chipIsotopes: Chip
@@ -95,6 +100,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     
     private var deviceId: String? = null
     private var isRecording = false
+    private var currentSource = SpectrumSourceType.DIFFERENTIAL
     
     private val mainHandler = Handler(Looper.getMainLooper())
     private var updateRunnable: Runnable? = null
@@ -139,8 +145,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         // Build UI programmatically
         setContentView(buildLayout())
         
-        // Get device ID
-        deviceId = Prefs.getPreferredAddress(this)
+        // Get device ID (use the device's UUID, not MAC address)
+        val macAddress = Prefs.getPreferredAddress(this)
+        deviceId = macAddress?.let { Prefs.getDeviceByMac(this, it)?.id }
         
         // Setup components
         setupToolbar()
@@ -220,8 +227,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             // Source toggle and settings row
             addView(buildControlsRow(density))
             
-            // Waterfall view (main area)
-            waterfallView = SpectrogramWaterfallView(this@VegaSpectralAnalysisActivity).apply {
+            // Chart container (holds either waterfall or histogram)
+            chartContainer = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     0,
@@ -234,8 +241,28 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                         (8 * density).toInt()
                     )
                 }
+                
+                // Waterfall view (for differential mode - shows time evolution)
+                waterfallView = SpectrogramWaterfallView(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    visibility = View.VISIBLE  // Default visible
+                }
+                addView(waterfallView)
+                
+                // Histogram view (for accumulated mode - classic spectrum display)
+                histogramView = SpectrumHistogramView(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    visibility = View.GONE  // Hidden by default
+                }
+                addView(histogramView)
             }
-            addView(waterfallView)
+            addView(chartContainer)
             
             // Timeline view (bottom)
             timelineView = SpectrogramTimelineView(this@VegaSpectralAnalysisActivity).apply {
@@ -398,6 +425,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 chipIsotopes = createChip("Isotopes", false)
                 addView(chipIsotopes)
                 
+                chipLogScale = createChip("Log Scale", true)  // Default to log scale
+                addView(chipLogScale)
+                
                 chipBackground = createChip("Background", false)
                 addView(chipBackground)
                 
@@ -478,14 +508,22 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private fun setupSourceToggle() {
         chipAccumulated.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
+                currentSource = SpectrumSourceType.ACCUMULATED
                 SpectrogramPrefs.setSpectrumSource(this, SpectrumSourceType.ACCUMULATED)
+                // Show histogram, hide waterfall
+                waterfallView.visibility = View.GONE
+                histogramView.visibility = View.VISIBLE
                 refreshData()
             }
         }
         
         chipDifferential.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
+                currentSource = SpectrumSourceType.DIFFERENTIAL
                 SpectrogramPrefs.setSpectrumSource(this, SpectrumSourceType.DIFFERENTIAL)
+                // Show waterfall, hide histogram
+                waterfallView.visibility = View.VISIBLE
+                histogramView.visibility = View.GONE
                 refreshData()
             }
         }
@@ -495,6 +533,11 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         chipIsotopes.setOnCheckedChangeListener { _, isChecked ->
             SpectrogramPrefs.setShowIsotopeMarkers(this, isChecked)
             waterfallView.setShowIsotopeMarkers(isChecked)
+            histogramView.setShowIsotopeMarkers(isChecked)
+        }
+        
+        chipLogScale.setOnCheckedChangeListener { _, isChecked ->
+            histogramView.setLogScale(isChecked)
         }
         
         chipBackground.setOnCheckedChangeListener { _, isChecked ->
@@ -566,12 +609,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         SpectrogramPrefs.setRecordingEnabled(this, isRecording)
         
         // Notify service
+        val action = if (isRecording) "START_SPECTRUM_RECORDING" else "STOP_SPECTRUM_RECORDING"
         val intent = Intent(this, RadiaCodeForegroundService::class.java).apply {
-            action = if (isRecording) {
-                "START_SPECTRUM_RECORDING"
-            } else {
-                "STOP_SPECTRUM_RECORDING"
-            }
+            this.action = action
         }
         startService(intent)
         
@@ -658,16 +698,30 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private fun loadPreferences() {
-        // Load source type
+        // Load source type and set correct view visibility
         val source = SpectrogramPrefs.getSpectrumSource(this)
+        currentSource = source
         when (source) {
-            SpectrumSourceType.ACCUMULATED -> chipAccumulated.isChecked = true
-            SpectrumSourceType.DIFFERENTIAL -> chipDifferential.isChecked = true
+            SpectrumSourceType.ACCUMULATED -> {
+                chipAccumulated.isChecked = true
+                waterfallView.visibility = View.GONE
+                histogramView.visibility = View.VISIBLE
+            }
+            SpectrumSourceType.DIFFERENTIAL -> {
+                chipDifferential.isChecked = true
+                waterfallView.visibility = View.VISIBLE
+                histogramView.visibility = View.GONE
+            }
         }
         
         // Load settings
         chipIsotopes.isChecked = SpectrogramPrefs.isShowIsotopeMarkers(this)
         waterfallView.setShowIsotopeMarkers(chipIsotopes.isChecked)
+        histogramView.setShowIsotopeMarkers(chipIsotopes.isChecked)
+        
+        // Log scale is on by default
+        chipLogScale.isChecked = true
+        histogramView.setLogScale(true)
         
         val bgEnabled = SpectrogramPrefs.isBackgroundSubtractionEnabled(this)
         chipBackground.isChecked = bgEnabled
@@ -691,7 +745,31 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             .getSnapshots(deviceId, startTime, System.currentTimeMillis())
             .filter { it.isDifferential == wantDifferential }
         
-        waterfallView.setSnapshots(snapshots)
+        // Update the appropriate view based on source type
+        if (wantDifferential) {
+            // Differential mode - use waterfall view
+            waterfallView.setSnapshots(snapshots)
+            
+            // Apply calibration from first snapshot
+            if (snapshots.isNotEmpty()) {
+                val first = snapshots.first()
+                waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
+            }
+        } else {
+            // Accumulated mode - use histogram view showing the most recent accumulated spectrum
+            if (snapshots.isNotEmpty()) {
+                val latest = snapshots.last()  // Most recent accumulated spectrum
+                histogramView.setSpectrum(
+                    counts = latest.spectrumData.counts,
+                    a0 = latest.spectrumData.a0,
+                    a1 = latest.spectrumData.a1,
+                    a2 = latest.spectrumData.a2
+                )
+            } else {
+                // Clear histogram if no data
+                histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
+            }
+        }
         
         // Load connection segments
         val segments = SpectrogramRepository.getInstance(this)
@@ -706,8 +784,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             "Showing ${source.name.lowercase()} spectrum"
         }
         
-        // Apply calibration from first snapshot
-        if (snapshots.isNotEmpty()) {
+        // Legacy: apply calibration for waterfall if needed (for backwards compat)
+        if (wantDifferential && snapshots.isNotEmpty()) {
             val first = snapshots.first()
             waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
         }

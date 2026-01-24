@@ -215,7 +215,8 @@ class RadiaCodeForegroundService : Service() {
             context = applicationContext,
             onDeviceStateChanged = { state -> handleDeviceStateChanged(state) },
             onDeviceReading = { deviceId, uSvH, cps, ts -> handleDeviceReading(deviceId, uSvH, cps, ts) },
-            onSpectrumReading = { deviceId, spectrum -> handleSpectrumReading(deviceId, spectrum) }
+            onSpectrumReading = { deviceId, spectrum -> handleSpectrumReading(deviceId, spectrum) },
+            onAccumulatedSpectrumReading = { deviceId, spectrum -> handleAccumulatedSpectrumReading(deviceId, spectrum) }
         )
         
         try {
@@ -488,6 +489,18 @@ class RadiaCodeForegroundService : Service() {
         // Save to spectrogram repository if recording is enabled
         if (isSpectrogramRecording) {
             saveSpectrumSnapshot(deviceId, spectrum, isDifferential = true)
+        }
+    }
+    
+    /**
+     * Handle accumulated spectrum reading from the multi-device manager.
+     * This uses VS.SPECTRUM - total counts since device was turned on/reset.
+     */
+    private fun handleAccumulatedSpectrumReading(deviceId: String, spectrum: SpectrumData) {
+        // Only save to spectrogram if recording is enabled
+        if (isSpectrogramRecording) {
+            Log.d(TAG, "Accumulated spectrum from $deviceId: ${spectrum.numChannels} channels, totalCounts=${spectrum.totalCounts}")
+            saveSpectrumSnapshot(deviceId, spectrum, isDifferential = false)
         }
     }
     

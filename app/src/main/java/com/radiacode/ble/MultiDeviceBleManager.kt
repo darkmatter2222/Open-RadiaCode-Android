@@ -21,7 +21,8 @@ class MultiDeviceBleManager(
     private val context: Context,
     private val onDeviceStateChanged: (DeviceState) -> Unit,
     private val onDeviceReading: (String, Float, Float, Long) -> Unit,  // deviceId, uSvH, cps, timestampMs
-    private val onSpectrumReading: ((String, SpectrumData) -> Unit)? = null  // deviceId, spectrum
+    private val onSpectrumReading: ((String, SpectrumData) -> Unit)? = null,  // deviceId, differential spectrum
+    private val onAccumulatedSpectrumReading: ((String, SpectrumData) -> Unit)? = null  // deviceId, accumulated spectrum
 ) {
     companion object {
         private const val TAG = "RadiaCode"
@@ -436,12 +437,42 @@ class MultiDeviceBleManager(
                     
                     Log.d(TAG, "Differential spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
                     onSpectrumReading?.invoke(deviceId, fullSpectrum)
+                    
+                    // Also read accumulated spectrum if callback is set
+                    if (onAccumulatedSpectrumReading != null) {
+                        readAccumulatedSpectrum(deviceId, client, managed)
+                    }
                 } else {
                     Log.w(TAG, "Differential spectrum was null for $deviceId")
                 }
             }
             .exceptionally { t ->
                 Log.w(TAG, "Spectrum read failed for $deviceId", t)
+                null
+            }
+    }
+    
+    /**
+     * Read accumulated spectrum (VS.SPECTRUM) after differential read completes.
+     */
+    private fun readAccumulatedSpectrum(deviceId: String, client: RadiacodeBleClient, managed: ManagedDevice) {
+        val calib = managed.cachedCalibration
+        
+        client.readSpectrum()
+            .thenAccept { spectrum ->
+                if (spectrum != null) {
+                    val fullSpectrum = if (calib != null) {
+                        spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
+                    } else {
+                        spectrum
+                    }
+                    
+                    Log.d(TAG, "Accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
+                    onAccumulatedSpectrumReading?.invoke(deviceId, fullSpectrum)
+                }
+            }
+            .exceptionally { t ->
+                Log.w(TAG, "Accumulated spectrum read failed for $deviceId", t)
                 null
             }
     }
