@@ -173,8 +173,7 @@ class RadiaCodeForegroundService : Service() {
     private var locationController: LocationController? = null
     private var backgroundLocationToken: UUID? = null
     
-    // Spectrogram recording
-    private var spectrogramRecordingTask: ScheduledFuture<*>? = null
+    // Spectrogram recording - just a flag, data flows via existing spectrum callbacks
     private var isSpectrogramRecording = false
 
     private var lastMapSaveLogMs: Long = 0L
@@ -497,7 +496,13 @@ class RadiaCodeForegroundService : Service() {
     // ═══════════════════════════════════════════════════════════════════════════
     
     /**
-     * Start spectrogram recording at the configured interval.
+     * Start spectrogram recording.
+     * 
+     * NOTE: We do NOT start a separate scheduler here. The differential spectrum data
+     * flows via handleSpectrumReading() callback from the MultiDeviceManager's existing
+     * poll loop. When isSpectrogramRecording is true, that callback saves the data.
+     * 
+     * This avoids BLE conflicts ("Only one in-flight request supported" errors).
      */
     private fun startSpectrogramRecording() {
         if (isSpectrogramRecording) {
@@ -506,19 +511,10 @@ class RadiaCodeForegroundService : Service() {
         }
         
         isSpectrogramRecording = true
-        Log.d(TAG, "Starting spectrogram recording")
+        Log.d(TAG, "Starting spectrogram recording - data will flow via existing spectrum callbacks")
         
         // Record connection state for timeline
         recordConnectionStates()
-        
-        // Schedule periodic accumulated spectrum reads
-        val intervalMs = SpectrogramPrefs.getUpdateIntervalMs(this)
-        spectrogramRecordingTask = scheduler.scheduleAtFixedRate(
-            { captureAccumulatedSpectrum() },
-            0,
-            intervalMs,
-            TimeUnit.MILLISECONDS
-        )
         
         // Broadcast that recording started
         sendBroadcast(Intent(VegaSpectralAnalysisActivity.ACTION_SPECTRUM_SNAPSHOT).setPackage(packageName))
@@ -534,55 +530,7 @@ class RadiaCodeForegroundService : Service() {
         }
         
         isSpectrogramRecording = false
-        spectrogramRecordingTask?.cancel(true)
-        spectrogramRecordingTask = null
         Log.d(TAG, "Stopped spectrogram recording")
-    }
-    
-    /**
-     * Capture accumulated spectrum from all connected devices.
-     */
-    private fun captureAccumulatedSpectrum() {
-        val manager = deviceManager ?: return
-        
-        try {
-            // Get all connected devices
-            val connectedDevices = manager.getAllDeviceStates()
-                .filter { it.connectionState == DeviceConnectionState.CONNECTED }
-            
-            for (state in connectedDevices) {
-                val deviceId = state.config.id
-                val client = manager.getClient(deviceId) ?: continue
-                
-                try {
-                    // Read calibration
-                    val calibration = client.readEnergyCalibration().get(5, TimeUnit.SECONDS)
-                    
-                    // Read accumulated spectrum
-                    val spectrum = client.readSpectrum().get(5, TimeUnit.SECONDS) ?: continue
-                    
-                    val fullSpectrum = spectrum.copy(
-                        a0 = calibration?.a0 ?: spectrum.a0,
-                        a1 = calibration?.a1 ?: spectrum.a1,
-                        a2 = calibration?.a2 ?: spectrum.a2
-                    )
-                    
-                    // Save to repository
-                    saveSpectrumSnapshot(deviceId, fullSpectrum, isDifferential = false)
-                    
-                    Log.d(TAG, "Captured accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch")
-                    
-                } catch (t: Throwable) {
-                    Log.w(TAG, "Failed to capture spectrum for $deviceId", t)
-                }
-            }
-            
-            // Broadcast update
-            sendBroadcast(Intent(VegaSpectralAnalysisActivity.ACTION_SPECTRUM_SNAPSHOT).setPackage(packageName))
-            
-        } catch (t: Throwable) {
-            Log.e(TAG, "captureAccumulatedSpectrum failed", t)
-        }
     }
     
     /**
@@ -598,6 +546,9 @@ class RadiaCodeForegroundService : Service() {
             isDifferential = isDifferential,
             connectionState = connectionState
         )
+        
+        // Broadcast that a new snapshot was added so the UI can update
+        sendBroadcast(Intent(VegaSpectralAnalysisActivity.ACTION_SPECTRUM_SNAPSHOT).setPackage(packageName))
     }
     
     /**
