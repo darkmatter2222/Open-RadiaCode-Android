@@ -19,6 +19,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.*
+import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
@@ -83,6 +84,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     // Bottom status bar
     private lateinit var bottomBar: LinearLayout
     private lateinit var statusText: TextView
+    private lateinit var smoothingContainer: LinearLayout
+    private lateinit var smoothingSlider: SeekBar
+    private lateinit var smoothingLabel: TextView
     
     // ═══════════════════════════════════════════════════════════════════════════
     // STATE
@@ -189,15 +193,15 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             )
             setBackgroundColor(colorBackground)
             
-            // Chart container - below title bar, above status bar
+            // Chart container - below title bar, above bottom controls
             chartContainer = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 ).apply {
-                    // Leave room for title bar and status bar
+                    // Leave room for title bar, smoothing slider and status bar
                     topMargin = getStatusBarHeight() + (56 * density).toInt()
-                    bottomMargin = getNavigationBarHeight() + (36 * density).toInt()
+                    bottomMargin = getNavigationBarHeight() + (80 * density).toInt()
                 }
                 
                 // Waterfall view (for differential mode)
@@ -393,31 +397,79 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     }
     
     private fun buildBottomBar(density: Float): LinearLayout {
-        bottomBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        // Container for smoothing slider + status bar
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (36 * density).toInt()
+                ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.BOTTOM
                 bottomMargin = getNavigationBarHeight()
             }
-            setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
-            
-            // Solid background (chart is above)
             setBackgroundColor(colorBackground)
             
-            // Status text (centered)
-            statusText = TextView(this@VegaSpectralAnalysisActivity).apply {
-                text = "Ready"
-                setTextColor(colorMuted)
-                textSize = 12f
-                gravity = Gravity.CENTER
+            // Smoothing slider row (only visible in accumulated mode)
+            smoothingContainer = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    (44 * density).toInt()
+                )
+                setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
+                visibility = View.GONE  // Hidden by default
+                
+                addView(TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "Smooth"
+                    setTextColor(colorMuted)
+                    textSize = 12f
+                })
+                
+                smoothingSlider = SeekBar(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        leftMargin = (12 * density).toInt()
+                        rightMargin = (8 * density).toInt()
+                    }
+                    max = 20
+                    progress = 0
+                    progressTintList = android.content.res.ColorStateList.valueOf(colorCyan)
+                    thumbTintList = android.content.res.ColorStateList.valueOf(colorCyan)
+                }
+                addView(smoothingSlider)
+                
+                smoothingLabel = TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "0"
+                    setTextColor(colorCyan)
+                    textSize = 12f
+                    minWidth = (24 * density).toInt()
+                    gravity = Gravity.END
+                }
+                addView(smoothingLabel)
             }
-            addView(statusText)
+            addView(smoothingContainer)
+            
+            // Status bar row
+            bottomBar = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    (36 * density).toInt()
+                )
+                setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
+                
+                statusText = TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "Ready"
+                    setTextColor(colorMuted)
+                    textSize = 12f
+                    gravity = Gravity.CENTER
+                }
+                addView(statusText)
+            }
+            addView(bottomBar)
         }
-        return bottomBar
+        return container
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -480,6 +532,16 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         
         sourceSelector.setOnClickListener { showSourcePicker() }
         scaleToggle.setOnClickListener { toggleScale() }
+        
+        // Smoothing slider listener
+        smoothingSlider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                smoothingLabel.text = progress.toString()
+                histogramView.setSmoothing(progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
         
         waterfallView.onSnapshotTapListener = { snapshot, energy ->
             val channel = snapshot.spectrumData.energyToChannel(energy)
@@ -590,10 +652,12 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             SpectrumSourceType.DIFFERENTIAL -> {
                 waterfallView.visibility = View.VISIBLE
                 histogramView.visibility = View.GONE
+                smoothingContainer.visibility = View.GONE  // Hide slider
             }
             SpectrumSourceType.ACCUMULATED -> {
                 waterfallView.visibility = View.GONE
                 histogramView.visibility = View.VISIBLE
+                smoothingContainer.visibility = View.VISIBLE  // Show slider
             }
         }
         
@@ -1210,10 +1274,12 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             SpectrumSourceType.DIFFERENTIAL -> {
                 waterfallView.visibility = View.VISIBLE
                 histogramView.visibility = View.GONE
+                smoothingContainer.visibility = View.GONE
             }
             SpectrumSourceType.ACCUMULATED -> {
                 waterfallView.visibility = View.GONE
                 histogramView.visibility = View.VISIBLE
+                smoothingContainer.visibility = View.VISIBLE
             }
         }
         

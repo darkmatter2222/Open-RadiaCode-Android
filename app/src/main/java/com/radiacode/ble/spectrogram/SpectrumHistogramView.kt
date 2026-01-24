@@ -92,6 +92,15 @@ class SpectrumHistogramView @JvmOverloads constructor(
     private var cursorChannel = -1
     private var showCursor = false
     private var isDraggingCursor = false  // Track if user is dragging to follow
+    private var touchStartTime = 0L       // For detecting tap vs drag
+    private var isMultiTouch = false      // Track if multi-touch (pinch) is active
+    
+    // Smoothing
+    private var smoothingFactor = 0        // 0 = no smoothing, higher = more smoothing
+    private var smoothedCounts: IntArray? = null
+    
+    // Peak snapping
+    private var peakChannels: List<Int> = emptyList()  // Cached peak positions
     
     // ═══════════════════════════════════════════════════════════════════════════
     // ISOTOPE MARKERS
@@ -270,6 +279,9 @@ class SpectrumHistogramView @JvmOverloads constructor(
         this.calibrationA1 = a1
         this.calibrationA2 = a2
         
+        // Apply smoothing if set
+        applySmoothing()
+        
         // Reset view to show full range if not zoomed
         if (zoomX == 1f) {
             visibleMinEnergy = 0f
@@ -411,12 +423,10 @@ class SpectrumHistogramView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         
-        // Background
+        // Background - use same color as main background for seamless look
         canvas.drawColor(colorBackground)
         
-        // Draw chart area background
-        val chartBgPaint = Paint().apply { color = colorSurface }
-        canvas.drawRect(chartRect, chartBgPaint)
+        // No separate chart area background - let it blend
         
         // Draw grid
         if (showGrid) {
@@ -428,8 +438,9 @@ class SpectrumHistogramView @JvmOverloads constructor(
             drawSpectrum(canvas, backgroundCounts!!, backgroundPaint, null)
         }
         
-        // Draw main spectrum
-        drawSpectrum(canvas, spectrumCounts, spectrumPaint, spectrumLinePaint)
+        // Draw main spectrum (use smoothed if available)
+        val displayCounts = smoothedCounts ?: spectrumCounts
+        drawSpectrum(canvas, displayCounts, spectrumPaint, spectrumLinePaint)
         
         // Draw isotope markers
         if (showIsotopeMarkers) {
@@ -662,7 +673,8 @@ class SpectrumHistogramView @JvmOverloads constructor(
         if (energy < visibleMinEnergy || energy > visibleMaxEnergy) return
         
         val x = energyToX(energy)
-        val count = spectrumCounts.getOrNull(cursorChannel) ?: 0
+        val displayCounts = smoothedCounts ?: spectrumCounts
+        val count = displayCounts.getOrNull(cursorChannel) ?: 0
         val y = countToY(count)
         
         // Vertical line through full chart height
@@ -692,8 +704,18 @@ class SpectrumHistogramView @JvmOverloads constructor(
             strokeWidth = 2f
         }
         
-        val boxWidth = 130f
-        val boxHeight = 75f
+        // Measure actual text widths to size box properly
+        val line1 = "${energy.toInt()} keV"
+        val line2 = "$count counts"
+        val line3 = "Ch: $cursorChannel"
+        val maxTextWidth = maxOf(
+            infoPaint.measureText(line1),
+            infoPaint.measureText(line2),
+            infoPaint.measureText(line3)
+        )
+        
+        val boxWidth = maxTextWidth + 24f  // Add padding
+        val boxHeight = 78f
         val boxPadding = 15f
         
         // Position box near peak: above if there's room, below if at top
@@ -721,15 +743,15 @@ class SpectrumHistogramView @JvmOverloads constructor(
         canvas.drawRoundRect(boxRect, 8f, 8f, boxBorderPaint)
         
         // Draw text inside box
-        val textX = clampedBoxX + 10
+        val textX = clampedBoxX + 12
         var textY = clampedBoxY + 22
-        canvas.drawText("${energy.toInt()} keV", textX, textY, infoPaint)
+        canvas.drawText(line1, textX, textY, infoPaint)
         textY += 24
-        canvas.drawText("$count counts", textX, textY, infoPaint)
+        canvas.drawText(line2, textX, textY, infoPaint)
         textY += 24
         infoPaint.textSize = 18f
         infoPaint.color = colorMuted
-        canvas.drawText("Ch: $cursorChannel", textX, textY, infoPaint)
+        canvas.drawText(line3, textX, textY, infoPaint)
     }
     
     private fun drawInfo(canvas: Canvas) {
@@ -780,39 +802,133 @@ class SpectrumHistogramView @JvmOverloads constructor(
     // ═══════════════════════════════════════════════════════════════════════════
     
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Handle cursor dragging first
-        when (event.action) {
+        val pointerCount = event.pointerCount
+        
+        when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                // If tapping in chart area and cursor is showing, start dragging
-                if (chartRect.contains(event.x, event.y)) {
-                    isDraggingCursor = true
-                    updateCursorPosition(event.x)
-                }
+                touchStartTime = System.currentTimeMillis()
+                isMultiTouch = false
+                isDraggingCursor = false
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // Second finger down - this is a pinch gesture
+                isMultiTouch = true
+                isDraggingCursor = false
+                showCursor = false
+                invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
-                // Follow finger while dragging
-                if (isDraggingCursor && chartRect.contains(event.x, event.y)) {
-                    updateCursorPosition(event.x)
-                    return true  // Consume move events while dragging cursor
+                if (!isMultiTouch && pointerCount == 1) {
+                    val elapsed = System.currentTimeMillis() - touchStartTime
+                    // Start cursor after 150ms to distinguish from pinch start
+                    if (elapsed > 150 && chartRect.contains(event.x, event.y)) {
+                        isDraggingCursor = true
+                        updateCursorPositionWithSnapping(event.x, true)  // Snap to peak when dragging
+                        return true
+                    }
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
+                val elapsed = System.currentTimeMillis() - touchStartTime
+                // Quick tap - show cursor at exact position (no snapping)
+                if (!isMultiTouch && elapsed < 200 && chartRect.contains(event.x, event.y)) {
+                    updateCursorPositionWithSnapping(event.x, false)  // No snapping on tap
+                }
                 isDraggingCursor = false
+                isMultiTouch = false
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                isDraggingCursor = false
+                isMultiTouch = false
             }
         }
         
-        // Only pass to scale detector if not dragging cursor
+        // Always pass to scale detector for pinch zoom
+        scaleDetector.onTouchEvent(event)
+        
+        // Pass to gesture detector for scroll/double-tap, but not during cursor drag
         if (!isDraggingCursor) {
-            scaleDetector.onTouchEvent(event)
+            gestureDetector.onTouchEvent(event)
         }
-        gestureDetector.onTouchEvent(event)
+        
         return true
     }
     
-    private fun updateCursorPosition(x: Float) {
+    private fun updateCursorPositionWithSnapping(x: Float, snapToPeak: Boolean) {
         val energy = xToEnergy(x)
-        cursorChannel = energyToChannel(energy)
+        var channel = energyToChannel(energy)
+        
+        if (snapToPeak && peakChannels.isNotEmpty()) {
+            // Find nearest peak within snapping distance (e.g., 20 channels)
+            val snapDistance = 20
+            val nearestPeak = peakChannels.minByOrNull { kotlin.math.abs(it - channel) }
+            if (nearestPeak != null && kotlin.math.abs(nearestPeak - channel) <= snapDistance) {
+                channel = nearestPeak
+            }
+        }
+        
+        cursorChannel = channel
         showCursor = true
         invalidate()
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SMOOTHING
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Set the smoothing factor (0 = no smoothing, higher = more smoothing)
+     * Uses a moving average window of (2*factor + 1) channels
+     */
+    fun setSmoothing(factor: Int) {
+        smoothingFactor = factor.coerceIn(0, 20)
+        applySmoothing()
+        invalidate()
+    }
+    
+    fun getSmoothing(): Int = smoothingFactor
+    
+    private fun applySmoothing() {
+        if (smoothingFactor == 0) {
+            smoothedCounts = null
+            findPeaks(spectrumCounts)
+            return
+        }
+        
+        val windowSize = 2 * smoothingFactor + 1
+        val result = IntArray(spectrumCounts.size)
+        
+        for (i in spectrumCounts.indices) {
+            var sum = 0L
+            var count = 0
+            for (j in (i - smoothingFactor)..(i + smoothingFactor)) {
+                if (j in spectrumCounts.indices) {
+                    sum += spectrumCounts[j]
+                    count++
+                }
+            }
+            result[i] = (sum / count).toInt()
+        }
+        
+        smoothedCounts = result
+        findPeaks(result)
+    }
+    
+    private fun findPeaks(counts: IntArray) {
+        // Find local maxima that are significant peaks
+        val peaks = mutableListOf<Int>()
+        val minPeakHeight = counts.maxOrNull()?.let { it / 20 } ?: 10  // At least 5% of max
+        
+        for (i in 2 until counts.size - 2) {
+            val current = counts[i]
+            // Check if this is a local maximum
+            if (current > counts[i - 1] && current > counts[i + 1] &&
+                current > counts[i - 2] && current > counts[i + 2] &&
+                current >= minPeakHeight) {
+                peaks.add(i)
+            }
+        }
+        
+        peakChannels = peaks
     }
 }
