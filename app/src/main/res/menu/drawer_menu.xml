@@ -10,6 +10,10 @@
             android:icon="@android:drawable/stat_sys_data_bluetooth"
             android:title="Device" />
         <item
+            android:id="@+id/nav_spectral_analysis"
+            android:icon="@android:drawable/ic_menu_manage"
+            android:title="Vega Spectral Analysis" />
+        <item
             android:id="@+id/nav_widget_crafter"
             android:icon="@android:drawable/ic_menu_gallery"
             android:title="Widget Crafter" />

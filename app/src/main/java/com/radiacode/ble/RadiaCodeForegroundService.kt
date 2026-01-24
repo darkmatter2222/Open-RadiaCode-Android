@@ -21,6 +21,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.location.LocationController
+import com.radiacode.ble.spectrogram.SpectrogramPrefs
+import com.radiacode.ble.spectrogram.SpectrogramRepository
+import com.radiacode.ble.spectrogram.SpectrumSnapshot
+import com.radiacode.ble.spectrogram.ConnectionSegmentType
+import com.radiacode.ble.spectrogram.VegaSpectralAnalysisActivity
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -42,8 +47,12 @@ class RadiaCodeForegroundService : Service() {
         private const val ACTION_RELOAD_DEVICES = "com.radiacode.ble.action.RELOAD_DEVICES"
         private const val ACTION_REFRESH_NOTIFICATION = "com.radiacode.ble.action.REFRESH_NOTIFICATION"
         private const val ACTION_REQUEST_SPECTRUM = "com.radiacode.ble.action.REQUEST_SPECTRUM"
+        private const val ACTION_START_SPECTRUM_RECORDING = "START_SPECTRUM_RECORDING"
+        private const val ACTION_STOP_SPECTRUM_RECORDING = "STOP_SPECTRUM_RECORDING"
 
         const val ACTION_READING = "com.radiacode.ble.action.READING"
+        const val ACTION_CONNECTED = "com.radiacode.ble.action.CONNECTED"
+        const val ACTION_DISCONNECTED = "com.radiacode.ble.action.DISCONNECTED"
         const val ACTION_DEVICE_STATE_CHANGED = "com.radiacode.ble.action.DEVICE_STATE"
         const val ACTION_SPECTRUM_DATA = "com.radiacode.ble.action.SPECTRUM_DATA"
         const val ACTION_STATISTICAL_UPDATE = "com.radiacode.ble.action.STATISTICAL_UPDATE"
@@ -163,6 +172,10 @@ class RadiaCodeForegroundService : Service() {
     // Background location tracking for map data
     private var locationController: LocationController? = null
     private var backgroundLocationToken: UUID? = null
+    
+    // Spectrogram recording
+    private var spectrogramRecordingTask: ScheduledFuture<*>? = null
+    private var isSpectrogramRecording = false
 
     private var lastMapSaveLogMs: Long = 0L
     private var lastNoLocationLogMs: Long = 0L
@@ -221,6 +234,12 @@ class RadiaCodeForegroundService : Service() {
         } else {
             Log.d(TAG, "GPS tracking disabled - skipping location acquisition")
         }
+        
+        // Resume spectrogram recording if it was enabled
+        if (SpectrogramPrefs.isRecordingEnabled(this)) {
+            Log.d(TAG, "Resuming spectrogram recording from previous session")
+            startSpectrogramRecording()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -248,6 +267,14 @@ class RadiaCodeForegroundService : Service() {
             ACTION_REQUEST_SPECTRUM -> {
                 val requestedDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
                 executor.submit { handleSpectrumRequest(requestedDeviceId) }
+                return START_STICKY
+            }
+            ACTION_START_SPECTRUM_RECORDING -> {
+                startSpectrogramRecording()
+                return START_STICKY
+            }
+            ACTION_STOP_SPECTRUM_RECORDING -> {
+                stopSpectrogramRecording()
                 return START_STICKY
             }
             ACTION_START, null -> {
@@ -357,9 +384,23 @@ class RadiaCodeForegroundService : Service() {
         if (previousState != currentState) {
             previousConnectionStates[deviceId] = currentState
             when (currentState) {
-                DeviceConnectionState.CONNECTED -> SoundManager.play(this, Prefs.SoundType.CONNECTED)
-                DeviceConnectionState.DISCONNECTED -> SoundManager.play(this, Prefs.SoundType.DISCONNECTED)
+                DeviceConnectionState.CONNECTED -> {
+                    SoundManager.play(this, Prefs.SoundType.CONNECTED)
+                    // Broadcast connected for spectrogram activity
+                    sendBroadcast(Intent(ACTION_CONNECTED).setPackage(packageName).putExtra(EXTRA_DEVICE_ID, deviceId))
+                }
+                DeviceConnectionState.DISCONNECTED -> {
+                    SoundManager.play(this, Prefs.SoundType.DISCONNECTED)
+                    // Broadcast disconnected for spectrogram activity
+                    sendBroadcast(Intent(ACTION_DISCONNECTED).setPackage(packageName).putExtra(EXTRA_DEVICE_ID, deviceId))
+                }
                 else -> { /* No sound for other states */ }
+            }
+            
+            // Record connection state change for spectrogram timeline
+            if (isSpectrogramRecording) {
+                val isConnected = currentState == DeviceConnectionState.CONNECTED
+                SpectrogramRepository.getInstance(this).recordConnectionChange(deviceId, isConnected)
             }
         }
         
@@ -443,6 +484,134 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (t: Throwable) {
             Log.e(TAG, "handleSpectrumReading broadcast failed", t)
+        }
+        
+        // Save to spectrogram repository if recording is enabled
+        if (isSpectrogramRecording) {
+            saveSpectrumSnapshot(deviceId, spectrum, isDifferential = true)
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SPECTROGRAM RECORDING
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Start spectrogram recording at the configured interval.
+     */
+    private fun startSpectrogramRecording() {
+        if (isSpectrogramRecording) {
+            Log.d(TAG, "Spectrogram recording already active")
+            return
+        }
+        
+        isSpectrogramRecording = true
+        Log.d(TAG, "Starting spectrogram recording")
+        
+        // Record connection state for timeline
+        recordConnectionStates()
+        
+        // Schedule periodic accumulated spectrum reads
+        val intervalMs = SpectrogramPrefs.getUpdateIntervalMs(this)
+        spectrogramRecordingTask = scheduler.scheduleAtFixedRate(
+            { captureAccumulatedSpectrum() },
+            0,
+            intervalMs,
+            TimeUnit.MILLISECONDS
+        )
+        
+        // Broadcast that recording started
+        sendBroadcast(Intent(VegaSpectralAnalysisActivity.ACTION_SPECTRUM_SNAPSHOT).setPackage(packageName))
+    }
+    
+    /**
+     * Stop spectrogram recording.
+     */
+    private fun stopSpectrogramRecording() {
+        if (!isSpectrogramRecording) {
+            Log.d(TAG, "Spectrogram recording not active")
+            return
+        }
+        
+        isSpectrogramRecording = false
+        spectrogramRecordingTask?.cancel(true)
+        spectrogramRecordingTask = null
+        Log.d(TAG, "Stopped spectrogram recording")
+    }
+    
+    /**
+     * Capture accumulated spectrum from all connected devices.
+     */
+    private fun captureAccumulatedSpectrum() {
+        val manager = deviceManager ?: return
+        
+        try {
+            // Get all connected devices
+            val connectedDevices = manager.getAllDeviceStates()
+                .filter { it.connectionState == DeviceConnectionState.CONNECTED }
+            
+            for (state in connectedDevices) {
+                val deviceId = state.config.id
+                val client = manager.getClient(deviceId) ?: continue
+                
+                try {
+                    // Read calibration
+                    val calibration = client.readEnergyCalibration().get(5, TimeUnit.SECONDS)
+                    
+                    // Read accumulated spectrum
+                    val spectrum = client.readSpectrum().get(5, TimeUnit.SECONDS) ?: continue
+                    
+                    val fullSpectrum = spectrum.copy(
+                        a0 = calibration?.a0 ?: spectrum.a0,
+                        a1 = calibration?.a1 ?: spectrum.a1,
+                        a2 = calibration?.a2 ?: spectrum.a2
+                    )
+                    
+                    // Save to repository
+                    saveSpectrumSnapshot(deviceId, fullSpectrum, isDifferential = false)
+                    
+                    Log.d(TAG, "Captured accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch")
+                    
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Failed to capture spectrum for $deviceId", t)
+                }
+            }
+            
+            // Broadcast update
+            sendBroadcast(Intent(VegaSpectralAnalysisActivity.ACTION_SPECTRUM_SNAPSHOT).setPackage(packageName))
+            
+        } catch (t: Throwable) {
+            Log.e(TAG, "captureAccumulatedSpectrum failed", t)
+        }
+    }
+    
+    /**
+     * Save a spectrum snapshot to the repository.
+     */
+    private fun saveSpectrumSnapshot(deviceId: String, spectrum: SpectrumData, isDifferential: Boolean) {
+        // Determine current connection state - if we're recording, we're connected
+        val connectionState = ConnectionSegmentType.CONNECTED
+        
+        SpectrogramRepository.getInstance(this).addSnapshot(
+            deviceId = deviceId,
+            spectrumData = spectrum,
+            isDifferential = isDifferential,
+            connectionState = connectionState
+        )
+    }
+    
+    /**
+     * Record current connection states for timeline visualization.
+     */
+    private fun recordConnectionStates() {
+        val manager = deviceManager ?: return
+        
+        for (state in manager.getAllDeviceStates()) {
+            val isConnected = state.connectionState == DeviceConnectionState.CONNECTED
+            SpectrogramRepository.getInstance(this).recordConnectionChange(
+                deviceId = state.config.id,
+                isConnected = isConnected
+            )
         }
     }
     

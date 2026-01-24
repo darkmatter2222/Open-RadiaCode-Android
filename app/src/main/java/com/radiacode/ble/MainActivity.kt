@@ -28,6 +28,8 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.navigation.NavigationView
+import com.radiacode.ble.spectrogram.VegaSpectralAnalysisActivity
+import com.radiacode.ble.spectrogram.SpectrogramPrefs
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.radiacode.ble.ui.MetricCardView
 import com.radiacode.ble.ui.ProChartView
@@ -76,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusLabel: TextView
     private lateinit var statusContainer: View
     private lateinit var readingPulseDot: View
+    private lateinit var spectrogramRecordingDot: View
 
     // Dashboard - Device Selector
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
@@ -689,6 +692,7 @@ class MainActivity : AppCompatActivity() {
         statusLabel = findViewById(R.id.statusLabel)
         statusContainer = statusLabel.parent as View
         readingPulseDot = findViewById(R.id.readingPulseDot)
+        spectrogramRecordingDot = findViewById(R.id.spectrogramRecordingDot)
 
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)
@@ -870,6 +874,9 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.nav_dashboard -> setPanel(Panel.Dashboard)
                 R.id.nav_device -> setPanel(Panel.Device)
+                R.id.nav_spectral_analysis -> {
+                    startActivity(Intent(this, VegaSpectralAnalysisActivity::class.java))
+                }
                 R.id.nav_widget_crafter -> {
                     startActivity(Intent(this, WidgetCrafterActivity::class.java))
                 }
@@ -1791,6 +1798,44 @@ class MainActivity : AppCompatActivity() {
         mapCard.startLocationTracking()
         startUiLoop()
         refreshSettingsRows()
+        
+        // Update spectrogram recording indicator
+        updateSpectrogramRecordingIndicator()
+    }
+    
+    /**
+     * Update the spectrogram recording indicator in the toolbar.
+     */
+    private fun updateSpectrogramRecordingIndicator() {
+        val isRecording = SpectrogramPrefs.isRecordingEnabled(this)
+        spectrogramRecordingDot.visibility = if (isRecording) View.VISIBLE else View.GONE
+        
+        if (isRecording) {
+            // Set red color and start pulsing animation
+            (spectrogramRecordingDot.background as? GradientDrawable)?.setColor(
+                ContextCompat.getColor(this, R.color.pro_red)
+            )
+            startSpectrogramRecordingPulse()
+        } else {
+            spectrogramRecordingDot.animate().cancel()
+            spectrogramRecordingDot.alpha = 1f
+        }
+    }
+    
+    private fun startSpectrogramRecordingPulse() {
+        spectrogramRecordingDot.animate()
+            .alpha(0.3f)
+            .setDuration(600)
+            .withEndAction {
+                if (SpectrogramPrefs.isRecordingEnabled(this)) {
+                    spectrogramRecordingDot.animate()
+                        .alpha(1f)
+                        .setDuration(600)
+                        .withEndAction { startSpectrogramRecordingPulse() }
+                        .start()
+                }
+            }
+            .start()
     }
     
     private fun reloadChartHistoryForSelectedDeviceAsync() {

@@ -36,6 +36,15 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
+                    <!-- Spectrogram recording indicator -->
+                    <View
+                        android:id="@+id/spectrogramRecordingDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/status_dot"
+                        android:visibility="gone" />
+
                     <View
                         android:id="@+id/statusDot"
                         android:layout_width="8dp"

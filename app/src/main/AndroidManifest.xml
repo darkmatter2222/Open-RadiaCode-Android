@@ -141,6 +141,12 @@
             android:exported="false"
             android:label="Widget Gallery" />
 
+        <!-- Vega Spectral Analysis (Spectrogram) -->
+        <activity
+            android:name=".spectrogram.VegaSpectralAnalysisActivity"
+            android:exported="false"
+            android:label="Vega Spectral Analysis" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"
