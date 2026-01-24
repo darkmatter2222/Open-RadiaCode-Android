@@ -333,4 +333,57 @@ object SpectrogramPrefs {
             .putString(KEY_LAST_DEVICE_ID, deviceId)
             .apply()
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ACCUMULATED SPECTRUM BASELINE
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Store a baseline spectrum for a device.
+     * This is used to provide a "zero point" for accumulated spectrum display.
+     * When the user clears data, we save the current accumulated spectrum as baseline
+     * and subtract it from all future readings to show only counts since clear.
+     */
+    fun setBaselineSpectrum(context: Context, deviceId: String, counts: IntArray) {
+        // Store as comma-separated string
+        val countsStr = counts.joinToString(",")
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString("baseline_spectrum_$deviceId", countsStr)
+            .putLong("baseline_time_$deviceId", System.currentTimeMillis())
+            .apply()
+    }
+    
+    /**
+     * Get the baseline spectrum for a device.
+     * Returns null if no baseline is set.
+     */
+    fun getBaselineSpectrum(context: Context, deviceId: String): IntArray? {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val countsStr = prefs.getString("baseline_spectrum_$deviceId", null) ?: return null
+        return try {
+            countsStr.split(",").map { it.toInt() }.toIntArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
+     * Get the time when baseline was set.
+     */
+    fun getBaselineTime(context: Context, deviceId: String): Long {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getLong("baseline_time_$deviceId", 0L)
+    }
+    
+    /**
+     * Clear the baseline spectrum for a device.
+     */
+    fun clearBaselineSpectrum(context: Context, deviceId: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .remove("baseline_spectrum_$deviceId")
+            .remove("baseline_time_$deviceId")
+            .apply()
+    }
 }

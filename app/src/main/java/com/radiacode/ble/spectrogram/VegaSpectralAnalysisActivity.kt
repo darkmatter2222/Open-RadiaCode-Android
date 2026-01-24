@@ -1280,15 +1280,33 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private fun showClearConfirmation() {
         AlertDialog.Builder(this, R.style.Theme_RadiaCodeBLE_Dialog)
             .setTitle("Clear Data")
-            .setMessage("Delete all recorded spectrum data? This cannot be undone.")
+            .setMessage("Delete all recorded spectrum data? This cannot be undone.\n\nFor accumulated spectrum, this will set a new zero point from the current device reading.")
             .setPositiveButton("Clear") { _, _ ->
                 deviceId?.let { id ->
+                    // For accumulated mode, save current spectrum as baseline to create a "zero point"
+                    // This way clearing the data shows counts from NOW, not device lifetime
+                    val source = SpectrogramPrefs.getSpectrumSource(this)
+                    if (source == SpectrumSourceType.ACCUMULATED) {
+                        // Get the last accumulated snapshot to use as baseline
+                        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+                        val startTime = System.currentTimeMillis() - historyMs
+                        val lastAccumSnapshot = SpectrogramRepository.getInstance(this)
+                            .getSnapshots(id, startTime, System.currentTimeMillis())
+                            .filter { !it.isDifferential }
+                            .lastOrNull()
+                        
+                        if (lastAccumSnapshot != null) {
+                            SpectrogramPrefs.setBaselineSpectrum(this, id, lastAccumSnapshot.spectrumData.counts)
+                            android.util.Log.d("VegaSpectral", "Set baseline spectrum with ${lastAccumSnapshot.spectrumData.counts.sumOf { it.toLong() }} total counts")
+                        }
+                    }
+                    
                     SpectrogramRepository.getInstance(this).clearDeviceData(id)
                     // Explicitly clear chart and overlays in both modes
                     histogramView.clearAll()
                     waterfallView.setSnapshots(emptyList())
                     refreshData()
-                    Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Data cleared - new zero point set", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -1361,8 +1379,19 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             // Summing multiple accumulated snapshots would multiply the counts incorrectly.
             if (snapshots.isNotEmpty()) {
                 val latest = snapshots.last()
+                var displayCounts = latest.spectrumData.counts
+                
+                // Subtract baseline if set (to show counts since clear, not device lifetime)
+                val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
+                if (baseline != null && baseline.size == displayCounts.size) {
+                    displayCounts = IntArray(displayCounts.size) { i ->
+                        // Clamp to zero in case baseline is higher (shouldn't happen but be safe)
+                        maxOf(0, displayCounts[i] - baseline[i])
+                    }
+                }
+                
                 histogramView.setSpectrum(
-                    counts = latest.spectrumData.counts,
+                    counts = displayCounts,
                     a0 = latest.spectrumData.a0,
                     a1 = latest.spectrumData.a1,
                     a2 = latest.spectrumData.a2,
