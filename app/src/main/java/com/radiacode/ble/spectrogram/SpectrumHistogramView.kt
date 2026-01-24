@@ -13,33 +13,26 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
 
-/**
- * Spectrum Histogram View
- * 
- * Classic radiation spectrum display:
- * - X-axis: Energy (keV) derived from channel calibration
- * - Y-axis: Counts (linear or logarithmic scale)
- * - Bars represent counts per energy bin
- * 
- * Features:
- * - Linear/logarithmic Y-axis toggle
- * - Pan/zoom support
- * - Isotope marker overlays with labels
- * - Peak highlighting with snap-to-peak cursor
- * - Background subtraction
- * - Energy cursor with count readout
- * - Smoothing via moving average
- * 
- * IMPORTANT: Channel 1024 (the last channel, index 1023) is NOT displayed.
- * This channel is a dedicated accumulation/overflow channel on RadiaCode devices
- * and does not contain valid spectral data. All display and calculations
- * should exclude this channel.
- */
 class SpectrumHistogramView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
+
+    /**
+     * Clear all chart state: data, overlays, cursor, zoom, info box, etc.
+     */
+    fun clearAll() {
+        setSpectrum(intArrayOf(), 0f, 3f, 0f)
+        showCursor = false
+        cursorChannel = -1
+        infoBoxRect.setEmpty()
+        zoomInsetRect.setEmpty()
+        closeButtonRect.setEmpty()
+        visibleMinEnergy = 0f
+        visibleMaxEnergy = 0f
+        invalidate()
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // COLORS
@@ -1023,7 +1016,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
     
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val pointerCount = event.pointerCount
-        
+
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchStartTime = System.currentTimeMillis()
@@ -1045,7 +1038,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
                     val dx = event.x - touchStartX
                     val dy = event.y - touchStartY
                     val dragDistance = kotlin.math.sqrt(dx * dx + dy * dy)
-                    
+
                     // Require both time AND distance threshold to activate cursor
                     // This prevents accidental cursor activation during zoom/pan gestures
                     if (elapsed > cursorActivationDelay && dragDistance > minDragDistance && chartRect.contains(event.x, event.y)) {
@@ -1061,11 +1054,11 @@ class SpectrumHistogramView @JvmOverloads constructor(
                 val dx = event.x - touchStartX
                 val dy = event.y - touchStartY
                 val dragDistance = kotlin.math.sqrt(dx * dx + dy * dy)
-                
+
                 // Quick tap with minimal movement
                 if (!isMultiTouch && elapsed < 250 && dragDistance < 20) {
-                    // Check if tap is on close button (X)
-                    if (showCursor && closeButtonRect.contains(event.x, event.y)) {
+                    // Check if tap is on info box (anywhere inside closes it)
+                    if (showCursor && infoBoxRect.contains(event.x, event.y)) {
                         showCursor = false
                         cursorChannel = -1
                         infoBoxRect.setEmpty()
@@ -1076,10 +1069,6 @@ class SpectrumHistogramView @JvmOverloads constructor(
                     // Check if tap is on zoom inset (zoom to that area)
                     else if (showCursor && zoomInsetRect.contains(event.x, event.y)) {
                         zoomToCursor()
-                    }
-                    // Check if tap is on info box (do nothing, just consume)
-                    else if (showCursor && infoBoxRect.contains(event.x, event.y)) {
-                        // Consumed - don't create new cursor
                     }
                     // Otherwise, show cursor at tap position
                     else if (chartRect.contains(event.x, event.y)) {
@@ -1094,15 +1083,15 @@ class SpectrumHistogramView @JvmOverloads constructor(
                 isMultiTouch = false
             }
         }
-        
+
         // Always pass to scale detector for pinch zoom
         scaleDetector.onTouchEvent(event)
-        
+
         // Pass to gesture detector for scroll/double-tap, but not during cursor drag
         if (!isDraggingCursor) {
             gestureDetector.onTouchEvent(event)
         }
-        
+
         return true
     }
     

@@ -627,15 +627,13 @@ class SpectrogramRepository(private val context: Context) {
         segmentLock.write {
             segmentCache.remove(deviceId)
         }
-        
-        // Clear disk
-        ioExecutor.execute {
-            val deviceDir = getSnapshotsDir(deviceId)
-            deviceDir.deleteRecursively()
-            
-            val segmentFile = File(getSegmentsDir(), "${sanitizeFilename(deviceId)}$SEGMENT_EXTENSION")
-            segmentFile.delete()
-        }
+
+        // Clear disk synchronously to guarantee no reload of old data
+        val deviceDir = getSnapshotsDir(deviceId)
+        deviceDir.deleteRecursively()
+
+        val segmentFile = File(getSegmentsDir(), "${sanitizeFilename(deviceId)}$SEGMENT_EXTENSION")
+        segmentFile.delete()
     }
     
     /**

@@ -1284,8 +1284,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             .setPositiveButton("Clear") { _, _ ->
                 deviceId?.let { id ->
                     SpectrogramRepository.getInstance(this).clearDeviceData(id)
-                    // Explicitly clear chart in both modes
-                    histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f)
+                    // Explicitly clear chart and overlays in both modes
+                    histogramView.clearAll()
                     waterfallView.setSnapshots(emptyList())
                     refreshData()
                     Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
