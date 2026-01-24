@@ -25,9 +25,15 @@ import kotlin.math.pow
  * - Linear/logarithmic Y-axis toggle
  * - Pan/zoom support
  * - Isotope marker overlays with labels
- * - Peak highlighting
+ * - Peak highlighting with snap-to-peak cursor
  * - Background subtraction
  * - Energy cursor with count readout
+ * - Smoothing via moving average
+ * 
+ * IMPORTANT: Channel 1024 (the last channel, index 1023) is NOT displayed.
+ * This channel is a dedicated accumulation/overflow channel on RadiaCode devices
+ * and does not contain valid spectral data. All display and calculations
+ * should exclude this channel.
  */
 class SpectrumHistogramView @JvmOverloads constructor(
     context: Context,
@@ -93,14 +99,24 @@ class SpectrumHistogramView @JvmOverloads constructor(
     private var showCursor = false
     private var isDraggingCursor = false  // Track if user is dragging to follow
     private var touchStartTime = 0L       // For detecting tap vs drag
+    private var touchStartX = 0f          // Starting X position for drag distance
+    private var touchStartY = 0f          // Starting Y position for drag distance
     private var isMultiTouch = false      // Track if multi-touch (pinch) is active
+    
+    // Peak snapping
+    private var snapToPeakEnabled = true  // Enable/disable snap to peak feature
     
     // Smoothing
     private var smoothingFactor = 0        // 0 = no smoothing, higher = more smoothing
     private var smoothedCounts: IntArray? = null
     
-    // Peak snapping
+    // Peak channel cache (for snap-to-peak feature)
     private var peakChannels: List<Int> = emptyList()  // Cached peak positions
+    
+    // Minimum drag distance (in pixels) before cursor appears
+    private val minDragDistance = 30f
+    // Minimum time (ms) before cursor appears while dragging
+    private val cursorActivationDelay = 300L
     
     // ═══════════════════════════════════════════════════════════════════════════
     // ISOTOPE MARKERS
@@ -807,6 +823,8 @@ class SpectrumHistogramView @JvmOverloads constructor(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchStartTime = System.currentTimeMillis()
+                touchStartX = event.x
+                touchStartY = event.y
                 isMultiTouch = false
                 isDraggingCursor = false
             }
@@ -820,18 +838,28 @@ class SpectrumHistogramView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (!isMultiTouch && pointerCount == 1) {
                     val elapsed = System.currentTimeMillis() - touchStartTime
-                    // Start cursor after 150ms to distinguish from pinch start
-                    if (elapsed > 150 && chartRect.contains(event.x, event.y)) {
+                    val dx = event.x - touchStartX
+                    val dy = event.y - touchStartY
+                    val dragDistance = kotlin.math.sqrt(dx * dx + dy * dy)
+                    
+                    // Require both time AND distance threshold to activate cursor
+                    // This prevents accidental cursor activation during zoom/pan gestures
+                    if (elapsed > cursorActivationDelay && dragDistance > minDragDistance && chartRect.contains(event.x, event.y)) {
                         isDraggingCursor = true
-                        updateCursorPositionWithSnapping(event.x, true)  // Snap to peak when dragging
+                        // Snap to peak when dragging (if enabled)
+                        updateCursorPositionWithSnapping(event.x, snapToPeakEnabled)
                         return true
                     }
                 }
             }
             MotionEvent.ACTION_UP -> {
                 val elapsed = System.currentTimeMillis() - touchStartTime
-                // Quick tap - show cursor at exact position (no snapping)
-                if (!isMultiTouch && elapsed < 200 && chartRect.contains(event.x, event.y)) {
+                val dx = event.x - touchStartX
+                val dy = event.y - touchStartY
+                val dragDistance = kotlin.math.sqrt(dx * dx + dy * dy)
+                
+                // Quick tap with minimal movement - show cursor at exact position (no snapping)
+                if (!isMultiTouch && elapsed < 250 && dragDistance < 20 && chartRect.contains(event.x, event.y)) {
                     updateCursorPositionWithSnapping(event.x, false)  // No snapping on tap
                 }
                 isDraggingCursor = false
@@ -888,6 +916,17 @@ class SpectrumHistogramView @JvmOverloads constructor(
     
     fun getSmoothing(): Int = smoothingFactor
     
+    /**
+     * Enable or disable snap-to-peak feature when dragging the cursor.
+     * When enabled, cursor will snap to nearby peaks while dragging.
+     * Tap always places cursor at exact position regardless of this setting.
+     */
+    fun setSnapToPeak(enabled: Boolean) {
+        snapToPeakEnabled = enabled
+    }
+    
+    fun isSnapToPeakEnabled(): Boolean = snapToPeakEnabled
+    
     private fun applySmoothing() {
         if (smoothingFactor == 0) {
             smoothedCounts = null
@@ -916,12 +955,15 @@ class SpectrumHistogramView @JvmOverloads constructor(
     
     private fun findPeaks(counts: IntArray) {
         // Find local maxima that are significant peaks
+        // NOTE: We exclude channel 1023 (the 1024th channel) as it's a dedicated
+        // accumulation channel on RadiaCode devices, not valid spectral data
         val peaks = mutableListOf<Int>()
-        val minPeakHeight = counts.maxOrNull()?.let { it / 20 } ?: 10  // At least 5% of max
+        val maxValidChannel = counts.size - 2  // Exclude last channel (1023)
+        val minPeakHeight = counts.take(maxValidChannel).maxOrNull()?.let { it / 20 } ?: 10  // At least 5% of max
         
-        for (i in 2 until counts.size - 2) {
+        for (i in 2 until maxValidChannel - 2) {
             val current = counts[i]
-            // Check if this is a local maximum
+            // Check if this is a local maximum using 5-point neighborhood
             if (current > counts[i - 1] && current > counts[i + 1] &&
                 current > counts[i - 2] && current > counts[i + 2] &&
                 current >= minPeakHeight) {

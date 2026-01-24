@@ -76,6 +76,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private lateinit var sourceSelector: LinearLayout
     private lateinit var sourceLabel: TextView
     private lateinit var scaleToggle: TextView
+    private lateinit var snapToggle: TextView
     private lateinit var settingsButton: ImageButton
     private lateinit var recordButton: FrameLayout
     private lateinit var recordDot: View
@@ -96,6 +97,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private var isRecording = false
     private var currentSource = SpectrumSourceType.DIFFERENTIAL
     private var isLogScale = true
+    private var isSnapEnabled = true  // Snap-to-peak feature
     private var showIsotopes = false
     
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -338,6 +340,25 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             addView(scaleToggle)
             
+            // Snap toggle button (SNAP) - enables peak snapping while dragging cursor
+            snapToggle = TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    (32 * density).toInt()
+                ).apply {
+                    rightMargin = (8 * density).toInt()
+                }
+                setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
+                gravity = Gravity.CENTER
+                text = "SNAP"
+                setTextColor(colorGreen)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                background = createPillBackground(density, colorSurface, colorGreen)
+                visibility = View.GONE  // Only visible in Accumulated mode
+            }
+            addView(snapToggle)
+            
             // Settings button
             settingsButton = ImageButton(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(
@@ -532,6 +553,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         
         sourceSelector.setOnClickListener { showSourcePicker() }
         scaleToggle.setOnClickListener { toggleScale() }
+        snapToggle.setOnClickListener { toggleSnap() }
         
         // Smoothing slider listener
         smoothingSlider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -653,11 +675,13 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 waterfallView.visibility = View.VISIBLE
                 histogramView.visibility = View.GONE
                 smoothingContainer.visibility = View.GONE  // Hide slider
+                snapToggle.visibility = View.GONE  // Hide snap toggle
             }
             SpectrumSourceType.ACCUMULATED -> {
                 waterfallView.visibility = View.GONE
                 histogramView.visibility = View.VISIBLE
                 smoothingContainer.visibility = View.VISIBLE  // Show slider
+                snapToggle.visibility = View.VISIBLE  // Show snap toggle
             }
         }
         
@@ -681,6 +705,24 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         )
         
         histogramView.setLogScale(isLogScale)
+    }
+    
+    private fun toggleSnap() {
+        val density = resources.displayMetrics.density
+        isSnapEnabled = !isSnapEnabled
+        
+        // Update button appearance
+        val activeColor = if (isSnapEnabled) colorGreen else colorMuted
+        snapToggle.text = "SNAP"
+        snapToggle.setTextColor(activeColor)
+        snapToggle.background = createPillBackground(
+            density,
+            colorSurface,
+            activeColor
+        )
+        
+        // Update histogram view
+        histogramView.setSnapToPeak(isSnapEnabled)
     }
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1275,11 +1317,13 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 waterfallView.visibility = View.VISIBLE
                 histogramView.visibility = View.GONE
                 smoothingContainer.visibility = View.GONE
+                snapToggle.visibility = View.GONE
             }
             SpectrumSourceType.ACCUMULATED -> {
                 waterfallView.visibility = View.GONE
                 histogramView.visibility = View.VISIBLE
                 smoothingContainer.visibility = View.VISIBLE
+                snapToggle.visibility = View.VISIBLE
             }
         }
         
