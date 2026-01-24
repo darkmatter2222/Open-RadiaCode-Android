@@ -287,6 +287,8 @@ class SpectrumHistogramView @JvmOverloads constructor(
     
     /**
      * Set the spectrum data to display.
+     * NOTE: Channel 1023 (the 1024th channel) is excluded from display
+     * as it's a dedicated accumulation channel, not valid spectral data.
      */
     fun setSpectrum(counts: IntArray, a0: Float, a1: Float, a2: Float) {
         this.spectrumCounts = counts.copyOf()
@@ -295,13 +297,20 @@ class SpectrumHistogramView @JvmOverloads constructor(
         this.calibrationA1 = a1
         this.calibrationA2 = a2
         
+        // Zero out channel 1023 (last channel) - it's accumulation data, not spectral
+        if (spectrumCounts.size >= 1024) {
+            spectrumCounts[1023] = 0
+        }
+        
         // Apply smoothing if set
         applySmoothing()
         
-        // Reset view to show full range if not zoomed
-        if (zoomX == 1f) {
+        // Only reset view on first load (when visible range is default/zero)
+        // This preserves user's zoom when new readings come in
+        val maxEnergy = channelToEnergy((channelCount - 2).coerceAtLeast(1))  // Exclude ch 1023
+        if (visibleMaxEnergy <= 0f || visibleMaxEnergy > maxEnergy * 1.1f) {
             visibleMinEnergy = 0f
-            visibleMaxEnergy = channelToEnergy(channelCount - 1)
+            visibleMaxEnergy = maxEnergy
         }
         
         invalidate()
@@ -521,8 +530,9 @@ class SpectrumHistogramView @JvmOverloads constructor(
         var started = false
         
         // Find visible channel range
+        // NOTE: Exclude channel 1023 (last channel) - it's accumulation data, not spectral
         val minChannel = energyToChannel(visibleMinEnergy).coerceAtLeast(0)
-        val maxChannel = energyToChannel(visibleMaxEnergy).coerceAtMost(counts.size - 1)
+        val maxChannel = energyToChannel(visibleMaxEnergy).coerceIn(0, counts.size - 2)  // -2 to exclude ch 1023
         
         // Determine how many channels per pixel for binning
         val pixelsAvailable = chartRect.width()
@@ -934,19 +944,25 @@ class SpectrumHistogramView @JvmOverloads constructor(
             return
         }
         
-        val windowSize = 2 * smoothingFactor + 1
         val result = IntArray(spectrumCounts.size)
+        // Exclude channel 1023 from smoothing (it's accumulation data)
+        val lastValidChannel = (spectrumCounts.size - 2).coerceAtLeast(0)
         
-        for (i in spectrumCounts.indices) {
+        for (i in 0..lastValidChannel) {
             var sum = 0L
             var count = 0
             for (j in (i - smoothingFactor)..(i + smoothingFactor)) {
-                if (j in spectrumCounts.indices) {
+                // Only include valid channels (0 to lastValidChannel)
+                if (j in 0..lastValidChannel) {
                     sum += spectrumCounts[j]
                     count++
                 }
             }
-            result[i] = (sum / count).toInt()
+            result[i] = if (count > 0) (sum / count).toInt() else 0
+        }
+        // Ensure channel 1023 stays at 0
+        if (result.size >= 1024) {
+            result[1023] = 0
         }
         
         smoothedCounts = result
@@ -954,19 +970,45 @@ class SpectrumHistogramView @JvmOverloads constructor(
     }
     
     private fun findPeaks(counts: IntArray) {
-        // Find local maxima that are significant peaks
-        // NOTE: We exclude channel 1023 (the 1024th channel) as it's a dedicated
-        // accumulation channel on RadiaCode devices, not valid spectral data
-        val peaks = mutableListOf<Int>()
-        val maxValidChannel = counts.size - 2  // Exclude last channel (1023)
-        val minPeakHeight = counts.take(maxValidChannel).maxOrNull()?.let { it / 20 } ?: 10  // At least 5% of max
+        // Find local maxima using prominence-based detection
+        // This works better across both LOG and LINEAR scales
+        // NOTE: We exclude channel 1023 (accumulation channel)
         
-        for (i in 2 until maxValidChannel - 2) {
+        // Guard against small or empty arrays
+        if (counts.size < 10) {
+            peakChannels = emptyList()
+            return
+        }
+        
+        val peaks = mutableListOf<Int>()
+        val maxValidChannel = (counts.size - 2).coerceAtLeast(10)  // Exclude ch 1023
+        
+        // Use a smaller window for local maxima detection (3-point)
+        // and calculate prominence relative to local neighborhood
+        val windowSize = 5  // Look 5 channels each direction for prominence
+        
+        for (i in 3 until maxValidChannel - 3) {
             val current = counts[i]
-            // Check if this is a local maximum using 5-point neighborhood
-            if (current > counts[i - 1] && current > counts[i + 1] &&
-                current > counts[i - 2] && current > counts[i + 2] &&
-                current >= minPeakHeight) {
+            if (current <= 0) continue
+            
+            // Must be local maximum (higher than immediate neighbors)
+            if (current <= counts[i - 1] || current <= counts[i + 1]) continue
+            
+            // Calculate local minimum in neighborhood (for prominence)
+            val leftMin = (maxOf(0, i - windowSize) until i).minOfOrNull { counts[it] } ?: current
+            val rightMin = ((i + 1)..minOf(maxValidChannel, i + windowSize)).minOfOrNull { counts[it] } ?: current
+            val localMin = minOf(leftMin, rightMin)
+            
+            // Prominence: how much the peak rises above surrounding terrain
+            val prominence = current - localMin
+            
+            // A peak is significant if it has prominence of at least 10% of its height
+            // OR if it's at least 3x the local minimum (works well for LOG scale)
+            val isProminentAbsolute = prominence > current * 0.1
+            val isProminentRelative = current > localMin * 3 && localMin > 0
+            val isAboveNoise = current > 5  // Must have at least 5 counts
+            
+            if ((isProminentAbsolute || isProminentRelative) && isAboveNoise) {
                 peaks.add(i)
             }
         }
