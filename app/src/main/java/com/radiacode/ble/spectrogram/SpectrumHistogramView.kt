@@ -91,6 +91,7 @@ class SpectrumHistogramView @JvmOverloads constructor(
     // Touch/cursor
     private var cursorChannel = -1
     private var showCursor = false
+    private var isDraggingCursor = false  // Track if user is dragging to follow
     
     // ═══════════════════════════════════════════════════════════════════════════
     // ISOTOPE MARKERS
@@ -664,31 +665,71 @@ class SpectrumHistogramView @JvmOverloads constructor(
         val count = spectrumCounts.getOrNull(cursorChannel) ?: 0
         val y = countToY(count)
         
-        // Vertical line
+        // Vertical line through full chart height
         canvas.drawLine(x, chartRect.top, x, chartRect.bottom, cursorPaint)
         
-        // Crosshair at data point
+        // Crosshair circle at data point
         canvas.drawCircle(x, y, 8f, cursorPaint)
+        canvas.drawCircle(x, y, 4f, Paint().apply { 
+            color = colorYellow
+            style = Paint.Style.FILL 
+        })
         
-        // Info box
-        val infoText = "Ch: $cursorChannel\n${energy.toInt()} keV\n$count counts"
+        // Info box - position near the peak (above or below the data point)
         val infoPaint = Paint(textPaint).apply {
-            textSize = 24f
+            textSize = 22f
             textAlign = Paint.Align.LEFT
+            color = colorWhite
         }
         
         val boxPaint = Paint().apply {
-            color = Color.argb(200, 26, 26, 30)
+            color = Color.argb(230, 26, 26, 30)
             style = Paint.Style.FILL
         }
+        val boxBorderPaint = Paint().apply {
+            color = colorYellow
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+        }
         
-        val boxX = if (x > chartRect.centerX()) x - 150 else x + 20
-        val boxY = chartRect.top + 20
-        canvas.drawRoundRect(boxX - 10, boxY - 5, boxX + 140, boxY + 80, 8f, 8f, boxPaint)
+        val boxWidth = 130f
+        val boxHeight = 75f
+        val boxPadding = 15f
         
-        canvas.drawText("Ch: $cursorChannel", boxX, boxY + 20, infoPaint)
-        canvas.drawText("${energy.toInt()} keV", boxX, boxY + 45, infoPaint)
-        canvas.drawText("$count counts", boxX, boxY + 70, infoPaint)
+        // Position box near peak: above if there's room, below if at top
+        // Also shift left/right based on x position
+        val boxX = if (x > chartRect.centerX()) {
+            x - boxWidth - boxPadding  // Left of cursor
+        } else {
+            x + boxPadding  // Right of cursor
+        }
+        
+        // Position vertically near the peak with some offset
+        val boxY = if (y - boxHeight - boxPadding > chartRect.top + 20) {
+            y - boxHeight - boxPadding  // Above the peak
+        } else {
+            y + boxPadding  // Below the peak
+        }
+        
+        // Ensure box stays within chart bounds
+        val clampedBoxX = boxX.coerceIn(chartRect.left + 5, chartRect.right - boxWidth - 5)
+        val clampedBoxY = boxY.coerceIn(chartRect.top + 5, chartRect.bottom - boxHeight - 5)
+        
+        // Draw box with border
+        val boxRect = RectF(clampedBoxX, clampedBoxY, clampedBoxX + boxWidth, clampedBoxY + boxHeight)
+        canvas.drawRoundRect(boxRect, 8f, 8f, boxPaint)
+        canvas.drawRoundRect(boxRect, 8f, 8f, boxBorderPaint)
+        
+        // Draw text inside box
+        val textX = clampedBoxX + 10
+        var textY = clampedBoxY + 22
+        canvas.drawText("${energy.toInt()} keV", textX, textY, infoPaint)
+        textY += 24
+        canvas.drawText("$count counts", textX, textY, infoPaint)
+        textY += 24
+        infoPaint.textSize = 18f
+        infoPaint.color = colorMuted
+        canvas.drawText("Ch: $cursorChannel", textX, textY, infoPaint)
     }
     
     private fun drawInfo(canvas: Canvas) {
@@ -739,8 +780,39 @@ class SpectrumHistogramView @JvmOverloads constructor(
     // ═══════════════════════════════════════════════════════════════════════════
     
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        scaleDetector.onTouchEvent(event)
+        // Handle cursor dragging first
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                // If tapping in chart area and cursor is showing, start dragging
+                if (chartRect.contains(event.x, event.y)) {
+                    isDraggingCursor = true
+                    updateCursorPosition(event.x)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                // Follow finger while dragging
+                if (isDraggingCursor && chartRect.contains(event.x, event.y)) {
+                    updateCursorPosition(event.x)
+                    return true  // Consume move events while dragging cursor
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isDraggingCursor = false
+            }
+        }
+        
+        // Only pass to scale detector if not dragging cursor
+        if (!isDraggingCursor) {
+            scaleDetector.onTouchEvent(event)
+        }
         gestureDetector.onTouchEvent(event)
         return true
+    }
+    
+    private fun updateCursorPosition(x: Float) {
+        val energy = xToEnergy(x)
+        cursorChannel = energyToChannel(energy)
+        showCursor = true
+        invalidate()
     }
 }

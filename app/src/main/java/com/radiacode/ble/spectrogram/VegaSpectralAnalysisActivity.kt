@@ -72,16 +72,16 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private lateinit var toolbarOverlay: LinearLayout
     private lateinit var backButton: ImageButton
     private lateinit var titleText: TextView
+    private lateinit var sourceSelector: LinearLayout
+    private lateinit var sourceLabel: TextView
+    private lateinit var scaleToggle: TextView
     private lateinit var settingsButton: ImageButton
     private lateinit var recordButton: FrameLayout
     private lateinit var recordDot: View
     private lateinit var recordRing: View
     
-    // Bottom control bar
+    // Bottom status bar
     private lateinit var bottomBar: LinearLayout
-    private lateinit var sourceSelector: LinearLayout
-    private lateinit var sourceLabel: TextView
-    private lateinit var scaleToggle: TextView
     private lateinit var statusText: TextView
     
     // ═══════════════════════════════════════════════════════════════════════════
@@ -189,12 +189,16 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             )
             setBackgroundColor(colorBackground)
             
-            // Full-bleed chart container (bottom layer)
+            // Chart container - below title bar, above status bar
             chartContainer = FrameLayout(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
-                )
+                ).apply {
+                    // Leave room for title bar and status bar
+                    topMargin = getStatusBarHeight() + (56 * density).toInt()
+                    bottomMargin = getNavigationBarHeight() + (36 * density).toInt()
+                }
                 
                 // Waterfall view (for differential mode)
                 waterfallView = SpectrogramWaterfallView(this@VegaSpectralAnalysisActivity).apply {
@@ -241,15 +245,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             setPadding((8 * density).toInt(), 0, (8 * density).toInt(), 0)
             
-            // Semi-transparent gradient background
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(
-                    Color.argb(200, 13, 13, 15),
-                    Color.argb(150, 13, 13, 15),
-                    Color.TRANSPARENT
-                )
-            )
+            // Solid background (not gradient - chart is below)
+            setBackgroundColor(colorBackground)
             
             // Back button
             backButton = ImageButton(this@VegaSpectralAnalysisActivity).apply {
@@ -266,24 +263,83 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             
             // Title
             titleText = TextView(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
                     leftMargin = (8 * density).toInt()
                 }
                 text = "Spectral Analysis"
                 setTextColor(colorText)
-                textSize = 18f
+                textSize = 16f
                 typeface = Typeface.DEFAULT_BOLD
             }
             addView(titleText)
+            
+            // Flexible spacer
+            addView(View(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
+            })
+            
+            // Source selector (dropdown style) - in toolbar now
+            sourceSelector = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    (32 * density).toInt()
+                ).apply {
+                    rightMargin = (8 * density).toInt()
+                }
+                setPadding((10 * density).toInt(), 0, (6 * density).toInt(), 0)
+                background = createPillBackground(density, colorSurface, colorBorder)
+                
+                sourceLabel = TextView(this@VegaSpectralAnalysisActivity).apply {
+                    text = "Diff"
+                    setTextColor(colorText)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                addView(sourceLabel)
+                
+                // Dropdown arrow
+                addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        (16 * density).toInt(),
+                        (16 * density).toInt()
+                    ).apply {
+                        leftMargin = (2 * density).toInt()
+                    }
+                    setImageResource(R.drawable.ic_arrow_down)
+                    setColorFilter(colorMuted)
+                })
+            }
+            addView(sourceSelector)
+            
+            // Scale toggle button (LOG/LIN) - in toolbar now
+            scaleToggle = TextView(this@VegaSpectralAnalysisActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    (32 * density).toInt()
+                ).apply {
+                    rightMargin = (8 * density).toInt()
+                }
+                setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
+                gravity = Gravity.CENTER
+                text = "LOG"
+                setTextColor(colorCyan)
+                textSize = 12f
+                typeface = Typeface.DEFAULT_BOLD
+                background = createPillBackground(density, colorSurface, colorCyan)
+            }
+            addView(scaleToggle)
             
             // Settings button
             settingsButton = ImageButton(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     (40 * density).toInt(),
                     (40 * density).toInt()
-                ).apply {
-                    rightMargin = (8 * density).toInt()
-                }
+                )
                 setImageResource(R.drawable.ic_settings)
                 setColorFilter(colorText)
                 background = createCircleRipple(density)
@@ -339,90 +395,25 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private fun buildBottomBar(density: Float): LinearLayout {
         bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (48 * density).toInt()
+                (36 * density).toInt()
             ).apply {
                 gravity = Gravity.BOTTOM
                 bottomMargin = getNavigationBarHeight()
             }
             setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
             
-            // Semi-transparent gradient background
-            background = GradientDrawable(
-                GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(
-                    Color.argb(220, 13, 13, 15),
-                    Color.argb(180, 13, 13, 15),
-                    Color.TRANSPARENT
-                )
-            )
+            // Solid background (chart is above)
+            setBackgroundColor(colorBackground)
             
-            // Source selector (dropdown style)
-            sourceSelector = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    (36 * density).toInt()
-                )
-                setPadding((12 * density).toInt(), 0, (8 * density).toInt(), 0)
-                background = createPillBackground(density, colorSurface, colorBorder)
-                
-                sourceLabel = TextView(this@VegaSpectralAnalysisActivity).apply {
-                    text = "Differential"
-                    setTextColor(colorText)
-                    textSize = 13f
-                    typeface = Typeface.DEFAULT_BOLD
-                }
-                addView(sourceLabel)
-                
-                // Dropdown arrow
-                addView(ImageView(this@VegaSpectralAnalysisActivity).apply {
-                    layoutParams = LinearLayout.LayoutParams(
-                        (20 * density).toInt(),
-                        (20 * density).toInt()
-                    ).apply {
-                        leftMargin = (4 * density).toInt()
-                    }
-                    setImageResource(R.drawable.ic_arrow_down)
-                    setColorFilter(colorMuted)
-                })
-            }
-            addView(sourceSelector)
-            
-            // Spacer
-            addView(View(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams((12 * density).toInt(), 0)
-            })
-            
-            // Scale toggle button
-            scaleToggle = TextView(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    (36 * density).toInt()
-                )
-                setPadding((16 * density).toInt(), 0, (16 * density).toInt(), 0)
-                gravity = Gravity.CENTER
-                text = "LOG"
-                setTextColor(colorCyan)
-                textSize = 12f
-                typeface = Typeface.DEFAULT_BOLD
-                background = createPillBackground(density, colorSurface, colorCyan)
-            }
-            addView(scaleToggle)
-            
-            // Flexible spacer
-            addView(View(this@VegaSpectralAnalysisActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(0, 0, 1f)
-            })
-            
-            // Status text
+            // Status text (centered)
             statusText = TextView(this@VegaSpectralAnalysisActivity).apply {
                 text = "Ready"
                 setTextColor(colorMuted)
                 textSize = 12f
+                gravity = Gravity.CENTER
             }
             addView(statusText)
         }
@@ -517,14 +508,14 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         val popup = PopupWindow(this).apply {
             val content = LinearLayout(this@VegaSpectralAnalysisActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor(colorSurface)
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 12 * density
-                    setColor(colorSurface)
+                    setColor(colorSurfaceElevated)  // Slightly lighter for visibility
                     setStroke((1 * density).toInt(), colorBorder)
                 }
                 setPadding((4 * density).toInt(), (8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt())
+                elevation = 16 * density
                 
                 addView(createSourceOption("Differential", currentSource == SpectrumSourceType.DIFFERENTIAL) {
                     setSource(SpectrumSourceType.DIFFERENTIAL)
@@ -538,10 +529,11 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             
             contentView = content
-            width = (160 * density).toInt()
+            width = (140 * density).toInt()
             height = ViewGroup.LayoutParams.WRAP_CONTENT
             isFocusable = true
-            elevation = 8 * density
+            elevation = 16 * density
+            setBackgroundDrawable(null)  // Let content handle background
         }
         
         popup.showAsDropDown(sourceSelector, 0, (4 * density).toInt())
@@ -554,27 +546,30 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (44 * density).toInt()
+                (40 * density).toInt()
             )
             setPadding((12 * density).toInt(), 0, (12 * density).toInt(), 0)
             
+            // Selection indicator dot
             addView(View(this@VegaSpectralAnalysisActivity).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     (8 * density).toInt(),
                     (8 * density).toInt()
                 ).apply {
-                    rightMargin = (12 * density).toInt()
+                    rightMargin = (10 * density).toInt()
                 }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(if (isSelected) colorCyan else Color.TRANSPARENT)
+                    setColor(if (isSelected) colorCyan else colorMuted)
                 }
             })
             
+            // Label text - ensure white color for visibility
             addView(TextView(this@VegaSpectralAnalysisActivity).apply {
                 text = label
-                setTextColor(if (isSelected) colorCyan else colorText)
+                setTextColor(if (isSelected) colorCyan else Color.WHITE)  // White for visibility
                 textSize = 14f
+                typeface = if (isSelected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             })
             
             setOnClickListener { onClick() }
@@ -585,9 +580,10 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         currentSource = source
         SpectrogramPrefs.setSpectrumSource(this, source)
         
+        // Short labels for compact toolbar display
         sourceLabel.text = when (source) {
-            SpectrumSourceType.DIFFERENTIAL -> "Differential"
-            SpectrumSourceType.ACCUMULATED -> "Accumulated"
+            SpectrumSourceType.DIFFERENTIAL -> "Diff"
+            SpectrumSourceType.ACCUMULATED -> "Accum"
         }
         
         when (source) {
@@ -1206,8 +1202,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private fun loadPreferences() {
         currentSource = SpectrogramPrefs.getSpectrumSource(this)
         sourceLabel.text = when (currentSource) {
-            SpectrumSourceType.DIFFERENTIAL -> "Differential"
-            SpectrumSourceType.ACCUMULATED -> "Accumulated"
+            SpectrumSourceType.DIFFERENTIAL -> "Diff"
+            SpectrumSourceType.ACCUMULATED -> "Accum"
         }
         
         when (currentSource) {
