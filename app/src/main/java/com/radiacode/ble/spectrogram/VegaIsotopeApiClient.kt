@@ -88,19 +88,36 @@ object VegaIsotopeApiClient {
                     return@execute
                 }
                 
-                // Build 2D matrix: each row is one snapshot, each column is one channel
-                val matrix = JSONArray()
+                // Step 1: Find global max across entire 60x1023 matrix for normalization
+                // Training data uses max normalization: all values divided by global max
+                var globalMax = 0
                 var totalCounts = 0L
+                
+                for (snapshot in snapshots) {
+                    val counts = snapshot.spectrumData.counts
+                    for (i in 0 until minOf(EXPECTED_CHANNELS, counts.size)) {
+                        val count = counts[i]
+                        if (count > globalMax) globalMax = count
+                        totalCounts += count
+                    }
+                }
+                
+                Log.d(TAG, "Global max count: $globalMax, total counts: $totalCounts")
+                
+                // Step 2: Build normalized 2D matrix (values in [0.0, 1.0])
+                // This matches the training data format: float64, max-normalized
+                val matrix = JSONArray()
                 
                 for (snapshot in snapshots) {
                     val counts = snapshot.spectrumData.counts
                     val row = JSONArray()
                     
-                    // Ensure each row has exactly EXPECTED_CHANNELS values
+                    // Ensure each row has exactly EXPECTED_CHANNELS normalized values
                     for (i in 0 until EXPECTED_CHANNELS) {
                         val count = if (i < counts.size) counts[i] else 0
-                        row.put(count)
-                        totalCounts += count
+                        // Normalize: divide by global max (or 0.0 if max is 0)
+                        val normalized = if (globalMax > 0) count.toDouble() / globalMax else 0.0
+                        row.put(normalized)
                     }
                     matrix.put(row)
                 }
@@ -110,15 +127,15 @@ object VegaIsotopeApiClient {
                     Log.w(TAG, "Warning: Expected $REQUIRED_TIME_INTERVALS time intervals, got ${snapshots.size}")
                 }
                 
-                // Build request JSON with 2D spectrum matrix
+                // Build request JSON with normalized 2D spectrum matrix
                 val requestJson = JSONObject().apply {
                     put("spectrum", matrix)
                     put("threshold", threshold.toDouble())
                     put("return_all", returnAll)
                 }
                 
-                Log.d(TAG, "Sending ${snapshots.size}x$EXPECTED_CHANNELS matrix, " +
-                        "total counts: $totalCounts")
+                Log.d(TAG, "Sending ${snapshots.size}x$EXPECTED_CHANNELS normalized matrix, " +
+                        "global_max: $globalMax, total_counts: $totalCounts")
                 
                 // Make HTTP request
                 val url = URL("$API_BASE_URL$IDENTIFY_ENDPOINT")

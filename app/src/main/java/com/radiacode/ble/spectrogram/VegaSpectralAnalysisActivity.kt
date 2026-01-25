@@ -1398,7 +1398,20 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             // Take most recent 60 and reverse to chronological order
             val snapshots = allSnapshots.take(requiredSamples).reversed()
             
-            // Build CSV - each row is one snapshot (2D matrix for the model)
+            // Step 1: Find global max for normalization (matches training data format)
+            var globalMax = 0
+            var totalCounts = 0L
+            for (snapshot in snapshots) {
+                val counts = snapshot.spectrumData.counts
+                for (i in 0 until minOf(VegaIsotopeApiClient.EXPECTED_CHANNELS, counts.size)) {
+                    val count = counts[i]
+                    if (count > globalMax) globalMax = count
+                    totalCounts += count
+                }
+            }
+            
+            // Build CSV - each row is one snapshot, normalized to [0,1] range
+            // This matches the training data format: float64, max-normalized
             val sb = StringBuilder()
             
             // Header row: channel_0, channel_1, ..., channel_1022
@@ -1408,12 +1421,15 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             sb.append("\n")
             
-            // Each snapshot becomes one row
+            // Each snapshot becomes one row with normalized float values
             for (snapshot in snapshots) {
                 val counts = snapshot.spectrumData.counts
                 for (i in 0 until VegaIsotopeApiClient.EXPECTED_CHANNELS) {
                     if (i > 0) sb.append(",")
-                    sb.append(if (i < counts.size) counts[i] else 0)
+                    val count = if (i < counts.size) counts[i] else 0
+                    // Normalize: divide by global max
+                    val normalized = if (globalMax > 0) count.toDouble() / globalMax else 0.0
+                    sb.append(String.format("%.8f", normalized))
                 }
                 sb.append("\n")
             }
@@ -1431,8 +1447,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(intent, "Export Training Matrix"))
             
-            val totalCounts = snapshots.sumOf { it.spectrumData.counts.sum().toLong() }
-            Toast.makeText(this, "Exported ${snapshots.size}x${VegaIsotopeApiClient.EXPECTED_CHANNELS} matrix ($totalCounts total counts)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Exported ${snapshots.size}x${VegaIsotopeApiClient.EXPECTED_CHANNELS} normalized matrix (max=$globalMax)", Toast.LENGTH_LONG).show()
             
         } catch (e: Exception) {
             android.util.Log.e("VegaSpectral", "Export API payload failed", e)
