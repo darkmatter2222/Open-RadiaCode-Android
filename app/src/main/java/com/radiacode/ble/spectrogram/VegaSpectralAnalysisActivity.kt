@@ -104,6 +104,9 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private var isSnapEnabled = true  // Snap-to-peak feature
     private var showIsotopes = false
     
+    // Analysis state - prevents multiple concurrent requests
+    @Volatile private var isAnalysisInProgress = false
+    
     private val mainHandler = Handler(Looper.getMainLooper())
     private var durationUpdateRunnable: Runnable? = null
     private var pulseAnimator: ValueAnimator? = null
@@ -1503,99 +1506,132 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private fun performIsotopeAnalysis() {
-        try {
-            android.util.Log.d("VegaIsotope", "performIsotopeAnalysis called")
-            
-            val deviceId = this.deviceId
-            if (deviceId == null) {
-                Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            android.util.Log.d("VegaIsotope", "Device ID: $deviceId")
-            
-            // Get the current spectrum data based on mode
-            val source = SpectrogramPrefs.getSpectrumSource(this)
-            val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
-            val startTime = System.currentTimeMillis() - historyMs
-            
-            android.util.Log.d("VegaIsotope", "Source: $source, historyMs: $historyMs")
-            
-            // Model requires differential mode (trained on 2D spectrogram images)
-            val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
-            if (!wantDifferential) {
-                Toast.makeText(this, "Switch to Differential mode for isotope analysis", Toast.LENGTH_LONG).show()
-                return
-            }
-            
-            val allSnapshots = SpectrogramRepository.getInstance(this)
-                .getSnapshots(deviceId, startTime, System.currentTimeMillis())
-                .filter { it.isDifferential }
-                .sortedByDescending { it.timestampMs }  // Most recent first
-            
-            android.util.Log.d("VegaIsotope", "Got ${allSnapshots.size} differential snapshots")
-            
-            // API v2.0 requires exactly 60 time intervals (1-second snapshots)
-            val requiredSamples = VegaIsotopeApiClient.REQUIRED_TIME_INTERVALS
-            
-            if (allSnapshots.size < requiredSamples) {
-                val remaining = requiredSamples - allSnapshots.size
-                Toast.makeText(
-                    this,
-                    "Need $requiredSamples samples for analysis.\n" +
-                    "Currently have ${allSnapshots.size} samples.\n" +
-                    "$remaining more needed - please wait.",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
-            
-            // Take the most recent 60 snapshots and reverse to chronological order
-            val snapshots = allSnapshots.take(requiredSamples).reversed()
-            
-            val totalCounts = snapshots.sumOf { it.spectrumData.counts.sum().toLong() }
-            android.util.Log.d("VegaIsotope", "Matrix size: ${snapshots.size} rows x 1023 channels, totalCounts: $totalCounts")
-            
-            if (totalCounts < 100) {
-                Toast.makeText(this, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            // Show loading toast
-            Toast.makeText(this, "Analyzing spectrum...", Toast.LENGTH_SHORT).show()
-            
-            android.util.Log.d("VegaIsotope", "Calling API with ${snapshots.size} snapshots (60x1023 matrix)")
-            
-            // Call the API with 2D matrix (60 time intervals x 1023 channels)
-            // Request ALL isotopes (return_all=true) so we can do multi-threshold analysis
-            VegaIsotopeApiClient.identifyIsotopes(
-                snapshots = snapshots,
-                threshold = 0.1f,  // Very low threshold to get all possibilities
-                returnAll = true   // Get all 82 isotopes for multi-threshold analysis
-            ) { response ->
-                android.util.Log.d("VegaIsotope", "API response received: success=${response.success}")
-                // Launch full-screen results activity on main thread
-                mainHandler.post {
-                    if (response.success) {
-                        // Launch full-screen isotope analysis activity
-                        IsotopeAnalysisActivity.start(
-                            context = this,
-                            deviceId = deviceId,
-                            result = response,
-                            allIsotopes = response.isotopes
-                        )
-                    } else {
+        // CRITICAL: Prevent multiple concurrent analysis requests
+        if (isAnalysisInProgress) {
+            android.util.Log.d("VegaIsotope", "Analysis already in progress, ignoring tap")
+            return
+        }
+        
+        val deviceId = this.deviceId
+        if (deviceId == null) {
+            Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        // Model requires differential mode
+        val source = SpectrogramPrefs.getSpectrumSource(this)
+        if (source != SpectrumSourceType.DIFFERENTIAL) {
+            Toast.makeText(this, "Switch to Differential mode for isotope analysis", Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        // Mark as in-progress BEFORE any async work
+        isAnalysisInProgress = true
+        
+        // Update UI to show loading state
+        aiAnalysisButton.alpha = 0.5f
+        aiAnalysisButton.isEnabled = false
+        Toast.makeText(this, "Analyzing spectrum...", Toast.LENGTH_SHORT).show()
+        
+        android.util.Log.d("VegaIsotope", "performIsotopeAnalysis: starting background work")
+        
+        // Capture values needed for background thread
+        val context = this
+        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+        val startTime = System.currentTimeMillis() - historyMs
+        val requiredSamples = VegaIsotopeApiClient.REQUIRED_TIME_INTERVALS
+        
+        // Move ALL heavy work to background thread
+        ioExecutor.execute {
+            try {
+                android.util.Log.d("VegaIsotope", "Background: fetching snapshots")
+                
+                // This can involve disk I/O and lock acquisition - do NOT do on UI thread
+                val allSnapshots = SpectrogramRepository.getInstance(context)
+                    .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+                    .filter { it.isDifferential }
+                    .sortedByDescending { it.timestampMs }  // Most recent first
+                
+                android.util.Log.d("VegaIsotope", "Background: got ${allSnapshots.size} differential snapshots")
+                
+                // Check if we have enough samples
+                if (allSnapshots.size < requiredSamples) {
+                    val remaining = requiredSamples - allSnapshots.size
+                    mainHandler.post {
+                        isAnalysisInProgress = false
+                        aiAnalysisButton.alpha = 1.0f
+                        aiAnalysisButton.isEnabled = true
                         Toast.makeText(
-                            this,
-                            "Analysis failed: ${response.errorMessage ?: "Unknown error"}",
+                            context,
+                            "Need $requiredSamples samples for analysis.\n" +
+                            "Currently have ${allSnapshots.size} samples.\n" +
+                            "$remaining more needed - please wait.",
                             Toast.LENGTH_LONG
                         ).show()
                     }
+                    return@execute
+                }
+                
+                // Take the most recent 60 snapshots and reverse to chronological order
+                val snapshots = allSnapshots.take(requiredSamples).reversed()
+                
+                val totalCounts = snapshots.sumOf { it.spectrumData.counts.sum().toLong() }
+                android.util.Log.d("VegaIsotope", "Background: Matrix ${snapshots.size}x1023, counts=$totalCounts")
+                
+                if (totalCounts < 100) {
+                    mainHandler.post {
+                        isAnalysisInProgress = false
+                        aiAnalysisButton.alpha = 1.0f
+                        aiAnalysisButton.isEnabled = true
+                        Toast.makeText(context, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
+                    }
+                    return@execute
+                }
+                
+                // Call the API - this also runs on its own executor
+                android.util.Log.d("VegaIsotope", "Background: calling API")
+                
+                VegaIsotopeApiClient.identifyIsotopes(
+                    snapshots = snapshots,
+                    threshold = 0.1f,  // Very low threshold to get all possibilities
+                    returnAll = true   // Get all 82 isotopes for multi-threshold analysis
+                ) { response ->
+                    android.util.Log.d("VegaIsotope", "API response: success=${response.success}")
+                    
+                    // Handle response on main thread
+                    mainHandler.post {
+                        // ALWAYS reset state, even on error
+                        isAnalysisInProgress = false
+                        aiAnalysisButton.alpha = 1.0f
+                        aiAnalysisButton.isEnabled = true
+                        
+                        if (isFinishing || isDestroyed) return@post
+                        
+                        if (response.success) {
+                            IsotopeAnalysisActivity.start(
+                                context = context,
+                                deviceId = deviceId,
+                                result = response,
+                                allIsotopes = response.isotopes
+                            )
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Analysis failed: ${response.errorMessage ?: "Unknown error"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VegaIsotope", "Background analysis failed", e)
+                mainHandler.post {
+                    isAnalysisInProgress = false
+                    aiAnalysisButton.alpha = 1.0f
+                    aiAnalysisButton.isEnabled = true
+                    Toast.makeText(context, "Analysis error: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
-        } catch (e: Exception) {
-            android.util.Log.e("VegaIsotope", "performIsotopeAnalysis failed", e)
-            Toast.makeText(this, "Analysis error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
     
