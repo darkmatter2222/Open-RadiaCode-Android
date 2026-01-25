@@ -1357,68 +1357,89 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     // ═══════════════════════════════════════════════════════════════════════════
     
     private fun performIsotopeAnalysis() {
-        val deviceId = this.deviceId
-        if (deviceId == null) {
-            Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // Get the current spectrum data based on mode
-        val source = SpectrogramPrefs.getSpectrumSource(this)
-        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
-        val startTime = System.currentTimeMillis() - historyMs
-        
-        val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
-        val snapshots = SpectrogramRepository.getInstance(this)
-            .getSnapshots(deviceId, startTime, System.currentTimeMillis())
-            .filter { it.isDifferential == wantDifferential }
-        
-        if (snapshots.isEmpty()) {
-            Toast.makeText(this, "No spectrum data available", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // Get the spectrum to analyze
-        val spectrumToAnalyze: IntArray = if (wantDifferential) {
-            // Differential mode: sum all snapshots
-            VegaIsotopeApiClient.combineSnapshots(snapshots)
-        } else {
-            // Accumulated mode: use the latest snapshot
-            val latest = snapshots.last()
-            var displayCounts = latest.spectrumData.counts
+        try {
+            android.util.Log.d("VegaIsotope", "performIsotopeAnalysis called")
             
-            // Subtract baseline if set
-            val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
-            if (baseline != null && baseline.size == displayCounts.size) {
-                displayCounts = IntArray(displayCounts.size) { i ->
-                    maxOf(0, displayCounts[i] - baseline[i])
+            val deviceId = this.deviceId
+            if (deviceId == null) {
+                Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            android.util.Log.d("VegaIsotope", "Device ID: $deviceId")
+            
+            // Get the current spectrum data based on mode
+            val source = SpectrogramPrefs.getSpectrumSource(this)
+            val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+            val startTime = System.currentTimeMillis() - historyMs
+            
+            android.util.Log.d("VegaIsotope", "Source: $source, historyMs: $historyMs")
+            
+            val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
+            val snapshots = SpectrogramRepository.getInstance(this)
+                .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+                .filter { it.isDifferential == wantDifferential }
+            
+            android.util.Log.d("VegaIsotope", "Got ${snapshots.size} snapshots, wantDifferential=$wantDifferential")
+            
+            if (snapshots.isEmpty()) {
+                Toast.makeText(this, "No spectrum data available", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // Get the spectrum to analyze
+            val spectrumToAnalyze: IntArray = if (wantDifferential) {
+                // Differential mode: sum all snapshots
+                android.util.Log.d("VegaIsotope", "Combining snapshots for differential mode")
+                VegaIsotopeApiClient.combineSnapshots(snapshots)
+            } else {
+                // Accumulated mode: use the latest snapshot
+                android.util.Log.d("VegaIsotope", "Using latest snapshot for accumulated mode")
+                val latest = snapshots.last()
+                var displayCounts = latest.spectrumData.counts
+                
+                // Subtract baseline if set
+                val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
+                if (baseline != null && baseline.size == displayCounts.size) {
+                    displayCounts = IntArray(displayCounts.size) { i ->
+                        maxOf(0, displayCounts[i] - baseline[i])
+                    }
+                }
+                displayCounts
+            }
+            
+            val totalCounts = spectrumToAnalyze.sum()
+            android.util.Log.d("VegaIsotope", "Spectrum size: ${spectrumToAnalyze.size}, totalCounts: $totalCounts")
+            
+            if (totalCounts < 100) {
+                Toast.makeText(this, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // Show the results dialog
+            android.util.Log.d("VegaIsotope", "Creating dialog")
+            val dialog = VegaIsotopeResultDialog(this)
+            android.util.Log.d("VegaIsotope", "Showing dialog")
+            dialog.show()
+            android.util.Log.d("VegaIsotope", "Dialog shown, calling API")
+            
+            // Call the API
+            VegaIsotopeApiClient.identifyIsotopes(
+                spectrum = spectrumToAnalyze,
+                threshold = 0.3f,  // Lower threshold for sensitivity
+                returnAll = false
+            ) { response ->
+                android.util.Log.d("VegaIsotope", "API response received: success=${response.success}")
+                // Update UI on main thread
+                mainHandler.post {
+                    if (dialog.isShowing) {
+                        dialog.showResults(response)
+                    }
                 }
             }
-            displayCounts
-        }
-        
-        val totalCounts = spectrumToAnalyze.sum()
-        if (totalCounts < 100) {
-            Toast.makeText(this, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // Show the results dialog
-        val dialog = VegaIsotopeResultDialog(this)
-        dialog.show()
-        
-        // Call the API
-        VegaIsotopeApiClient.identifyIsotopes(
-            spectrum = spectrumToAnalyze,
-            threshold = 0.3f,  // Lower threshold for sensitivity
-            returnAll = false
-        ) { response ->
-            // Update UI on main thread
-            mainHandler.post {
-                if (dialog.isShowing) {
-                    dialog.showResults(response)
-                }
-            }
+        } catch (e: Exception) {
+            android.util.Log.e("VegaIsotope", "performIsotopeAnalysis failed", e)
+            Toast.makeText(this, "Analysis error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
     

@@ -619,6 +619,13 @@ class SpectrogramWaterfallView @JvmOverloads constructor(
     }
     
     private fun drawConnectionGaps(canvas: Canvas) {
+        // DISABLED: The user wants contiguous readings without temporal gap visualization.
+        // The spectrogram should show each reading in sequence regardless of time gaps.
+        // This function previously drew hatched bars for timestamp gaps > 2x expected interval,
+        // but that made the visualization look different from the RadiaCode app.
+        return
+        
+        /*
         if (snapshots.size < 2) return
         
         canvas.save()
@@ -655,6 +662,7 @@ class SpectrogramWaterfallView @JvmOverloads constructor(
         }
         
         canvas.restore()
+        */
     }
     
     private fun drawIsotopeMarkers(canvas: Canvas) {
@@ -697,15 +705,25 @@ class SpectrogramWaterfallView @JvmOverloads constructor(
         textPaint.textAlign = Paint.Align.CENTER
         canvas.drawText("Energy (keV)", chartRect.centerX(), height - 10f, textPaint)
         
-        // Time axis (left) - show timestamps
+        // Time axis (left) - show reading index (contiguous), not timestamps
+        // This matches the RadiaCode app style where Y shows readings in sequence
         if (snapshots.isNotEmpty()) {
             labelPaint.textAlign = Paint.Align.RIGHT
-            val timeStep = max(1, snapshots.size / 5)
-            for (i in snapshots.indices step timeStep) {
+            val totalReadings = snapshots.size
+            val step = max(1, totalReadings / 5)
+            for (i in snapshots.indices step step) {
                 val y = rowIndexToScreenY(i)
                 if (y >= chartRect.top && y <= chartRect.bottom) {
-                    val timeLabel = formatTimestamp(snapshots[i].timestampMs)
-                    canvas.drawText(timeLabel, chartRect.left - 8f, y + 6f, labelPaint)
+                    // Show reading index (1-based)
+                    val readingLabel = "${i + 1}"
+                    canvas.drawText(readingLabel, chartRect.left - 8f, y + 6f, labelPaint)
+                }
+            }
+            // Always show the last reading index
+            if (totalReadings > 1) {
+                val y = rowIndexToScreenY(totalReadings - 1)
+                if (y >= chartRect.top && y <= chartRect.bottom) {
+                    canvas.drawText("$totalReadings", chartRect.left - 8f, y + 6f, labelPaint)
                 }
             }
         }

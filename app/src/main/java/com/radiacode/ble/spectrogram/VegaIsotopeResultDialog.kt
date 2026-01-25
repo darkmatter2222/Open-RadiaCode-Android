@@ -70,7 +70,11 @@ class VegaIsotopeResultDialog(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Setup window
+        // Set content first - window decorView needs this before blur can be applied
+        setContentView(buildLayout())
+        setCanceledOnTouchOutside(false)
+        
+        // Setup window effects AFTER setContentView (decorView must exist for blur)
         window?.apply {
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setDimAmount(0.7f)
@@ -78,9 +82,6 @@ class VegaIsotopeResultDialog(
                 setBackgroundBlurRadius(25)
             }
         }
-        
-        setContentView(buildLayout())
-        setCanceledOnTouchOutside(false)
         
         // Start in loading state
         showLoading()
