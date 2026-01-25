@@ -21,7 +21,7 @@ services:
     
     # Environment
     environment:
-      - VEGA_ISOTOPE_MODEL=/app/models/vega_2d_final.pt
+      - VEGA_ISOTOPE_MODEL=/app/models/vega_2d_v3_best.pt
       - VEGA_DEVICE=cuda
       - VEGA_DEFAULT_THRESHOLD=0.5
       - NVIDIA_VISIBLE_DEVICES=all

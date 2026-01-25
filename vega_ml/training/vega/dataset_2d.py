@@ -1,10 +1,14 @@
 """
 Dataset for 2D Vega Model
 
-Loads 2D spectra (time × channels) and pads/truncates to fixed dimensions.
+Loads 2D spectra (time x channels) and pads/truncates to fixed dimensions.
+Supports multiple storage formats:
+- v3: JSON labels (spectrum_*.json + spectrum_*.npy)
+- v4: Binary labels (s*.lbl + s*.npy) - compact format
 """
 
 import json
+import struct
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -26,11 +30,41 @@ class SpectrumSample2D:
     detector: str
 
 
+def unpack_v4_labels(data: bytes, index_to_isotope: Dict[int, str]) -> Dict:
+    """
+    Unpack v4 binary labels.
+    
+    Format:
+        1 byte:  num_source_isotopes
+        N bytes: isotope indices (uint8)
+        N*2 bytes: activities as uint16 (0-65535 maps to 0-1000 Bq)
+        1 byte:  flags
+    """
+    offset = 0
+    num_iso = data[offset]
+    offset += 1
+    
+    isotopes = []
+    for _ in range(num_iso):
+        idx = data[offset]
+        isotopes.append(index_to_isotope.get(idx, f"Unknown-{idx}"))
+        offset += 1
+    
+    activities = {}
+    for iso in isotopes:
+        scaled = struct.unpack('<H', data[offset:offset+2])[0]
+        activities[iso] = scaled / 65.535
+        offset += 2
+    
+    return {'isotopes': isotopes, 'source_activities_bq': activities}
+
+
 class SpectrumDataset2D(Dataset):
     """
     PyTorch Dataset for 2D gamma spectra.
     
     Pads or truncates time dimension to fixed size for batch processing.
+    Supports both v3 (JSON) and v4 (binary) storage formats.
     """
     
     def __init__(
@@ -59,12 +93,16 @@ class SpectrumDataset2D(Dataset):
         self.transform = transform
         
         # Detect label format and load sample list
-        self.use_individual_labels = self._detect_label_format()
+        self.format = self._detect_format()
+        self.v4_isotope_index = None
         
-        if self.use_individual_labels:
-            self.sample_ids = self._scan_for_samples()
-            self.metadata = None
-            print(f"Using individual label files (efficient mode)")
+        if self.format == "v4":
+            self.sample_ids = self._scan_v4_samples()
+            self._load_v4_metadata()
+            print(f"Using v4 binary format (compact mode)")
+        elif self.format == "v3":
+            self.sample_ids = self._scan_v3_samples()
+            print(f"Using v3 JSON format (individual files)")
         else:
             self.metadata = self._load_metadata()
             self.sample_ids = list(self.metadata['samples'].keys())
@@ -74,24 +112,47 @@ class SpectrumDataset2D(Dataset):
         print(f"Target shape: ({target_time_intervals}, 1023)")
         print(f"Isotope index has {self.isotope_index.num_isotopes} isotopes")
     
-    def _detect_label_format(self) -> bool:
-        """Detect whether to use individual JSON files or combined labels.json."""
+    def _detect_format(self) -> str:
+        """Detect storage format: v4, v3, or legacy."""
+        # Check for v4 binary format
+        lbl_files = list(self.spectra_dir.glob("s*.lbl"))
+        if len(lbl_files) > 0:
+            return "v4"
+        
+        # Check for v3 individual JSON
         json_files = list(self.spectra_dir.glob("spectrum_*.json"))
         if len(json_files) > 0:
-            return True
+            return "v3"
         
+        # Check for legacy combined labels.json
         labels_path = self.data_dir / "labels.json"
         if labels_path.exists():
-            return False
+            return "legacy"
         
         raise FileNotFoundError(
-            f"No label files found. Expected either:\n"
-            f"  - Individual files: {self.spectra_dir}/spectrum_*.json\n"
-            f"  - Combined file: {self.data_dir}/labels.json"
+            f"No label files found. Expected one of:\n"
+            f"  - v4 binary: {self.spectra_dir}/s*.lbl\n"
+            f"  - v3 JSON: {self.spectra_dir}/spectrum_*.json\n"
+            f"  - Legacy: {self.data_dir}/labels.json"
         )
     
-    def _scan_for_samples(self) -> List[str]:
-        """Scan directory for sample IDs based on .npy files."""
+    def _scan_v4_samples(self) -> List[str]:
+        """Scan directory for v4 sample IDs."""
+        npy_files = sorted(self.spectra_dir.glob("s*.npy"))
+        return [f.stem for f in npy_files]
+    
+    def _load_v4_metadata(self):
+        """Load v4 metadata including isotope index mapping."""
+        metadata_path = self.data_dir / "metadata.json"
+        if metadata_path.exists():
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                self.v4_isotope_index = {
+                    int(v): k for k, v in metadata.get('isotope_index', {}).items()
+                }
+    
+    def _scan_v3_samples(self) -> List[str]:
+        """Scan directory for v3 sample IDs based on .npy files."""
         npy_files = sorted(self.spectra_dir.glob("spectrum_*.npy"))
         sample_ids = []
         for npy_path in npy_files:
@@ -111,12 +172,23 @@ class SpectrumDataset2D(Dataset):
     
     def _load_sample_label(self, sample_id: str) -> Dict:
         """Load label for a single sample."""
-        if self.use_individual_labels:
+        if self.format == "v4":
+            lbl_path = self.spectra_dir / f"{sample_id}.lbl"
+            with open(lbl_path, 'rb') as f:
+                return unpack_v4_labels(f.read(), self.v4_isotope_index or {})
+        elif self.format == "v3":
             json_path = self.spectra_dir / f"spectrum_{sample_id}.json"
             with open(json_path, 'r') as f:
                 return json.load(f)
         else:
             return self.metadata['samples'][sample_id]
+    
+    def _get_spectrum_path(self, sample_id: str) -> Path:
+        """Get the path to the spectrum file."""
+        if self.format == "v4":
+            return self.spectra_dir / f"{sample_id}.npy"
+        else:
+            return self.spectra_dir / f"spectrum_{sample_id}.npy"
     
     def _pad_or_truncate(self, spectrum: np.ndarray) -> np.ndarray:
         """
@@ -164,8 +236,12 @@ class SpectrumDataset2D(Dataset):
         sample_meta = self._load_sample_label(sample_id)
         
         # Load spectrum
-        spectrum_path = self.spectra_dir / f"spectrum_{sample_id}.npy"
+        spectrum_path = self._get_spectrum_path(sample_id)
         spectrum = np.load(spectrum_path)
+        
+        # Convert from float16 to float32 if needed
+        if spectrum.dtype == np.float16:
+            spectrum = spectrum.astype(np.float32)
         
         # Ensure 2D
         if spectrum.ndim == 1:
@@ -297,12 +373,26 @@ if __name__ == "__main__":
     # Test the dataset
     from pathlib import Path
     
-    data_dir = Path("O:/master_data_collection/isotopev2")
+    # Test v4 format
+    data_dir = Path("O:/master_data_collection/isotopev4_test")
+    if data_dir.exists():
+        print("Testing v4 format...")
+        dataset = SpectrumDataset2D(data_dir, target_time_intervals=300)
+        sample = dataset[0]
+        
+        print(f"\nSample:")
+        print(f"  Spectrum shape: {sample['spectrum'].shape}")
+        print(f"  Presence labels: {sample['presence_labels'].sum().item():.0f} isotopes")
+        print(f"  Sample ID: {sample['sample_id']}")
     
-    dataset = SpectrumDataset2D(data_dir, target_time_intervals=60)
-    sample = dataset[0]
-    
-    print(f"\nSample:")
-    print(f"  Spectrum shape: {sample['spectrum'].shape}")
-    print(f"  Presence labels: {sample['presence_labels'].sum().item():.0f} isotopes")
-    print(f"  Sample ID: {sample['sample_id']}")
+    # Test v3 format
+    data_dir_v3 = Path("O:/master_data_collection/isotopev2")
+    if data_dir_v3.exists() and list((data_dir_v3 / "spectra").glob("spectrum_*.json")):
+        print("\nTesting v3 format...")
+        dataset = SpectrumDataset2D(data_dir_v3, target_time_intervals=60)
+        sample = dataset[0]
+        
+        print(f"\nSample:")
+        print(f"  Spectrum shape: {sample['spectrum'].shape}")
+        print(f"  Presence labels: {sample['presence_labels'].sum().item():.0f} isotopes")
+        print(f"  Sample ID: {sample['sample_id']}")

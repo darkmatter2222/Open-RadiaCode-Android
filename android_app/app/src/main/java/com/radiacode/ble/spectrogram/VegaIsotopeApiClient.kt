@@ -20,12 +20,12 @@ import kotlin.math.min
  * and identify radioactive isotopes with probabilities and estimated activities.
  * 
  * API Endpoint: POST /identify
- * Input: 2D matrix (60 time intervals x 1023 energy channels)
- *   - Axis 0: Time intervals (60 one-second intervals)
+ * Input: 2D matrix (time intervals x 1023 energy channels)
+ *   - Axis 0: Time intervals (typically 300 one-second intervals)
  *   - Axis 1: Energy channels (1023 channels, 20 keV to 3000 keV)
  * Output: List of detected isotopes with probabilities and activity estimates
  * 
- * API Version: 2.0.0
+ * API Version: 3.0.0
  */
 object VegaIsotopeApiClient {
 
@@ -37,7 +37,7 @@ object VegaIsotopeApiClient {
     
     // Spectrum dimensions (fixed by model architecture)
     const val EXPECTED_CHANNELS = 1023          // Energy channels
-    const val REQUIRED_TIME_INTERVALS = 60      // Time dimension (1-second intervals)
+    const val REQUIRED_TIME_INTERVALS = 300     // Time dimension (1-second intervals)
     
     // Model's expected energy calibration (LINEAR: 20-3000 keV over 1023 channels)
     // The model was trained with this specific calibration
@@ -47,6 +47,60 @@ object VegaIsotopeApiClient {
     private val executor: Executor = Executors.newSingleThreadExecutor()
     
     /**
+     * Decay chain relationships for display purposes.
+     * Maps parent isotopes to their characteristic daughter products.
+     */
+    val DECAY_CHAIN_INFO = mapOf(
+        "U-238" to DecayChainInfo(
+            parent = "U-238",
+            daughters = listOf("Th-234", "Pa-234m", "U-234", "Th-230", "Ra-226", "Rn-222", "Pb-214", "Bi-214", "Pb-210", "Po-210"),
+            keyDaughters = listOf("Pb-214", "Bi-214", "Ra-226"),
+            description = "Uranium-238 decay chain (detected via daughters)"
+        ),
+        "Th-232" to DecayChainInfo(
+            parent = "Th-232",
+            daughters = listOf("Ra-228", "Ac-228", "Th-228", "Ra-224", "Rn-220", "Pb-212", "Bi-212", "Tl-208"),
+            keyDaughters = listOf("Ac-228", "Pb-212", "Tl-208"),
+            description = "Thorium-232 decay chain"
+        ),
+        "U-235" to DecayChainInfo(
+            parent = "U-235",
+            daughters = listOf("Th-231", "Pa-231", "Ac-227", "Th-227", "Ra-223", "Pb-211", "Bi-211"),
+            keyDaughters = listOf("Pa-231", "Th-227", "Pb-211"),
+            description = "Uranium-235 (Actinium) decay chain"
+        )
+    )
+    
+    /**
+     * Information about a radioactive decay chain
+     */
+    data class DecayChainInfo(
+        val parent: String,
+        val daughters: List<String>,
+        val keyDaughters: List<String>,  // Most easily detected daughters
+        val description: String
+    )
+    
+    /**
+     * Get decay chain info if this isotope is part of a decay chain
+     */
+    fun getDecayChainParent(isotopeName: String): String? {
+        for ((parent, info) in DECAY_CHAIN_INFO) {
+            if (isotopeName in info.daughters || isotopeName == parent) {
+                return parent
+            }
+        }
+        return null
+    }
+    
+    /**
+     * Check if isotope is a key daughter indicator for its parent chain
+     */
+    fun isKeyDaughter(isotopeName: String): Boolean {
+        return DECAY_CHAIN_INFO.values.any { isotopeName in it.keyDaughters }
+    }
+    
+    /**
      * Result of isotope identification
      */
     data class IsotopeResult(
@@ -54,7 +108,13 @@ object VegaIsotopeApiClient {
         val probability: Float,      // 0.0 to 1.0
         val activityBq: Float,       // Estimated activity in Becquerels
         val primaryEnergy: Float     // Primary gamma line energy in keV
-    )
+    ) {
+        /** Returns parent decay chain name if this isotope is part of one */
+        val decayChainParent: String? get() = getDecayChainParent(name)
+        
+        /** True if this isotope is a key daughter for detecting its parent chain */
+        val isKeyDaughter: Boolean get() = VegaIsotopeApiClient.isKeyDaughter(name)
+    }
     
     /**
      * Response from the isotope identification API
@@ -126,7 +186,7 @@ object VegaIsotopeApiClient {
 
                 val tRebin = android.os.SystemClock.elapsedRealtime()
                 
-                // Step 2: Find global max across rebinned 60x1023 matrix for normalization
+                // Step 2: Find global max across rebinned Tx1023 matrix for normalization
                 var globalMax = 0.0
                 var totalCounts = 0.0
                 
@@ -151,7 +211,7 @@ object VegaIsotopeApiClient {
                     matrix.put(row)
                 }
                 
-                // Validate matrix dimensions (API v2.0 requires 60x1023)
+                // Validate matrix dimensions (model expects a fixed time window; server may pad/truncate)
                 if (snapshots.size != REQUIRED_TIME_INTERVALS) {
                     Log.w(TAG, "Warning: Expected $REQUIRED_TIME_INTERVALS time intervals, got ${snapshots.size}")
                 }

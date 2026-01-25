@@ -14,11 +14,11 @@ Endpoints:
     GET  /isotopes         - List all supported isotopes
 
 The 2D model accepts:
-    - 2D spectrum: shape (60, 1023) - 60 time intervals × 1023 energy channels
+    - 2D spectrum: shape (T, 1023) - time intervals × 1023 energy channels
     - 1D spectrum: shape (1023,) - will be expanded to 2D automatically
     
 Energy range: 20 keV to 3000 keV across 1023 channels
-Time: 60 one-second intervals (1 minute total measurement)
+Time: default 300 one-second intervals (engine pads/truncates to checkpoint)
 """
 
 import os
@@ -49,11 +49,11 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ==============================================================================
 
-MODEL_PATH = os.getenv("VEGA_ISOTOPE_MODEL", "models/vega_2d_final.pt")
+MODEL_PATH = os.getenv("VEGA_ISOTOPE_MODEL", "models/vega_2d_v3_best.pt")
 DEVICE = os.getenv("VEGA_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
 DEFAULT_THRESHOLD = float(os.getenv("VEGA_DEFAULT_THRESHOLD", "0.5"))
 MODEL_NAME = os.getenv("VEGA_MODEL_NAME", "vega-2d")
-MODEL_VERSION = os.getenv("VEGA_MODEL_VERSION", "2.0.0")
+MODEL_VERSION = os.getenv("VEGA_MODEL_VERSION", "3.0.0")
 LABEL_INDEX_VERSION = os.getenv("VEGA_LABEL_INDEX_VERSION", "portable_2d_sorted")
 
 # Input/semantics policies
@@ -64,7 +64,8 @@ ENERGY_ALIGNMENT_POLICY = os.getenv(
     "assume_aligned_no_resampling; send raw counts + calibration metadata for server-side rebin if needed"
 )
 NUM_CHANNELS = 1023       # Fixed by model architecture (energy channels)
-NUM_TIME_INTERVALS = 60   # Fixed by model architecture (time dimension)
+# Default time window. The loaded checkpoint can override this via model_config.
+NUM_TIME_INTERVALS = 300  # 5 minutes at 1-second intervals
 NUM_ISOTOPES = 82         # Fixed by model architecture
 
 # ==============================================================================
@@ -180,7 +181,29 @@ GAMMA_LINES = {
     "F-18": [(511.0, 1.934)],
     "Ir-192": [(296.0, 0.287), (308.5, 0.300), (316.5, 0.828), (468.1, 0.478)],
     "Th-232": [(63.8, 0.0026)],
-    "U-238": [(49.6, 0.064), (113.5, 0.017)],
+    "U-238": [(49.6, 0.000064)],  # Corrected: U-238 is alpha emitter with very weak gamma
+    "U-235": [(185.72, 0.572), (143.76, 0.1096), (163.33, 0.0508), (205.31, 0.0503)],
+}
+
+# Decay chain relationships for inferring parent isotopes from daughters
+# When these daughter combinations are detected, the parent is likely present
+# Note: U-238 detection is tricky because:
+#   1. U-238 itself has almost no gamma emission (0.0064% branching)
+#   2. The model often detects Pb-214 but misses Bi-214 at higher energies
+#   3. We need to be aggressive - even 1 strong daughter detection suggests uranium
+DECAY_CHAIN_INFERENCE = {
+    "U-238": {
+        "daughters": ["Pb-214", "Bi-214", "Ra-226"],
+        "min_daughters": 1,  # Even 1 daughter is significant for uranium
+        "min_avg_probability": 0.20,  # Single daughter must be reasonably confident
+        "boost_factor": 0.85,  # Boost parent probability when daughters detected
+    },
+    "Th-232": {
+        "daughters": ["Ac-228", "Pb-212", "Tl-208", "Bi-212"],
+        "min_daughters": 1,
+        "min_avg_probability": 0.20,
+        "boost_factor": 0.85,
+    },
 }
 
 
@@ -225,7 +248,7 @@ class Vega2DConfig:
     
     # Input dimensions
     num_channels: int = 1023          # Energy channels
-    num_time_intervals: int = 60      # Fixed time dimension
+    num_time_intervals: int = 300     # Fixed time dimension (default: 5 minutes)
     
     # Output
     num_isotopes: int = 82
@@ -283,7 +306,8 @@ class Vega2DModel(nn.Module):
     2D CNN model for gamma spectrum isotope identification.
     
     Treats spectra as images with time on one axis and energy channels on the other.
-    Input shape: (batch, 1, 60, 1023) or (batch, 60, 1023)
+    Input shape: (batch, 1, T, 1023) or (batch, T, 1023)
+    The inference engine will pad/truncate time to match the loaded checkpoint.
     """
     
     def __init__(self, config: Vega2DConfig = None):
@@ -378,7 +402,7 @@ class IdentifyRequest(BaseModel):
     """Request to identify isotopes from 2D spectrum data."""
     spectrum: List[List[float]] = Field(
         ..., 
-        description=f"2D gamma spectrum as list of {NUM_TIME_INTERVALS} time intervals, each with {NUM_CHANNELS} channels"
+        description=f"2D gamma spectrum as list of time intervals, each with {NUM_CHANNELS} channels (engine pads/truncates time to model config; default {NUM_TIME_INTERVALS})"
     )
     threshold: float = Field(
         default=DEFAULT_THRESHOLD, 
@@ -408,7 +432,7 @@ class IdentifyB64Request(BaseModel):
     """Request with base64-encoded numpy array."""
     spectrum_b64: str = Field(
         ...,
-        description="Base64-encoded numpy array (.npy format bytes). Shape: (60, 1023) or (1023,)"
+        description=f"Base64-encoded numpy array (.npy format bytes). Shape: (T, {NUM_CHANNELS}) or ({NUM_CHANNELS},)"
     )
     threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0, le=1)
     return_all: bool = Field(default=False)
@@ -418,7 +442,7 @@ class IdentifyBatchRequest(BaseModel):
     """Batch identification request."""
     spectra: List[List[List[float]]] = Field(
         ...,
-        description=f"List of 2D spectra, each with shape ({NUM_TIME_INTERVALS}, {NUM_CHANNELS})"
+        description=f"List of 2D spectra, each with shape (T, {NUM_CHANNELS}) (engine pads/truncates T to model config; default {NUM_TIME_INTERVALS})"
     )
     threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0, le=1)
     return_all: bool = Field(default=False)
@@ -456,7 +480,7 @@ class HealthResponse(BaseModel):
 class InfoResponse(BaseModel):
     """Model information response."""
     service: str = "vega-isotope-identification"
-    version: str = "2.0.0"
+    version: str = "3.0.0"
     model_path: str
     device: str
     num_isotopes: int
@@ -578,7 +602,7 @@ class Vega2DInferenceEngine:
             normalize: Normalize to [0, 1] range
             
         Returns:
-            Tensor ready for model, shape (1, 60, 1023)
+            Tensor ready for model, shape (1, num_time_intervals, 1023)
         """
         # Coerce to float32
         spectrum = np.asarray(spectrum, dtype=np.float32)
@@ -614,6 +638,68 @@ class Vega2DInferenceEngine:
         tensor = torch.tensor(spectrum, dtype=torch.float32).unsqueeze(0)
         return tensor.to(self.device)
     
+    def _apply_decay_chain_inference(
+        self,
+        probabilities: List[float],
+        isotope_names: List[str],
+        threshold: float
+    ) -> List[float]:
+        """
+        Apply decay chain inference to boost parent isotope probabilities.
+        
+        When characteristic daughter isotopes are detected (e.g., Pb-214, Bi-214 for U-238),
+        we infer that the parent isotope is likely present even if its direct gamma
+        signature is too weak to detect (U-238 is an alpha emitter with 0.0064% gamma).
+        
+        Args:
+            probabilities: Raw model output probabilities
+            isotope_names: List of isotope names matching probability indices
+            threshold: Detection threshold
+            
+        Returns:
+            Modified probabilities with parent isotopes boosted if daughters detected
+        """
+        probabilities = list(probabilities)  # Make mutable copy
+        name_to_idx = {name: idx for idx, name in enumerate(isotope_names)}
+        
+        for parent_name, config in DECAY_CHAIN_INFERENCE.items():
+            if parent_name not in name_to_idx:
+                continue
+                
+            parent_idx = name_to_idx[parent_name]
+            daughters = config["daughters"]
+            min_daughters = config["min_daughters"]
+            min_avg_prob = config["min_avg_probability"]
+            boost_factor = config["boost_factor"]
+            
+            # Find detected daughters
+            detected_daughters = []
+            detected_daughter_probs = []
+            for daughter in daughters:
+                if daughter in name_to_idx:
+                    daughter_idx = name_to_idx[daughter]
+                    prob = probabilities[daughter_idx]
+                    if prob >= threshold:
+                        detected_daughters.append(daughter)
+                        detected_daughter_probs.append(prob)
+            
+            # Check if enough daughters detected with sufficient probability
+            # Only average the DETECTED daughters, not all daughters
+            if len(detected_daughters) >= min_daughters and detected_daughter_probs:
+                avg_detected_prob = np.mean(detected_daughter_probs)
+                if avg_detected_prob >= min_avg_prob:
+                    # Boost parent probability based on daughter evidence
+                    current_parent_prob = probabilities[parent_idx]
+                    boosted_prob = max(current_parent_prob, boost_factor * avg_detected_prob)
+                    probabilities[parent_idx] = min(boosted_prob, 0.99)  # Cap at 0.99
+                    logger.info(
+                        f"Decay chain inference: {parent_name} boosted from "
+                        f"{current_parent_prob:.3f} to {probabilities[parent_idx]:.3f} "
+                        f"(daughters: {detected_daughters}, avg_prob: {avg_detected_prob:.3f})"
+                    )
+        
+        return probabilities
+    
     @torch.no_grad()
     def predict(
         self,
@@ -640,6 +726,9 @@ class Vega2DInferenceEngine:
 
         probabilities = [float(p) for p in probs.tolist()]
         activities_bq = [float(a) for a in activities.tolist()]
+        
+        # Apply decay chain inference: boost parent isotope probability if daughters detected
+        probabilities = self._apply_decay_chain_inference(probabilities, isotope_names, threshold)
 
         isotopes = []
         for i in range(len(probabilities)):
@@ -705,7 +794,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Vega 2D Isotope Identification API",
     description="Gamma spectrum isotope identification using 2D CNN deep learning",
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -750,7 +839,7 @@ async def get_info():
     """Get model and service information."""
     return {
         "service": "vega-isotope-identification",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "model_path": MODEL_PATH,
         "device": str(engine.device) if engine.is_loaded else "N/A",
         "num_isotopes": NUM_ISOTOPES,
@@ -785,9 +874,9 @@ async def identify_isotopes(request: IdentifyRequest):
     """
     Identify isotopes from a 2D gamma spectrum.
     
-    The spectrum should be 60 time intervals × 1023 energy channels.
+    The spectrum should be T time intervals × 1023 energy channels.
     Energy range: 20 keV to 3000 keV.
-    Time: 60 one-second intervals.
+    Time: engine pads/truncates to the loaded checkpoint time dimension.
     """
     if not engine.is_loaded:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -813,7 +902,7 @@ async def identify_isotopes_1d(request: IdentifyRequest1D):
     """
     Identify isotopes from a 1D gamma spectrum (legacy support).
     
-    The spectrum will be expanded to 2D by repeating across 60 time intervals.
+    The spectrum will be expanded to 2D by repeating across the model time dimension.
     """
     if not engine.is_loaded:
         raise HTTPException(status_code=503, detail="Model not loaded")
@@ -833,7 +922,7 @@ async def identify_isotopes_b64(request: IdentifyB64Request):
     Identify isotopes from a base64-encoded numpy array.
     
     The spectrum should be a .npy file encoded as base64.
-    Accepts shape (60, 1023) or (1023,).
+    Accepts shape (T, 1023) or (1023,).
     """
     if not engine.is_loaded:
         raise HTTPException(status_code=503, detail="Model not loaded")

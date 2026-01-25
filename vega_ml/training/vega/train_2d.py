@@ -27,11 +27,11 @@ class TrainingConfig2D:
     """Training configuration for 2D model."""
     
     # Data
-    data_dir: str = "O:/master_data_collection/isotopev2"
+    data_dir: str = "O:/master_data_collection/isotopev4"
     model_dir: str = "models"
     
     # Model
-    target_time_intervals: int = 60
+    target_time_intervals: int = 300
     
     # Training
     epochs: int = 50
@@ -325,7 +325,7 @@ def train_vega_2d(
                 'training_config': asdict(config),
                 'val_metrics': val_metrics,
                 'history': history
-            }, model_dir / 'vega_2d_best.pt')
+            }, model_dir / 'vega_2d_v3_best.pt')
             print(f"  ✓ Saved best model (val_loss: {best_val_loss:.4f})")
         else:
             patience_counter += 1
@@ -346,10 +346,10 @@ def train_vega_2d(
         'model_config': asdict(model_config),
         'training_config': asdict(config),
         'history': history
-    }, model_dir / 'vega_2d_final.pt')
+    }, model_dir / 'vega_2d_v3_final.pt')
     
     # Save history
-    with open(model_dir / 'vega_2d_history.json', 'w') as f:
+    with open(model_dir / 'vega_2d_v3_history.json', 'w') as f:
         json.dump(history, f, indent=2)
     
     # Test set evaluation
@@ -370,7 +370,7 @@ def train_vega_2d(
 
 def main():
     parser = argparse.ArgumentParser(description='Train Vega 2D Model')
-    parser.add_argument('--data-dir', type=str, default='O:/master_data_collection/isotopev2',
+    parser.add_argument('--data-dir', type=str, default='O:/master_data_collection/isotopev4',
                         help='Path to training data')
     parser.add_argument('--model-dir', type=str, default='models',
                         help='Path to save models')
@@ -380,7 +380,7 @@ def main():
                         help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='Learning rate')
-    parser.add_argument('--time-intervals', type=int, default=60,
+    parser.add_argument('--time-intervals', type=int, default=300,
                         help='Target time intervals (pad/truncate)')
     parser.add_argument('--no-amp', action='store_true',
                         help='Disable mixed precision training')

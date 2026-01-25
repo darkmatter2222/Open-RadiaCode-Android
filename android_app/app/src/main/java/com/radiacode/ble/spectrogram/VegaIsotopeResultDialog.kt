@@ -447,24 +447,44 @@ class VegaIsotopeResultDialog(
             else -> colorTextSecondary
         }
         
+        // Check if this isotope is part of a decay chain
+        val chainParent = isotope.decayChainParent
+        val isKeyDaughter = isotope.isKeyDaughter
+        
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (44 * density).toInt()
+                (if (chainParent != null) 52 else 44 * density).toInt()
             )
             
-            // Isotope name with energy
+            // Isotope name with energy and chain info
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f)
                 
-                addView(TextView(context).apply {
-                    text = isotope.name
-                    setTextColor(colorText)
-                    textSize = 14f
-                    typeface = Typeface.DEFAULT_BOLD
+                // Name row with chain indicator
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    
+                    addView(TextView(context).apply {
+                        text = isotope.name
+                        setTextColor(colorText)
+                        textSize = 14f
+                        typeface = Typeface.DEFAULT_BOLD
+                    })
+                    
+                    // Show chain indicator for key daughters
+                    if (isKeyDaughter && chainParent != null) {
+                        addView(TextView(context).apply {
+                            text = " [$chainParent]"
+                            setTextColor(colorCyan)
+                            textSize = 10f
+                            setPadding((4 * density).toInt(), 0, 0, 0)
+                        })
+                    }
                 })
                 
                 if (isotope.primaryEnergy > 0) {

@@ -1351,12 +1351,13 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
      * Export the exact payload that would be sent to the Vega Isotope Analysis API (v2.0).
      * This is useful for collecting training data for the isotope classification model.
      * 
-     * The API v2.0 expects a 2D matrix:
-     *   - Shape: (60, 1023)
-     *   - Axis 0: Time intervals (60 one-second intervals)
+    * The API expects a 2D matrix:
+    *   - Shape: (T, 1023)
+    *   - Axis 0: Time intervals (typically 300 one-second intervals)
      *   - Axis 1: Energy channels (1023 channels, 20 keV to 3000 keV)
      * 
-     * Exports the most recent 60 differential snapshots in chronological order.
+    * Exports the most recent N differential snapshots (chronological order),
+    * where N matches the model window (see VegaIsotopeApiClient.REQUIRED_TIME_INTERVALS).
      */
     private fun exportIsotopeApiPayload() {
         val deviceId = this.deviceId ?: run {
@@ -1399,7 +1400,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 return
             }
             
-            // Take most recent 60 and reverse to chronological order
+            // Take most recent N and reverse to chronological order
             val snapshots = allSnapshots.take(requiredSamples).reversed()
             
             // Step 1: Find global max for normalization (matches training data format)
@@ -1600,7 +1601,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                     return@execute
                 }
                 
-                // Take the most recent 60 snapshots and reverse to chronological order
+                // Take the most recent N snapshots and reverse to chronological order
                 val snapshots = allSnapshots.take(requiredSamples).reversed()
 
                 val windowStartMs = snapshots.firstOrNull()?.timestampMs ?: 0L

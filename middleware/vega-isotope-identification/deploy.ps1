@@ -64,6 +64,9 @@ foreach ($var in $required) {
 $SSH_TARGET = "$SSH_USER@$SSH_HOST"
 $PROJECT_DIR = $PSScriptRoot
 
+# Model artifact
+$MODEL_FILENAME = "vega_2d_v3_best.pt"
+
 Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Green
 Write-Host "  Server: $SSH_TARGET"
@@ -192,11 +195,18 @@ if (-not $SkipCopy) {
         }
     }
     
-    # Copy model file from local models directory
+    # Copy model file (prefer service-local models/, fallback to vega_ml/models/)
     Write-Host "Copying 2D model file..." -ForegroundColor Cyan
-    $localModelPath = Join-Path $PROJECT_DIR "models\vega_2d_final.pt"
+    $localModelPath = Join-Path $PROJECT_DIR ("models\" + $MODEL_FILENAME)
+    if (-not (Test-Path $localModelPath)) {
+        $fallbackModelPath = Join-Path $PROJECT_DIR ("..\..\vega_ml\models\" + $MODEL_FILENAME)
+        if (Test-Path $fallbackModelPath) {
+            $localModelPath = $fallbackModelPath
+        }
+    }
+
     if (Test-Path $localModelPath) {
-        Write-Host "  Copying vega_2d_final.pt from local models..." -ForegroundColor DarkGray
+        Write-Host "  Copying $MODEL_FILENAME from: $localModelPath" -ForegroundColor DarkGray
         $scpArgs = @($localModelPath, "${SSH_TARGET}:${REMOTE_PATH}/models/")
         if ($SSH_KEY_PATH -and $SSH_KEY_PATH -ne "~/.ssh/id_rsa") {
             $scpArgs = @("-i", $SSH_KEY_PATH) + $scpArgs
@@ -204,7 +214,7 @@ if (-not $SkipCopy) {
         scp @scpArgs
     } else {
         Write-Host "  WARNING: 2D Model file not found!" -ForegroundColor Yellow
-        Write-Host "  Expected at: $localModelPath" -ForegroundColor Yellow
+        Write-Host "  Looked for: models\$MODEL_FILENAME and ..\..\vega_ml\models\$MODEL_FILENAME" -ForegroundColor Yellow
     }
     
     Write-Host "Files copied successfully!" -ForegroundColor Green

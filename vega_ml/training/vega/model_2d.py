@@ -19,7 +19,7 @@ class Vega2DConfig:
     
     # Input dimensions
     num_channels: int = 1023  # Energy channels
-    num_time_intervals: int = 60  # Fixed time dimension
+    num_time_intervals: int = 300  # Fixed time dimension (5 min at 1 sec/interval)
     
     # Output
     num_isotopes: int = 82
