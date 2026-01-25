@@ -225,14 +225,14 @@ class VegaIsotopeResultDialog(
                 }
                 addView(errorContainer)
                 
-                // Close button
+                // Close button - always visible
                 closeButton = TextView(context).apply {
-                    text = "Close"
+                    text = "Cancel"
                     setTextColor(colorCyan)
                     textSize = 14f
                     typeface = Typeface.DEFAULT_BOLD
                     gravity = Gravity.CENTER
-                    visibility = View.GONE
+                    visibility = View.VISIBLE  // Always visible
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         (44 * density).toInt()
@@ -352,11 +352,11 @@ class VegaIsotopeResultDialog(
                 addView(processingTimeText)
             })
             
-            // Results scroll view
+            // Results scroll view - constrain height to leave room for close button
             resultsScrollView = ScrollView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    (300 * density).toInt()  // Max height
+                    (200 * density).toInt()  // Reduced max height to ensure close button is visible
                 )
             }
             addView(resultsScrollView)
