@@ -44,7 +44,9 @@ class MultiDeviceBleManager(
         @Volatile var intentionalClose: Boolean = false,
         var state: DeviceState = DeviceState(config),
         var pollCycleCount: Int = 0,  // Track poll cycles for spectrum reading
-        var cachedCalibration: Triple<Float, Float, Float>? = null  // a0, a1, a2
+        var cachedCalibration: Triple<Float, Float, Float>? = null,  // a0, a1, a2
+        var previousSpectrum: IntArray? = null,  // For computing manual differential
+        var previousSpectrumTime: Long = 0L  // Timestamp of previous spectrum
     )
     
     private val devices = ConcurrentHashMap<String, ManagedDevice>()
@@ -400,11 +402,19 @@ class MultiDeviceBleManager(
     
     /**
      * Read spectrum data and send to callback.
-     * Uses DIFFERENTIAL spectrum for real-time mode (shows recent counts, not accumulated).
-     * Caches calibration to avoid reading it every time.
+     * 
+     * IMPORTANT: We compute the differential spectrum MANUALLY by subtracting the previous
+     * spectrum from the current spectrum. The device's VS_SPEC_DIFF register is unreliable -
+     * even the official Python library (cdump/radiacode) does not use it!
+     * 
+     * From show-spectrum.py:
+     *   spectrum = rc.spectrum()
+     *   counts_diff = actual_counts - previous_counts
+     * 
+     * This gives us consistent 1-second differential data for the spectrogram.
      */
     private fun readAndBroadcastSpectrum(deviceId: String, client: RadiacodeBleClient, managed: ManagedDevice) {
-        Log.d(TAG, "Starting differential spectrum read for $deviceId")
+        Log.d(TAG, "Starting spectrum read for $deviceId (manual differential)")
         
         // Use async chaining to avoid deadlocks
         // First read calibration if not cached
@@ -421,58 +431,78 @@ class MultiDeviceBleManager(
             java.util.concurrent.CompletableFuture.completedFuture(managed.cachedCalibration)
         }
         
-        // Then read DIFFERENTIAL spectrum (recent counts, not accumulated)
-        // This is critical for real-time isotope identification
+        // Read VS.SPECTRUM (not VS_SPEC_DIFF!) and compute differential manually
+        // This is how the official Python library does it and it's more reliable
         calibFuture
             .thenCompose { calib ->
-                client.readDifferentialSpectrum().thenApply { spectrum -> Pair(calib, spectrum) }
+                client.readSpectrum().thenApply { spectrum -> Pair(calib, spectrum) }
             }
             .thenAccept { (calib, spectrum) ->
                 if (spectrum != null) {
-                    val fullSpectrum = if (calib != null) {
-                        spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
+                    val now = System.currentTimeMillis()
+                    val currentCounts = spectrum.counts
+                    
+                    // Compute differential from previous spectrum
+                    val diffCounts = if (managed.previousSpectrum != null && 
+                        managed.previousSpectrum!!.size == currentCounts.size) {
+                        
+                        val prev = managed.previousSpectrum!!
+                        IntArray(currentCounts.size) { i ->
+                            // Counts can only increase in accumulated spectrum
+                            // Negative means spectrum was reset - treat as 0
+                            val diff = currentCounts[i] - prev[i]
+                            if (diff >= 0) diff else 0
+                        }
                     } else {
-                        spectrum
+                        // First read - use zeros (will show as empty first row)
+                        IntArray(currentCounts.size) { 0 }
                     }
                     
-                    Log.d(TAG, "Differential spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
-                    onSpectrumReading?.invoke(deviceId, fullSpectrum)
+                    // Calculate time since last spectrum
+                    val elapsedSeconds = if (managed.previousSpectrumTime > 0) {
+                        ((now - managed.previousSpectrumTime) / 1000.0).toInt().coerceAtLeast(1)
+                    } else {
+                        1
+                    }
                     
-                    // Also read accumulated spectrum if callback is set
+                    // Store for next differential
+                    managed.previousSpectrum = currentCounts.copyOf()
+                    managed.previousSpectrumTime = now
+                    
+                    // Create differential spectrum with calibration
+                    val diffSpectrum = SpectrumData(
+                        durationSeconds = elapsedSeconds,
+                        a0 = calib?.first ?: spectrum.a0,
+                        a1 = calib?.second ?: spectrum.a1,
+                        a2 = calib?.third ?: spectrum.a2,
+                        counts = diffCounts,
+                        timestampMs = now
+                    )
+                    
+                    val totalDiffCounts = diffCounts.sum()
+                    val maxDiffCount = diffCounts.maxOrNull() ?: 0
+                    val nonZero = diffCounts.count { it > 0 }
+                    Log.d(TAG, "Manual differential for $deviceId: elapsed=${elapsedSeconds}s totalCounts=$totalDiffCounts maxCount=$maxDiffCount nonZero=$nonZero")
+                    
+                    // Send differential spectrum to spectrogram
+                    onSpectrumReading?.invoke(deviceId, diffSpectrum)
+                    
+                    // Also send accumulated spectrum if callback is set
                     if (onAccumulatedSpectrumReading != null) {
-                        readAccumulatedSpectrum(deviceId, client, managed)
+                        val fullSpectrum = if (calib != null) {
+                            spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
+                        } else {
+                            spectrum
+                        }
+                        Log.d(TAG, "Accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
+                        onAccumulatedSpectrumReading?.invoke(deviceId, fullSpectrum)
                     }
                 } else {
-                    Log.w(TAG, "Differential spectrum was null for $deviceId")
+                    Log.w(TAG, "Spectrum was null for $deviceId")
                 }
             }
             .exceptionally { t ->
                 Log.w(TAG, "Spectrum read failed for $deviceId", t)
-                null
-            }
-    }
-    
-    /**
-     * Read accumulated spectrum (VS.SPECTRUM) after differential read completes.
-     */
-    private fun readAccumulatedSpectrum(deviceId: String, client: RadiacodeBleClient, managed: ManagedDevice) {
-        val calib = managed.cachedCalibration
-        
-        client.readSpectrum()
-            .thenAccept { spectrum ->
-                if (spectrum != null) {
-                    val fullSpectrum = if (calib != null) {
-                        spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
-                    } else {
-                        spectrum
-                    }
-                    
-                    Log.d(TAG, "Accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
-                    onAccumulatedSpectrumReading?.invoke(deviceId, fullSpectrum)
-                }
-            }
-            .exceptionally { t ->
-                Log.w(TAG, "Accumulated spectrum read failed for $deviceId", t)
                 null
             }
     }
