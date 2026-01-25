@@ -488,7 +488,13 @@ class RadiaCodeForegroundService : Service() {
      * Reads energy calibration coefficients and broadcasts them.
      */
     private fun handleCalibrationRequest(requestedDeviceId: String?) {
-        val manager = deviceManager ?: return
+        val manager = deviceManager
+        if (manager == null) {
+            Log.w(TAG, "handleCalibrationRequest: No device manager")
+            broadcastCalibrationError("No device manager available")
+            return
+        }
+        
         val client = manager.getClient(requestedDeviceId)
         
         // Determine actual device ID
@@ -497,6 +503,7 @@ class RadiaCodeForegroundService : Service() {
         
         if (client == null) {
             Log.w(TAG, "handleCalibrationRequest: No connected device")
+            broadcastCalibrationError("No device connected")
             return
         }
         
@@ -510,14 +517,25 @@ class RadiaCodeForegroundService : Service() {
             val i = Intent(ACTION_CALIBRATION_DATA)
                 .setPackage(packageName)
                 .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
-                .putExtra(EXTRA_DEVICE_ID, deviceId)
+                .putExtra(EXTRA_DEVICE_ID, deviceId ?: "unknown")
                 .putExtra(EXTRA_CALIB_A0, calibration.a0)
                 .putExtra(EXTRA_CALIB_A1, calibration.a1)
                 .putExtra(EXTRA_CALIB_A2, calibration.a2)
+                .putExtra("success", true)
             sendBroadcast(i)
         } catch (t: Throwable) {
             Log.e(TAG, "handleCalibrationRequest failed", t)
+            broadcastCalibrationError("Failed to read calibration: ${t.message}")
         }
+    }
+    
+    private fun broadcastCalibrationError(message: String) {
+        val i = Intent(ACTION_CALIBRATION_DATA)
+            .setPackage(packageName)
+            .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
+            .putExtra("success", false)
+            .putExtra("error", message)
+        sendBroadcast(i)
     }
     
     /**

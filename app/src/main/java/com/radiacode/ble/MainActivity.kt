@@ -2006,6 +2006,14 @@ class MainActivity : AppCompatActivity() {
                     try { unregisterReceiver(this) } catch (_: Exception) {}
                     pendingCalibrationReceiver = null
                     
+                    // Check for error
+                    val success = intent.getBooleanExtra("success", true)
+                    if (!success) {
+                        val error = intent.getStringExtra("error") ?: "Unknown error"
+                        android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
+                        return
+                    }
+                    
                     val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID) ?: "unknown"
                     val a0 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A0, 0f)
                     val a1 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A1, 1f)
@@ -2019,7 +2027,7 @@ class MainActivity : AppCompatActivity() {
         
         val filter = IntentFilter(RadiaCodeForegroundService.ACTION_CALIBRATION_DATA)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(pendingCalibrationReceiver, filter, RECEIVER_EXPORTED)
+            registerReceiver(pendingCalibrationReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(pendingCalibrationReceiver, filter)
         }
