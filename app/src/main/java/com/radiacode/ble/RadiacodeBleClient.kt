@@ -340,6 +340,10 @@ internal class RadiacodeBleClient(
      * Reads the differential (recent) gamma spectrum.
      * This is ideal for real-time isotope identification as it shows RECENT counts,
      * not the total accumulated since device boot.
+     * 
+     * NOTE: The device's "duration" field in VS_SPEC_DIFF is NOT the interval since last read.
+     * It appears to be time since last spectrum reset (can be days). We override it with 1 second
+     * since we poll every ~1 second and the counts represent that interval.
      */
     fun readDifferentialSpectrum(): CompletableFuture<SpectrumData> {
         Log.d(TAG, "readDifferentialSpectrum: RD_VIRT_STRING VS_SPEC_DIFF")
@@ -354,7 +358,7 @@ internal class RadiacodeBleClient(
                 if (flen < 16) throw IllegalStateException("Differential spectrum data too short flen=$flen")
                 
                 // Format: <Ifff> duration_seconds, a0, a1, a2 (calibration), then counts
-                val durationSeconds = bb.int
+                val deviceDuration = bb.int  // Device reports bogus value (time since spectrum reset, not interval)
                 val a0 = bb.float  // keV offset
                 val a1 = bb.float  // keV/channel (linear)
                 val a2 = bb.float  // keV/channel² (quadratic)
@@ -367,10 +371,12 @@ internal class RadiacodeBleClient(
                 val totalCounts = counts.sumOf { it.toLong() }
                 val maxCount = counts.maxOrNull() ?: 0
                 val nonZeroChannels = counts.count { it > 0 }
-                Log.d(TAG, "readDifferentialSpectrum: duration=${durationSeconds}s totalCounts=$totalCounts maxCount=$maxCount nonZero=$nonZeroChannels")
+                Log.d(TAG, "readDifferentialSpectrum: deviceDuration=${deviceDuration}s (ignored), totalCounts=$totalCounts maxCount=$maxCount nonZero=$nonZeroChannels")
                 
+                // Use 1 second as duration since we poll every ~1 second
+                // The device's duration field is NOT the poll interval - it's time since spectrum reset
                 SpectrumData(
-                    durationSeconds = durationSeconds,
+                    durationSeconds = 1,  // Fixed 1-second interval (our actual poll rate)
                     a0 = a0,
                     a1 = a1,
                     a2 = a2,
