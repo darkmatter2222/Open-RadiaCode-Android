@@ -17,7 +17,7 @@ import java.util.concurrent.Executors
  * and identify radioactive isotopes with probabilities and estimated activities.
  * 
  * API Endpoint: POST /identify
- * Input: 1023-channel spectrum (counts per channel)
+ * Input: 2D matrix of spectrum snapshots (each row is a 1-second differential snapshot with 1023 channels)
  * Output: List of detected isotopes with probabilities and activity estimates
  */
 object VegaIsotopeApiClient {
@@ -56,47 +56,59 @@ object VegaIsotopeApiClient {
     )
     
     /**
-     * Identify isotopes from a gamma spectrum.
+     * Identify isotopes from a series of gamma spectrum snapshots.
      * 
-     * @param spectrum Array of counts per channel (should be 1023 channels)
+     * @param snapshots List of spectrum snapshots (each is one 1-second measurement)
      * @param threshold Detection threshold (0-1). Lower = more sensitive. Default 0.5
      * @param returnAll If true, return all 82 isotopes. If false, only detected ones.
      * @param onResult Callback with the identification results
      */
     fun identifyIsotopes(
-        spectrum: IntArray,
+        snapshots: List<SpectrumSnapshot>,
         threshold: Float = 0.5f,
         returnAll: Boolean = false,
         onResult: (IdentificationResponse) -> Unit
     ) {
         executor.execute {
             try {
-                // Validate spectrum length
-                val spectrumToSend = if (spectrum.size == EXPECTED_CHANNELS) {
-                    spectrum
-                } else if (spectrum.size == 1024) {
-                    // RadiaCode has 1024 channels, but channel 1024 is accumulator
-                    // Take first 1023 channels
-                    spectrum.take(1023).toIntArray()
-                } else {
-                    Log.w(TAG, "Unexpected spectrum size: ${spectrum.size}, expected $EXPECTED_CHANNELS")
-                    // Pad or truncate as needed
-                    IntArray(EXPECTED_CHANNELS) { i ->
-                        if (i < spectrum.size) spectrum[i] else 0
-                    }
+                if (snapshots.isEmpty()) {
+                    onResult(IdentificationResponse(
+                        success = false,
+                        isotopes = emptyList(),
+                        numDetected = 0,
+                        confidence = 0f,
+                        processingTimeMs = 0f,
+                        errorMessage = "No spectrum data provided"
+                    ))
+                    return@execute
                 }
                 
-                // Build request JSON
+                // Build 2D matrix: each row is one snapshot, each column is one channel
+                val matrix = JSONArray()
+                var totalCounts = 0L
+                
+                for (snapshot in snapshots) {
+                    val counts = snapshot.spectrumData.counts
+                    val row = JSONArray()
+                    
+                    // Ensure each row has exactly EXPECTED_CHANNELS values
+                    for (i in 0 until EXPECTED_CHANNELS) {
+                        val count = if (i < counts.size) counts[i] else 0
+                        row.put(count)
+                        totalCounts += count
+                    }
+                    matrix.put(row)
+                }
+                
+                // Build request JSON with 2D spectrum matrix
                 val requestJson = JSONObject().apply {
-                    put("spectrum", JSONArray().apply {
-                        spectrumToSend.forEach { put(it.toDouble()) }
-                    })
+                    put("spectrum", matrix)
                     put("threshold", threshold.toDouble())
                     put("return_all", returnAll)
                 }
                 
-                Log.d(TAG, "Sending spectrum with ${spectrumToSend.size} channels, " +
-                        "total counts: ${spectrumToSend.sum()}")
+                Log.d(TAG, "Sending ${snapshots.size} rows x $EXPECTED_CHANNELS channels, " +
+                        "total counts: $totalCounts")
                 
                 // Make HTTP request
                 val url = URL("$API_BASE_URL$IDENTIFY_ENDPOINT")
@@ -197,29 +209,4 @@ object VegaIsotopeApiClient {
         }
     }
     
-    /**
-     * Sum multiple spectrum snapshots into a single spectrum for analysis.
-     * This creates a combined spectrum from differential mode snapshots.
-     * 
-     * @param snapshots List of spectrum snapshots to combine
-     * @return Combined spectrum counts array
-     */
-    fun combineSnapshots(snapshots: List<SpectrumSnapshot>): IntArray {
-        if (snapshots.isEmpty()) {
-            return IntArray(EXPECTED_CHANNELS)
-        }
-        
-        // Use the size of the first snapshot's spectrum
-        val channelCount = snapshots.first().spectrumData.counts.size
-        val combined = IntArray(channelCount)
-        
-        for (snapshot in snapshots) {
-            val counts = snapshot.spectrumData.counts
-            for (i in 0 until minOf(channelCount, counts.size)) {
-                combined[i] += counts[i]
-            }
-        }
-        
-        return combined
-    }
 }

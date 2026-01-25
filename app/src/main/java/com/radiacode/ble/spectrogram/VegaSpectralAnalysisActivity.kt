@@ -1347,11 +1347,11 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
      * Export the exact payload that would be sent to the Vega Isotope Analysis API.
      * This is useful for collecting training data for the isotope classification model.
      * 
-     * The payload matches what performIsotopeAnalysis() sends:
-     * - For DIFFERENTIAL mode: Sum of all differential snapshots within history window
-     * - For ACCUMULATED mode: Latest snapshot minus baseline (if set)
+     * The model expects a 2D matrix where each row is a 1-second differential snapshot.
+     * Format: CSV with rows of 1023 channels each (the "spectrogram image").
      * 
-     * Format: CSV with header row (channel_0, channel_1, ..., channel_1022, total_counts, source_type)
+     * For DIFFERENTIAL mode: Each row is one snapshot within the history window
+     * For ACCUMULATED mode: Not supported (model trained on differential data)
      */
     private fun exportIsotopeApiPayload() {
         val deviceId = this.deviceId ?: run {
@@ -1360,80 +1360,49 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         }
         
         try {
-            // Replicate the exact logic from performIsotopeAnalysis()
             val source = SpectrogramPrefs.getSpectrumSource(this)
             val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
             val startTime = System.currentTimeMillis() - historyMs
             
-            val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
-            val snapshots = SpectrogramRepository.getInstance(this)
-                .getSnapshots(deviceId, startTime, System.currentTimeMillis())
-                .filter { it.isDifferential == wantDifferential }
-            
-            if (snapshots.isEmpty()) {
-                Toast.makeText(this, "No spectrum data available", Toast.LENGTH_SHORT).show()
+            // Model was trained on differential data only
+            if (source != SpectrumSourceType.DIFFERENTIAL) {
+                Toast.makeText(this, "Switch to Differential mode first (model trained on differential data)", Toast.LENGTH_LONG).show()
                 return
             }
             
-            // Get the spectrum exactly as it would be sent to the API
-            val spectrumToAnalyze: IntArray = if (wantDifferential) {
-                // Differential mode: sum all snapshots (same as VegaIsotopeApiClient.combineSnapshots)
-                VegaIsotopeApiClient.combineSnapshots(snapshots)
-            } else {
-                // Accumulated mode: use the latest snapshot with baseline subtraction
-                val latest = snapshots.last()
-                var displayCounts = latest.spectrumData.counts
-                
-                val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
-                if (baseline != null && baseline.size == displayCounts.size) {
-                    displayCounts = IntArray(displayCounts.size) { i ->
-                        maxOf(0, displayCounts[i] - baseline[i])
-                    }
-                }
-                displayCounts
+            val snapshots = SpectrogramRepository.getInstance(this)
+                .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+                .filter { it.isDifferential }
+                .sortedBy { it.timestampMs }  // Oldest first (chronological order)
+            
+            if (snapshots.isEmpty()) {
+                Toast.makeText(this, "No differential spectrum data available", Toast.LENGTH_SHORT).show()
+                return
             }
             
-            // Truncate to 1023 channels (what the API expects)
-            val apiSpectrum = if (spectrumToAnalyze.size == VegaIsotopeApiClient.EXPECTED_CHANNELS) {
-                spectrumToAnalyze
-            } else if (spectrumToAnalyze.size == 1024) {
-                spectrumToAnalyze.take(1023).toIntArray()
-            } else {
-                IntArray(VegaIsotopeApiClient.EXPECTED_CHANNELS) { i ->
-                    if (i < spectrumToAnalyze.size) spectrumToAnalyze[i] else 0
-                }
-            }
-            
-            val totalCounts = apiSpectrum.sum()
-            
-            // Build CSV with header
+            // Build CSV - each row is one snapshot (2D matrix for the model)
             val sb = StringBuilder()
             
-            // Header row: channel_0, channel_1, ..., channel_1022, total_counts, source_type, snapshot_count, history_ms
+            // Header row: channel_0, channel_1, ..., channel_1022
             for (i in 0 until VegaIsotopeApiClient.EXPECTED_CHANNELS) {
+                if (i > 0) sb.append(",")
                 sb.append("channel_$i")
-                sb.append(",")
             }
-            sb.append("total_counts,source_type,snapshot_count,history_ms\n")
-            
-            // Data row
-            for (count in apiSpectrum) {
-                sb.append(count)
-                sb.append(",")
-            }
-            sb.append(totalCounts)
-            sb.append(",")
-            sb.append(if (wantDifferential) "DIFFERENTIAL" else "ACCUMULATED")
-            sb.append(",")
-            sb.append(snapshots.size)
-            sb.append(",")
-            sb.append(historyMs)
             sb.append("\n")
+            
+            // Each snapshot becomes one row
+            for (snapshot in snapshots) {
+                val counts = snapshot.spectrumData.counts
+                for (i in 0 until VegaIsotopeApiClient.EXPECTED_CHANNELS) {
+                    if (i > 0) sb.append(",")
+                    sb.append(if (i < counts.size) counts[i] else 0)
+                }
+                sb.append("\n")
+            }
             
             // Write to file
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val sourceTag = if (wantDifferential) "diff" else "accum"
-            val file = File(cacheDir, "vega_api_payload_${sourceTag}_$timestamp.csv")
+            val file = File(cacheDir, "vega_training_matrix_$timestamp.csv")
             file.writeText(sb.toString())
             
             val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
@@ -1442,9 +1411,10 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(Intent.createChooser(intent, "Export API Payload for Training"))
+            startActivity(Intent.createChooser(intent, "Export Training Matrix"))
             
-            Toast.makeText(this, "Exporting $totalCounts total counts from ${snapshots.size} snapshots", Toast.LENGTH_LONG).show()
+            val totalCounts = snapshots.sumOf { it.spectrumData.counts.sum().toLong() }
+            Toast.makeText(this, "Exported ${snapshots.size} rows x 1023 channels ($totalCounts total counts)", Toast.LENGTH_LONG).show()
             
         } catch (e: Exception) {
             android.util.Log.e("VegaSpectral", "Export API payload failed", e)
@@ -1522,6 +1492,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             val snapshots = SpectrogramRepository.getInstance(this)
                 .getSnapshots(deviceId, startTime, System.currentTimeMillis())
                 .filter { it.isDifferential == wantDifferential }
+                .sortedBy { it.timestampMs }  // Chronological order for the model
             
             android.util.Log.d("VegaIsotope", "Got ${snapshots.size} snapshots, wantDifferential=$wantDifferential")
             
@@ -1530,29 +1501,14 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 return
             }
             
-            // Get the spectrum to analyze
-            val spectrumToAnalyze: IntArray = if (wantDifferential) {
-                // Differential mode: sum all snapshots
-                android.util.Log.d("VegaIsotope", "Combining snapshots for differential mode")
-                VegaIsotopeApiClient.combineSnapshots(snapshots)
-            } else {
-                // Accumulated mode: use the latest snapshot
-                android.util.Log.d("VegaIsotope", "Using latest snapshot for accumulated mode")
-                val latest = snapshots.last()
-                var displayCounts = latest.spectrumData.counts
-                
-                // Subtract baseline if set
-                val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
-                if (baseline != null && baseline.size == displayCounts.size) {
-                    displayCounts = IntArray(displayCounts.size) { i ->
-                        maxOf(0, displayCounts[i] - baseline[i])
-                    }
-                }
-                displayCounts
+            // Model requires differential mode (trained on 2D spectrogram images)
+            if (!wantDifferential) {
+                Toast.makeText(this, "Switch to Differential mode for isotope analysis", Toast.LENGTH_LONG).show()
+                return
             }
             
-            val totalCounts = spectrumToAnalyze.sum()
-            android.util.Log.d("VegaIsotope", "Spectrum size: ${spectrumToAnalyze.size}, totalCounts: $totalCounts")
+            val totalCounts = snapshots.sumOf { it.spectrumData.counts.sum().toLong() }
+            android.util.Log.d("VegaIsotope", "Matrix size: ${snapshots.size} rows x 1023 channels, totalCounts: $totalCounts")
             
             if (totalCounts < 100) {
                 Toast.makeText(this, "Insufficient data (need more counts)", Toast.LENGTH_SHORT).show()
@@ -1564,11 +1520,11 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             val dialog = VegaIsotopeResultDialog(this)
             android.util.Log.d("VegaIsotope", "Showing dialog")
             dialog.show()
-            android.util.Log.d("VegaIsotope", "Dialog shown, calling API")
+            android.util.Log.d("VegaIsotope", "Dialog shown, calling API with ${snapshots.size} snapshots")
             
-            // Call the API
+            // Call the API with full 2D matrix (each snapshot is one row)
             VegaIsotopeApiClient.identifyIsotopes(
-                spectrum = spectrumToAnalyze,
+                snapshots = snapshots,
                 threshold = 0.3f,  // Lower threshold for sensitivity
                 returnAll = false
             ) { response ->
