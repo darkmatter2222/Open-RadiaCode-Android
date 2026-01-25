@@ -1561,24 +1561,35 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                 return
             }
             
-            // Show the results dialog
-            android.util.Log.d("VegaIsotope", "Creating dialog")
-            val dialog = VegaIsotopeResultDialog(this)
-            android.util.Log.d("VegaIsotope", "Showing dialog")
-            dialog.show()
-            android.util.Log.d("VegaIsotope", "Dialog shown, calling API with ${snapshots.size} snapshots (60x1023 matrix)")
+            // Show loading toast
+            Toast.makeText(this, "Analyzing spectrum...", Toast.LENGTH_SHORT).show()
+            
+            android.util.Log.d("VegaIsotope", "Calling API with ${snapshots.size} snapshots (60x1023 matrix)")
             
             // Call the API with 2D matrix (60 time intervals x 1023 channels)
+            // Request ALL isotopes (return_all=true) so we can do multi-threshold analysis
             VegaIsotopeApiClient.identifyIsotopes(
                 snapshots = snapshots,
-                threshold = 0.3f,  // Lower threshold for sensitivity
-                returnAll = false
+                threshold = 0.1f,  // Very low threshold to get all possibilities
+                returnAll = true   // Get all 82 isotopes for multi-threshold analysis
             ) { response ->
                 android.util.Log.d("VegaIsotope", "API response received: success=${response.success}")
-                // Update UI on main thread
+                // Launch full-screen results activity on main thread
                 mainHandler.post {
-                    if (dialog.isShowing) {
-                        dialog.showResults(response)
+                    if (response.success) {
+                        // Launch full-screen isotope analysis activity
+                        IsotopeAnalysisActivity.start(
+                            context = this,
+                            deviceId = deviceId,
+                            result = response,
+                            allIsotopes = response.isotopes
+                        )
+                    } else {
+                        Toast.makeText(
+                            this,
+                            "Analysis failed: ${response.errorMessage ?: "Unknown error"}",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             }

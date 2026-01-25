@@ -147,6 +147,13 @@
             android:exported="false"
             android:label="Vega Spectral Analysis" />
 
+        <!-- Isotope Analysis Results (Full-screen) -->
+        <activity
+            android:name=".spectrogram.IsotopeAnalysisActivity"
+            android:exported="false"
+            android:label="Isotope Analysis"
+            android:theme="@style/Theme.RadiaCode" />
+
         <service
             android:name=".RadiaCodeForegroundService"
             android:exported="false"

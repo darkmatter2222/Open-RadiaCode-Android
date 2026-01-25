@@ -11,8 +11,8 @@ android {
         applicationId = "com.radiacode.ble"
         minSdk = 26
         targetSdk = 34
-        versionCode = 106
-        versionName = "1.32"
+        versionCode = 107
+        versionName = "1.33"
     }
 
     // The repo’s audio files live in app/audio/. Copy any provided sound assets into res/raw
