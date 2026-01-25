@@ -1,376 +1,195 @@
-# Open RadiaCode Android
+# RadiaCode Data Collection & Isotope Identification
 
-Android app (Kotlin) that connects to a RadiaCode 110 over BLE and displays live readings.
+A complete system for radiation detection, data collection, and AI-powered isotope identification using RadiaCode scintillation detectors.
 
-App name: **Open RadiaCode**
+## Projects
 
-> **Speech-to-text note:** The correct name is **RadiaCode** (capital R, capital C, no space).
-> Common transcription error: "RadioCode" — this is INCORRECT.
+This monorepo contains three interconnected applications:
 
-## Versioning
+### 1. Open RadiaCode Android App (`android_app/`)
 
-- **Format:** `MAJOR.MINOR` (e.g., `0.01`, `0.02`, `1.00`)
-- **Minor versions:** Incremented for each build
-- **Major versions:** Only increment on GitHub releases
-- **Current version:** See `app/build.gradle.kts` → `versionName`
+A Kotlin Android app that connects to RadiaCode devices over Bluetooth LE.
 
-## Download & Installation
+**Features:**
+- Real-time dose rate and count rate monitoring
+- Live charts with zoom, pan, and statistical analysis
+- Home screen widgets with customizable themes
+- Smart alerts with threshold and statistical triggers
+- Live GPS mapping of radiation readings
+- Real-time isotope identification via backend API
+- Background service with auto-connect on boot
 
-Pre-built APK files are available in the [`Installer/`](Installer/) folder of this repository.
+**[Full documentation](android_app/README.md)**
 
-### Step 1: Download the APK
+### 2. Vega Middleware (`middleware/`)
 
-1. Go to the [`Installer/`](Installer/) folder in this repository
-2. Click on the latest `OpenRadiaCode-v{VERSION}.apk` file (e.g., `OpenRadiaCode-v0.01.apk`)
-3. Click the **Download** button (or "Download raw file" icon)
-4. The APK will download to your phone or computer
+A suite of AI microservices deployed on GPU servers via Docker.
 
-> **Tip:** If downloading on a computer, transfer the APK to your Android device via USB, email, or cloud storage.
+| Service | Port | Description |
+|---------|------|-------------|
+| **vega-tts** | 8000 | Text-to-Speech with voice cloning (Chatterbox TTS) |
+| **vega-llm** | 8001 | Chat and text generation (Qwen) |
+| **vega-isotope-identification** | 8020 | CNN-based isotope identification |
+| **vega-ingress** | 8080 | API gateway with request logging |
 
-### Step 2: Enable Installation from Unknown Sources
+**[Full documentation](middleware/README.md)**
 
-Android blocks app installations from outside the Play Store by default. You need to enable "Install unknown apps" for your browser or file manager:
+### 3. Vega ML Training (`vega_ml/`)
 
-**On Android 8.0+ (Oreo and newer):**
-1. When you try to install the APK, Android will prompt you to allow installation
-2. Tap **Settings** on the prompt
-3. Toggle **"Allow from this source"** ON
-4. Go back and continue the installation
+Machine learning pipeline for training isotope identification models.
 
-**Or manually enable it:**
-1. Open **Settings** → **Apps** (or **Apps & notifications**)
-2. Tap the **⋮** menu → **Special access** → **Install unknown apps**
-3. Find your browser (Chrome, Firefox, etc.) or file manager
-4. Toggle **"Allow from this source"** ON
+**Components:**
+- Synthetic gamma spectra generator (82 isotopes)
+- Physics-based simulation (Gaussian peaks, Poisson noise, Compton continuum)
+- CNN-FCNN hybrid model (VegaModel, 34.5M parameters)
+- Training pipeline with mixed precision and multi-task learning
 
-**On older Android versions (7.x and below):**
-1. Open **Settings** → **Security**
-2. Enable **"Unknown sources"**
-3. Confirm the warning prompt
-
-### Step 3: Install the APK
-
-1. Open your **Downloads** folder or file manager
-2. Tap the `OpenRadiaCode-v{VERSION}.apk` file
-3. Tap **Install**
-4. Wait for installation to complete
-5. Tap **Open** to launch the app
-
-### Step 4: Grant Permissions
-
-When you first run the app, grant these permissions when prompted:
-- **Bluetooth** - Required to connect to your RadiaCode device
-- **Location** - Required by Android for BLE scanning (the app doesn't track your location)
-- **Notifications** - For radiation alerts and background service status
-
-### Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| "App not installed" error | Make sure you don't have a conflicting version. Uninstall any old version first. |
-| Can't find the APK | Check your browser's download folder, usually `/Download/` |
-| "Installation blocked" | Enable "Install unknown apps" for your browser (Step 2) |
-| App crashes on launch | Ensure your Android version is 8.0 or higher |
-
-### Updating the App
-
-To update to a newer version:
-1. Download the new APK from the `Installer/` folder
-2. Install it over the existing app (your settings will be preserved)
-3. If installation fails, uninstall the old version first, then install the new one
-
-## Overview
-
-Key goal: appliance-style operation — once a preferred device is set, a foreground service keeps connecting and polling in the background, with home screen widgets showing the latest readings. The app automatically connects on boot and maintains connection in the background.
-
-<img src="https://github.com/user-attachments/assets/84d87a19-c2ab-4b88-8d1e-460ade11351a" alt="Open RadiaCode App Screenshot" width="300">
-
-## Features
-
-### Dashboard
-- **Real-time charts** with zoom, pan, and configurable time windows (30s to 1h)
-- **Delta cards** showing change rates with statistical sparklines
-- **Spike detection** with configurable markers and percentage annotations
-- **Statistical analysis** with z-score highlighting and trend indicators
-- **Tap charts to focus** - full-screen chart view with enhanced detail
-- **Live map view** with GPS tracking showing radiation levels at each location
-  - Color-coded markers based on dose/count rate readings
-  - Metric selector to view dose rate or count rate on map
-  - Dynamic scale bar showing min/max values
-  - Reset button to clear all map markers
-  - Automatic location tracking when permissions granted
-
-### Smart Alerts
-- Configure up to **10 custom alerts**
-- **Threshold-based**: trigger when dose/count goes above or below a value
-- **Statistical alerts**: trigger when readings deviate beyond 1σ, 2σ, or 3σ from the mean
-- **Duration requirements**: condition must persist for N seconds before triggering
-- **Cooldown periods**: prevent alert spam with configurable quiet periods
-- **Push notifications** with vibration and quick app access
-- **Color-coded severity**: Green (info), Yellow (warning), Red (critical)
-
-### Home Screen Widgets
-Three widget styles to choose from:
-
-1. **RadiaCode Simple** - Compact widget showing:
-   - Connection status with device name (green dot = connected)
-   - Dose rate with configurable units (µSv/h or nSv/h)
-   - Count rate with configurable units (CPS or CPM)
-   - Last update timestamp
-   - Device-specific binding for multi-device setups
-
-2. **RadiaCode Charts** - Full-featured widget with:
-   - Connection status with device name
-   - Dose rate with live sparkline chart
-   - Count rate with live sparkline chart
-   - Multiple chart types: Sparkline, Line, Bar, Delta
-   - Real-time updates every second
-   - Gradient-filled chart visualization with glow effects
-   - Device-specific binding for multi-device setups
-
-3. **RadiaCode (Legacy)** - Original widget with trend indicators
-
-All widgets:
-- **Device name display** - Shows which device is bound to the widget
-- Update in real-time as readings come in
-- Respect your unit preferences from Settings
-- Show connection status with color-coded indicator
-- **Per-device binding** - bind each widget to a specific device
-- **Dynamic colors** - value colors change based on radiation levels
-- **Anomaly badges** - ⚠ indicator when readings are unusual
-- Tap to open the app
-
-### Widget Crafter
-Configure widgets with advanced options when adding to your home screen:
-
-- **Device Selection** - Bind widget to a specific RadiaCode device
-- **Chart Types** - Choose from Sparkline, Line, Bar, or **Delta** (z-score colored)
-- **Delta Charts** - Segments colored green/red based on statistical deviation from mean
-- **Color Schemes** - Themes like Cyberpunk, Forest, Ocean, Fire, Grayscale
-- **Background Opacity** - 100%, 75%, 50%, 25%, or fully transparent
-- **Transparent Charts** - Chart backgrounds blend with widget panel
-- **Show/Hide Border** - Toggle widget outline
-- **Dynamic Colors** - Automatically color values based on radiation levels
-- **Bollinger Bands** - Statistical bands overlay on charts
-- **Field Toggles** - Show/hide dose, count rate, time
-- **Live Preview** - See your widget configuration before applying
-
-### Auto-Connect & Boot Start
-- **Auto-connect on app launch**: When you open the app, it automatically connects to your preferred device
-- **Boot-time startup**: The app starts a background service when your phone boots up
-- **Persistent connection**: Maintains BLE connection even when app is in background
-- **Automatic reconnection**: If connection drops, automatically attempts to reconnect
-- **No manual intervention needed**: Once configured, the app works like an appliance
-
-### Settings
-- **Chart Settings**: Time window, smoothing, spike markers, spike percentages
-- **Display Settings**: Unit selection (µSv/h, nSv/h, CPS, CPM)
-- **Alerts**: Dose threshold, Smart Alerts configuration
-- **Isotope Detection**: Configure enabled isotopes, show/hide decay daughters
-
-### Isotope Identification (NEW)
-Real-time isotope identification from gamma spectra:
-
-- **15 Common Isotopes**: K-40, Th-232, U-238, Ra-226, Cs-137, Co-60, Am-241, Ir-192, Ba-133, Tc-99m, I-131, F-18, Cs-134, Na-22, Eu-152
-- **Two Modes**:
-  - **Scan Mode**: Press "SCAN" for one-shot spectrum analysis
-  - **Real-time Mode**: Toggle streaming for continuous identification
-- **Three Chart Types**:
-  - **Multi-line Chart**: Time series of top isotope probabilities
-  - **Stacked Area Chart**: Fraction visualization over time
-  - **Animated Bars**: Horizontal bars with sparkline history
-- **Configurable Display**:
-  - Probability mode (0-100% confidence)
-  - Fraction mode (relative contribution)
-- **Energy Calibration**: Accurate keV-to-channel conversion using device calibration
-- **ROI Analysis**: Simple Region of Interest algorithm with sigmoid scoring
-- **Isotope Settings**: Enable/disable individual isotopes, grouped by category (Natural, Medical, Industrial, Fission)
-- **Advanced**: Pause live updates
-
-## Design Theme
-
-The app uses a **professional dark theme** optimized for radiation monitoring:
-
-### Color Palette
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Background | `#0D0D0F` | Main background (near black) |
-| Surface | `#1A1A1E` | Cards, widgets |
-| Border | `#2A2A2E` | Subtle borders |
-| Muted | `#6E6E78` | Secondary text |
-| Secondary | `#9E9EA8` | Labels |
-
-### Accent Colors
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Cyan | `#00E5FF` | Dose rate values and charts |
-| Magenta | `#E040FB` | Count rate values and charts |
-| Green | `#69F0AE` | Connected status, positive trends |
-| Red | `#FF5252` | Disconnected status, alerts |
-| Yellow | `#FFD600` | Warnings |
-
-### Typography
-- Monospace fonts for numeric values
-- Bold labels for section headers
-- Subtle letter spacing on category labels
-
-## Build + Deploy (Windows)
-
-See [AGENTS.md](AGENTS.md) for the complete build/install/debug workflow.
-
-Quick version:
-
-```powershell
-# Set Java home (if needed)
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-
-# Build
-./gradlew assembleDebug
-
-# Install
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-# View logs
-adb logcat -v time -s RadiaCode
-```
-
-## App Usage
-
-### First Time Setup
-1. Open the app
-2. Open the navigation drawer → **Device** → **Find devices**
-3. Tap your RadiaCode to set it as the preferred device
-
-### After Setup
-- The foreground service auto-connects and keeps polling
-- A persistent notification shows status and has a **Stop** action
-- Add home screen widgets from the launcher to see readings at a glance
-- The app will automatically start and connect when your phone boots
-
-### Changing Units
-1. Open Settings (gear icon)
-2. Scroll to Display Settings
-3. Select preferred Dose unit (µSv/h or nSv/h)
-4. Select preferred Count unit (CPS or CPM)
-5. Widgets update automatically
+**[Full documentation](vega_ml/README.md)**
 
 ## Architecture
 
-### Key Components
-
-| Component | Description |
-|-----------|-------------|
-| `MainActivity` | Main dashboard with charts and cards |
-| `RadiaCodeForegroundService` | Persistent background service for BLE communication |
-| `BootReceiver` | Starts service on device boot (BOOT_COMPLETED, USER_UNLOCKED) |
-| `SimpleWidgetProvider` | Compact home screen widget with device binding |
-| `ChartWidgetProvider` | Widget with multi-type charts and device binding |
-| `RadiaCodeWidgetProvider` | Legacy widget with trend indicators |
-| `WidgetConfigActivity` | Widget configuration UI when adding widgets |
-| `WidgetCrafterActivity` | Widget management hub (from hamburger menu) |
-| `WidgetConfig` | Data class for per-widget configuration |
-| `DeviceConfig` | Data class for device settings (name, color) |
-| `Prefs` | SharedPreferences wrapper for settings and readings |
-| `SmartAlertsManager` | Handles alert evaluation and notifications |
-| `ChartGenerator` | Multi-type chart rendering (sparkline, bar, candle, area) |
-| `DynamicColorCalculator` | Value-based color interpolation |
-| `StatisticsCalculator` | Statistical analysis utilities |
-| `IntelligenceEngine` | Anomaly detection and predictions |
-
-### Multi-Device Support
-
-The app supports multiple RadiaCode devices simultaneously:
-
-- **Device List**: Manage multiple devices with custom names and colors
-- **Per-Device Storage**: Each device stores its own reading history
-- **Per-Widget Binding**: Each widget can be bound to a specific device
-- **Device Colors**: Assign colors to devices for easy identification on charts
-- **Concurrent Connections**: Service can poll multiple devices (sequentially)
-
-### Data Flow
-
 ```
-RadiaCodeForegroundService
-    ↓ (BLE polling every ~1s)
-    ↓
-Broadcast (ACTION_READING with all data including lat/lng)
-    ↓                              ↓
-MainActivity (charts)        FullscreenMapActivity (hexagons)
-    ↓                              ↓
-[Immediate UI updates via broadcast - no Prefs polling]
-    ↓
-Background thread: Prefs writes, widgets, CSV, alerts
+┌─────────────────────────────────────────────────────────────────┐
+│                         User's Phone                            │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              Open RadiaCode Android App                  │   │
+│  │  - Dashboard with live charts                           │   │
+│  │  - Widgets, alerts, GPS mapping                         │   │
+│  │  - Isotope identification UI                            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ BLE                    │ HTTPS
+                           ▼                        ▼
+                    ┌─────────────┐         ┌──────────────────┐
+                    │  RadiaCode  │         │  Vega Middleware │
+                    │   Device    │         │  (GPU Server)    │
+                    │  (101-110)  │         │                  │
+                    └─────────────┘         │  ┌────────────┐  │
+                                            │  │ Isotope ID │  │
+                                            │  │   (CNN)    │  │
+                                            │  └────────────┘  │
+                                            │  ┌────────────┐  │
+                                            │  │    LLM     │  │
+                                            │  └────────────┘  │
+                                            │  ┌────────────┐  │
+                                            │  │    TTS     │  │
+                                            │  └────────────┘  │
+                                            └──────────────────┘
+                                                     ▲
+                                                     │ model files
+                                            ┌────────┴─────────┐
+                                            │    Vega ML       │
+                                            │  Training        │
+                                            │  (RTX 5090)      │
+                                            └──────────────────┘
 ```
 
-**Performance Note:** All heavy I/O (SharedPreferences, file writes, widget rendering) runs on a background executor to keep the BLE poll cycle at ~1 second. UI components receive data via broadcast for immediate updates.
+## Quick Start
 
-### Boot Startup Flow
+### Android App
 
+1. Download the latest APK from [`android_app/Installer/`](android_app/Installer/)
+2. Enable "Install from unknown sources" on your Android device
+3. Install and grant Bluetooth/Location permissions
+4. Pair with your RadiaCode device
+
+### Middleware (Server Deployment)
+
+```powershell
+# Deploy isotope identification service
+cd middleware/vega-isotope-identification
+cp .env.example .env  # Edit with your server details
+.\deploy.ps1
+
+# Deploy TTS service
+cd ../vega-tts
+cp .env.example .env
+.\deploy.ps1
 ```
-Android Boot Complete
-    ↓
-BootReceiver (BOOT_COMPLETED / USER_UNLOCKED)
-    ↓
-Check: preferred_address set?
-    ↓ (yes)
-Start RadiaCodeForegroundService
-    ↓
-Service connects to RadiaCode
-    ↓
-Begin polling and updating widgets
+
+### ML Training
+
+```bash
+cd vega_ml
+
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install numpy scipy pillow
+pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+
+# Generate training data
+python -m synthetic_spectra.generate_spectra
+
+# Train model
+python training/vega/run_training.py --epochs 100
 ```
 
-## Protocol Notes
+## Supported Hardware
 
-This app implements the RadiaCode BLE protocol. For comprehensive documentation see:
+### RadiaCode Devices
+| Model | Crystal | FWHM @ 662 keV | Status |
+|-------|---------|----------------|--------|
+| RadiaCode 101 | CsI(Tl) | 9.0% | Supported |
+| RadiaCode 102 | CsI(Tl) | 9.5% | Supported |
+| RadiaCode 103 | CsI(Tl) | 8.4% | Supported |
+| RadiaCode 103G | GAGG(Ce) | 7.4% | Supported |
+| RadiaCode 110 | CsI(Tl) | 8.4% | Primary |
 
-📖 **[RADIACODE_PROTOCOL.md](RADIACODE_PROTOCOL.md)** - Complete protocol reference including:
-- All commands (COMMAND enum)
-- Virtual Strings (VS) - DATA_BUF, SPECTRUM, etc.
-- Virtual Special Function Registers (VSFR) - device settings
-- DATA_BUF record types with byte-level formats
-- Battery/temperature decoding formulas
-- Alarm system configuration
-- Spectrum data formats
+### GPU Requirements
+- **Training:** NVIDIA RTX 3090/4090/5090 (24GB VRAM recommended)
+- **Inference:** RTX 3090 or equivalent for real-time isotope ID
 
-### Quick Reference
+## Isotopes Supported
 
-- **Service UUID**: `e63215e5-7003-49d8-96b0-b024798fb901`
-- **Write Characteristic**: `e63215e6-7003-49d8-96b0-b024798fb901` (18-byte chunks)
-- **Notify Characteristic**: `e63215e7-7003-49d8-96b0-b024798fb901` (length-prefixed responses)
+The system can identify 82 isotopes across categories:
 
-**Primary data polling**: `VS.DATA_BUF (0x100)` via `COMMAND.RD_VIRT_STRING (0x0826)`
+- **Natural Background:** K-40, Ra-226, Rn-222, Th-232, U-238
+- **Medical:** Tc-99m, F-18, I-131, Ga-68, Lu-177
+- **Industrial:** Ir-192, Se-75, Am-241, Cs-137, Co-60
+- **Calibration:** Ba-133, Eu-152, Na-22, Mn-54, Co-57
+- **Reactor Fallout:** Cs-134, Sr-90, Zr-95, Ru-106
 
-**Key record types**:
-- `GRP_RealTimeData` (eid=0, gid=0): Live dose rate and count rate
-- `GRP_RareData` (eid=0, gid=3): Battery level and temperature
+## Development
 
-## Troubleshooting
+### Prerequisites
+- Android Studio (for Android app)
+- Python 3.10+ (for ML and middleware)
+- Docker with NVIDIA Container Toolkit (for deployment)
+- ADB (for device testing)
 
-### Device not found during scan
-- Ensure the official RadiaCode app is not connected
-- Check that the device isn't paired in Android Bluetooth settings
-- Make sure the RadiaCode is powered on
+### Project Structure
+```
+RadiaCodeAndroidDataCollection/
+├── android_app/          # Kotlin Android application
+│   ├── app/src/          # Source code
+│   ├── Installer/        # Distributable APKs
+│   └── AGENTS.md         # Android-specific agent instructions
+│
+├── middleware/           # AI microservices
+│   ├── vega-tts/         # Text-to-Speech service
+│   ├── vega-llm/         # LLM chat service
+│   ├── vega-isotope-identification/  # CNN inference service
+│   ├── vega-ingress/     # API gateway
+│   └── agent.md          # Middleware agent instructions
+│
+├── vega_ml/              # ML training pipeline
+│   ├── synthetic_spectra/  # Data generation
+│   ├── training/         # Model and training code
+│   ├── inference/        # Inference engine
+│   ├── models/           # Saved checkpoints
+│   └── agents.md         # ML agent instructions
+│
+├── AGENTS.md             # Root agent instructions
+└── README.md             # This file
+```
 
-### Widget shows "No data"
-- Open the app to establish connection
-- Check that the service is running (notification visible)
-- Verify preferred device is set in Device settings
+### Agent Instructions
 
-### Boot auto-start not working
-- Can't test via `adb shell am broadcast` (Android blocks protected broadcasts)
-- Reboot the phone to test boot startup
-- Ensure a preferred device address is saved
-
-### Connection drops frequently
-- Move closer to the RadiaCode device
-- Check RadiaCode battery level
-- The service will automatically attempt reconnection
-
-## UI Specification
-
-The canonical UI/UX spec is in [docs/UI.md](docs/UI.md).
+For AI coding agents, see [AGENTS.md](AGENTS.md) for operating rules and per-project documentation.
 
 ## License
 
-See LICENSE file for details.
+See individual project folders for license information.
