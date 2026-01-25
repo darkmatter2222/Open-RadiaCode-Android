@@ -1340,12 +1340,19 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                         }
                     }
                     
+                    // Clear all data from the repository
                     SpectrogramRepository.getInstance(this).clearDeviceData(id)
-                    // Explicitly clear chart and overlays in both modes
+                    
+                    // Explicitly clear chart views to show empty state
                     histogramView.clearAll()
                     waterfallView.setSnapshots(emptyList())
-                    refreshData()
-                    Toast.makeText(this, "Data cleared - new zero point set", Toast.LENGTH_SHORT).show()
+                    waterfallView.invalidate()
+                    histogramView.invalidate()
+                    
+                    // DON'T call refreshData() here - it would immediately show new incoming data
+                    // The views should stay empty until new data accumulates
+                    
+                    Toast.makeText(this, "Data cleared", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
