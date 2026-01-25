@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -30,6 +31,7 @@ import com.radiacode.ble.RadiaCodeForegroundService
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.Executors
 
 /**
  * Vega Spectral Analysis Activity
@@ -106,6 +108,16 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private var durationUpdateRunnable: Runnable? = null
     private var pulseAnimator: ValueAnimator? = null
     
+    // Background thread executor for IO/data operations (separate from API executor)
+    private val ioExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "VegaSpectral-IO").apply { isDaemon = true }
+    }
+    
+    // Debounce refresh - prevents rapid-fire refreshes from blocking UI
+    private var refreshPending = false
+    private var lastRefreshTime = 0L
+    private val REFRESH_DEBOUNCE_MS = 100L  // Don't refresh more than 10 times/sec
+    
     // ═══════════════════════════════════════════════════════════════════════════
     // BROADCAST RECEIVER
     // ═══════════════════════════════════════════════════════════════════════════
@@ -113,7 +125,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     private val spectrumReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                ACTION_SPECTRUM_SNAPSHOT -> refreshData()
+                ACTION_SPECTRUM_SNAPSHOT -> scheduleRefresh()  // Use debounced refresh
                 RadiaCodeForegroundService.ACTION_CONNECTED -> updateStatus("Connected")
                 RadiaCodeForegroundService.ACTION_DISCONNECTED -> updateStatus("Disconnected")
             }
@@ -121,6 +133,7 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
     }
     
     companion object {
+        private const val TAG = "VegaSpectral"
         const val ACTION_SPECTRUM_SNAPSHOT = "com.radiacode.ble.SPECTRUM_SNAPSHOT"
         const val EXTRA_DEVICE_ID = "device_id"
     }
@@ -176,6 +189,8 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         super.onDestroy()
         durationUpdateRunnable?.let { mainHandler.removeCallbacks(it) }
         pulseAnimator?.cancel()
+        // Shutdown IO executor to free resources
+        (ioExecutor as? java.util.concurrent.ExecutorService)?.shutdown()
     }
     
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -1492,6 +1507,114 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
         updateRecordingUI()
     }
     
+    /**
+     * Schedules a debounced refresh to prevent rapid-fire updates from blocking the UI.
+     * This is called from the broadcast receiver when new spectrum data arrives.
+     * Max refresh rate is ~10 Hz (100ms debounce).
+     */
+    private fun scheduleRefresh() {
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastRefreshTime
+        
+        if (elapsed >= REFRESH_DEBOUNCE_MS) {
+            // Enough time has passed, refresh immediately
+            lastRefreshTime = now
+            refreshDataAsync()
+        } else if (!refreshPending) {
+            // Schedule a refresh after debounce period
+            refreshPending = true
+            mainHandler.postDelayed({
+                refreshPending = false
+                lastRefreshTime = System.currentTimeMillis()
+                refreshDataAsync()
+            }, REFRESH_DEBOUNCE_MS - elapsed)
+        }
+        // else: refresh already pending, do nothing
+    }
+    
+    /**
+     * Async version of refreshData() - performs repository access on IO thread,
+     * then posts UI updates to main thread. This prevents lock contention from
+     * blocking the UI thread when BLE polling is writing to the repository.
+     */
+    private fun refreshDataAsync() {
+        val deviceId = this.deviceId ?: return
+        val context = this
+        
+        // Capture current settings on UI thread (these are fast prefs reads)
+        val source = SpectrogramPrefs.getSpectrumSource(this)
+        val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+        val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
+        val bgSubEnabled = SpectrogramPrefs.isBackgroundSubtractionEnabled(this)
+        val bgId = if (bgSubEnabled) SpectrogramPrefs.getSelectedBackgroundId(this) else null
+        val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
+        
+        // Do heavy work (repository access with locks) on IO thread
+        ioExecutor.execute {
+            try {
+                val startTime = System.currentTimeMillis() - historyMs
+                val snapshots = SpectrogramRepository.getInstance(context)
+                    .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+                    .filter { it.isDifferential == wantDifferential }
+                
+                val bg = if (bgId != null) {
+                    SpectrogramRepository.getInstance(context).getBackgrounds()
+                        .find { it.id == bgId }
+                } else null
+                
+                // Post UI updates back to main thread
+                mainHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+                    
+                    if (wantDifferential) {
+                        waterfallView.setSnapshots(snapshots)
+                        if (snapshots.isNotEmpty()) {
+                            val first = snapshots.first()
+                            waterfallView.setCalibration(first.spectrumData.a0, first.spectrumData.a1, first.spectrumData.a2)
+                        }
+                    } else {
+                        // ACCUMULATED mode: Use the LATEST snapshot only, don't sum!
+                        if (snapshots.isNotEmpty()) {
+                            val latest = snapshots.last()
+                            var displayCounts = latest.spectrumData.counts
+                            
+                            // Subtract baseline if set
+                            if (baseline != null && baseline.size == displayCounts.size) {
+                                displayCounts = IntArray(displayCounts.size) { i ->
+                                    maxOf(0, displayCounts[i] - baseline[i])
+                                }
+                            }
+                            
+                            histogramView.setSpectrum(
+                                counts = displayCounts,
+                                a0 = latest.spectrumData.a0,
+                                a1 = latest.spectrumData.a1,
+                                a2 = latest.spectrumData.a2,
+                                sampleCount = snapshots.size
+                            )
+                        } else {
+                            histogramView.setSpectrum(intArrayOf(), 0f, 3f, 0f, sampleCount = 0)
+                        }
+                    }
+                    
+                    if (!isRecording) {
+                        updateStatus("${snapshots.size} snapshots")
+                    }
+                    
+                    if (bgSubEnabled && bg != null) {
+                        waterfallView.setBackgroundSpectrum(bg)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing data", e)
+            }
+        }
+    }
+    
+    /**
+     * Synchronous version - only used when we need immediate data (e.g., for export).
+     * For normal UI updates, use refreshDataAsync().
+     */
     private fun refreshData() {
         val deviceId = this.deviceId ?: return
 
