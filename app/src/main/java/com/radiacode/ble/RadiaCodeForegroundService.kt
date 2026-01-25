@@ -47,6 +47,7 @@ class RadiaCodeForegroundService : Service() {
         private const val ACTION_RELOAD_DEVICES = "com.radiacode.ble.action.RELOAD_DEVICES"
         private const val ACTION_REFRESH_NOTIFICATION = "com.radiacode.ble.action.REFRESH_NOTIFICATION"
         private const val ACTION_REQUEST_SPECTRUM = "com.radiacode.ble.action.REQUEST_SPECTRUM"
+        private const val ACTION_REQUEST_CALIBRATION = "com.radiacode.ble.action.REQUEST_CALIBRATION"
         private const val ACTION_START_SPECTRUM_RECORDING = "START_SPECTRUM_RECORDING"
         private const val ACTION_STOP_SPECTRUM_RECORDING = "STOP_SPECTRUM_RECORDING"
 
@@ -55,6 +56,7 @@ class RadiaCodeForegroundService : Service() {
         const val ACTION_DISCONNECTED = "com.radiacode.ble.action.DISCONNECTED"
         const val ACTION_DEVICE_STATE_CHANGED = "com.radiacode.ble.action.DEVICE_STATE"
         const val ACTION_SPECTRUM_DATA = "com.radiacode.ble.action.SPECTRUM_DATA"
+        const val ACTION_CALIBRATION_DATA = "com.radiacode.ble.action.CALIBRATION_DATA"
         const val ACTION_STATISTICAL_UPDATE = "com.radiacode.ble.action.STATISTICAL_UPDATE"
         const val EXTRA_TS_MS = "ts_ms"
         const val EXTRA_USV_H = "usv_h"
@@ -133,6 +135,19 @@ class RadiaCodeForegroundService : Service() {
         fun requestSpectrum(context: Context, deviceId: String? = null) {
             val intent = Intent(context, RadiaCodeForegroundService::class.java)
                 .setAction(ACTION_REQUEST_SPECTRUM)
+            if (deviceId != null) {
+                intent.putExtra(EXTRA_DEVICE_ID, deviceId)
+            }
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {
+                // Service might not be running
+            }
+        }
+        
+        fun requestCalibration(context: Context, deviceId: String? = null) {
+            val intent = Intent(context, RadiaCodeForegroundService::class.java)
+                .setAction(ACTION_REQUEST_CALIBRATION)
             if (deviceId != null) {
                 intent.putExtra(EXTRA_DEVICE_ID, deviceId)
             }
@@ -267,6 +282,11 @@ class RadiaCodeForegroundService : Service() {
             ACTION_REQUEST_SPECTRUM -> {
                 val requestedDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
                 executor.submit { handleSpectrumRequest(requestedDeviceId) }
+                return START_STICKY
+            }
+            ACTION_REQUEST_CALIBRATION -> {
+                val requestedDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
+                executor.submit { handleCalibrationRequest(requestedDeviceId) }
                 return START_STICKY
             }
             ACTION_START_SPECTRUM_RECORDING -> {
@@ -460,6 +480,43 @@ class RadiaCodeForegroundService : Service() {
             }
         } catch (t: Throwable) {
             Log.e(TAG, "handleSpectrumRequest failed", t)
+        }
+    }
+    
+    /**
+     * Handle calibration data request from UI.
+     * Reads energy calibration coefficients and broadcasts them.
+     */
+    private fun handleCalibrationRequest(requestedDeviceId: String?) {
+        val manager = deviceManager ?: return
+        val client = manager.getClient(requestedDeviceId)
+        
+        // Determine actual device ID
+        val deviceId = requestedDeviceId ?: manager.getAllDeviceStates()
+            .firstOrNull { it.connectionState == DeviceConnectionState.CONNECTED }?.config?.id
+        
+        if (client == null) {
+            Log.w(TAG, "handleCalibrationRequest: No connected device")
+            return
+        }
+        
+        try {
+            // Read calibration
+            val calibration = client.readEnergyCalibration().get(5, TimeUnit.SECONDS)
+            
+            Log.d(TAG, "Calibration read: a0=${calibration.a0} a1=${calibration.a1} a2=${calibration.a2}")
+            
+            // Broadcast calibration data
+            val i = Intent(ACTION_CALIBRATION_DATA)
+                .setPackage(packageName)
+                .putExtra(EXTRA_TS_MS, System.currentTimeMillis())
+                .putExtra(EXTRA_DEVICE_ID, deviceId)
+                .putExtra(EXTRA_CALIB_A0, calibration.a0)
+                .putExtra(EXTRA_CALIB_A1, calibration.a1)
+                .putExtra(EXTRA_CALIB_A2, calibration.a2)
+            sendBroadcast(i)
+        } catch (t: Throwable) {
+            Log.e(TAG, "handleCalibrationRequest failed", t)
         }
     }
     

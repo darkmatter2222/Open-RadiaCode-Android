@@ -1,7 +1,10 @@
 package com.radiacode.ble
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
@@ -189,6 +192,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rowVegaIntelligence: View
     private lateinit var rowTrendArrows: View
     private lateinit var rowIsotopeSettings: View
+    private lateinit var rowDownloadCalibration: View
 
     private lateinit var valueWindow: TextView
     private lateinit var valueSmoothing: TextView
@@ -789,6 +793,7 @@ class MainActivity : AppCompatActivity() {
         rowVegaIntelligence = findViewById(R.id.rowVegaIntelligence)
         rowTrendArrows = findViewById(R.id.rowTrendArrows)
         rowIsotopeSettings = findViewById(R.id.rowIsotopeSettings)
+        rowDownloadCalibration = findViewById(R.id.rowDownloadCalibration)
 
         valueWindow = findViewById(R.id.valueWindow)
         valueSmoothing = findViewById(R.id.valueSmoothing)
@@ -1069,6 +1074,10 @@ class MainActivity : AppCompatActivity() {
         
         rowIsotopeSettings.setOnClickListener {
             startActivity(Intent(this, IsotopeSettingsActivity::class.java))
+        }
+        
+        rowDownloadCalibration.setOnClickListener {
+            downloadKevCalibration()
         }
     }
     
@@ -1975,6 +1984,105 @@ class MainActivity : AppCompatActivity() {
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(android.content.Intent.createChooser(share, "Share readings"))
+    }
+    
+    private var pendingCalibrationReceiver: BroadcastReceiver? = null
+    
+    private fun downloadKevCalibration() {
+        val selectedDeviceId = selectedDeviceIdCache
+        
+        // Show progress
+        android.widget.Toast.makeText(this, "Reading calibration from device...", android.widget.Toast.LENGTH_SHORT).show()
+        
+        // Register a one-shot receiver for calibration data
+        pendingCalibrationReceiver?.let {
+            try { unregisterReceiver(it) } catch (_: Exception) {}
+        }
+        
+        pendingCalibrationReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == RadiaCodeForegroundService.ACTION_CALIBRATION_DATA) {
+                    // Unregister immediately
+                    try { unregisterReceiver(this) } catch (_: Exception) {}
+                    pendingCalibrationReceiver = null
+                    
+                    val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID) ?: "unknown"
+                    val a0 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A0, 0f)
+                    val a1 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A1, 1f)
+                    val a2 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A2, 0f)
+                    
+                    // Generate and share CSV
+                    exportCalibrationAsCsv(deviceId, a0, a1, a2)
+                }
+            }
+        }
+        
+        val filter = IntentFilter(RadiaCodeForegroundService.ACTION_CALIBRATION_DATA)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(pendingCalibrationReceiver, filter, RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(pendingCalibrationReceiver, filter)
+        }
+        
+        // Request calibration from service
+        RadiaCodeForegroundService.requestCalibration(this, selectedDeviceId)
+        
+        // Timeout after 10 seconds
+        mainHandler.postDelayed({
+            pendingCalibrationReceiver?.let {
+                try { unregisterReceiver(it) } catch (_: Exception) {}
+                pendingCalibrationReceiver = null
+                android.widget.Toast.makeText(this, "Calibration request timed out. Is device connected?", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }, 10_000)
+    }
+    
+    private fun exportCalibrationAsCsv(deviceId: String, a0: Float, a1: Float, a2: Float) {
+        try {
+            // Generate CSV content with channel-to-keV mapping
+            val sb = StringBuilder()
+            sb.appendLine("# RadiaCode Energy Calibration Export")
+            sb.appendLine("# Device: $deviceId")
+            sb.appendLine("# Export Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            sb.appendLine("#")
+            sb.appendLine("# Calibration Coefficients (Energy = a0 + a1*channel + a2*channel^2):")
+            sb.appendLine("# a0 (offset) = $a0 keV")
+            sb.appendLine("# a1 (linear) = $a1 keV/channel")
+            sb.appendLine("# a2 (quadratic) = $a2 keV/channel^2")
+            sb.appendLine("#")
+            sb.appendLine("Channel,Energy_keV")
+            
+            // Generate channel-to-energy mapping for all 1024 channels
+            for (channel in 0..1023) {
+                val energy = a0 + a1 * channel + a2 * channel * channel
+                sb.appendLine("$channel,${String.format(java.util.Locale.US, "%.4f", energy)}")
+            }
+            
+            // Save to file
+            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val filename = "radiacode_keV_calibration_$timestamp.csv"
+            val file = File(filesDir, filename)
+            file.writeText(sb.toString())
+            
+            // Share via Intent
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "RadiaCode Energy Calibration")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            startActivity(android.content.Intent.createChooser(shareIntent, "Share keV Calibration"))
+            
+        } catch (e: Exception) {
+            android.util.Log.e("RadiaCode", "Failed to export calibration", e)
+            android.widget.Toast.makeText(
+                this, 
+                "Failed to export calibration: ${e.message}", 
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun startServiceIfConfigured() {

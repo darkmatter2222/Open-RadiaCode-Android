@@ -2460,6 +2460,33 @@
                                     android:fontFamily="monospace" />
                             </LinearLayout>
 
+                            <!-- Download keV Calibration -->
+                            <LinearLayout
+                                android:id="@+id/rowDownloadCalibration"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Download keV Calibration"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@android:drawable/stat_sys_download"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
