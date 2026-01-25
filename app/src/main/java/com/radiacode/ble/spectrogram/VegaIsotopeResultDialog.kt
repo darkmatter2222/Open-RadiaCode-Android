@@ -72,7 +72,8 @@ class VegaIsotopeResultDialog(
         
         // Set content first - window decorView needs this before blur can be applied
         setContentView(buildLayout())
-        setCanceledOnTouchOutside(false)
+        setCanceledOnTouchOutside(true)  // Allow dismissing by tapping outside
+        setCancelable(true)  // Allow back button to dismiss
         
         // Setup window effects AFTER setContentView (decorView must exist for blur)
         window?.apply {
@@ -104,7 +105,8 @@ class VegaIsotopeResultDialog(
         loadingContainer.visibility = View.VISIBLE
         resultsContainer.visibility = View.GONE
         errorContainer.visibility = View.GONE
-        closeButton.visibility = View.GONE
+        closeButton.visibility = View.VISIBLE  // Always show close button
+        closeButton.text = "Cancel"  // Show "Cancel" during loading
         statusText.text = "Analyzing spectrum..."
         startSpinnerAnimation()
     }
@@ -124,6 +126,7 @@ class VegaIsotopeResultDialog(
         errorContainer.visibility = View.GONE
         resultsContainer.visibility = View.VISIBLE
         closeButton.visibility = View.VISIBLE
+        closeButton.text = "Close"  // Change back to "Close" for results
         
         // Update metadata
         confidenceText.text = "Confidence: ${(response.confidence * 100).toInt()}%"
@@ -143,6 +146,7 @@ class VegaIsotopeResultDialog(
         resultsContainer.visibility = View.GONE
         errorContainer.visibility = View.VISIBLE
         closeButton.visibility = View.VISIBLE
+        closeButton.text = "Close"  // Change back to "Close" for error
         
         errorContainer.removeAllViews()
         errorContainer.addView(TextView(context).apply {
