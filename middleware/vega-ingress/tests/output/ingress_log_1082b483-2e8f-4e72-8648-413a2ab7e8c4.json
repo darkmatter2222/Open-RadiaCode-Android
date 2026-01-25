@@ -1,0 +1,52 @@
+﻿{
+    "id":  "1082b483-2e8f-4e72-8648-413a2ab7e8c4",
+    "ts_utc":  "2026-01-25T17:07:13.746987+00:00",
+    "duration_ms":  6.344,
+    "request":  {
+                    "method":  "GET",
+                    "path":  "/health",
+                    "query":  "",
+                    "client":  "127.0.0.1",
+                    "headers":  {
+                                    "host":  "localhost:8080",
+                                    "user-agent":  "curl/8.14.1",
+                                    "accept":  "*/*"
+                                },
+                    "content_type":  null,
+                    "json":  null,
+                    "body_bytes":  null,
+                    "body_truncated":  false
+                },
+    "response":  {
+                     "status_code":  200,
+                     "content_type":  "application/json",
+                     "headers":  {
+                                     "content-length":  "267",
+                                     "content-type":  "application/json",
+                                     "x-request-id":  "1082b483-2e8f-4e72-8648-413a2ab7e8c4"
+                                 },
+                     "json":  {
+                                  "status":  "healthy",
+                                  "backends":  {
+                                                   "tts":  {
+                                                               "status":  "healthy",
+                                                               "model_loaded":  true,
+                                                               "device":  "cuda"
+                                                           },
+                                                   "llm":  {
+                                                               "status":  "healthy",
+                                                               "model_loaded":  true,
+                                                               "device":  "cuda",
+                                                               "model_id":  "Qwen/Qwen3-4B-Thinking-2507"
+                                                           },
+                                                   "isotope":  {
+                                                                   "status":  "healthy",
+                                                                   "model_loaded":  true,
+                                                                   "device":  "cuda"
+                                                               }
+                                               }
+                              },
+                     "body_bytes_logged":  267,
+                     "body_truncated":  false
+                 }
+}

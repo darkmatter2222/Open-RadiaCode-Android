@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/pro_surface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Intelligence Report Guide"
+            android:textColor="@color/pro_cyan"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="The Intelligence Report analyzes your radiation readings in real-time to detect patterns, anomalies, and predict future values."
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="13sp"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="16dp"
+            android:background="@color/pro_border" />
+
+        <!-- Stability Indicator -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● Stability"
+            android:textColor="@color/pro_green"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Shows how consistent your readings are:\n• STABLE (green): Very consistent readings\n• VARIABLE (amber): Normal fluctuation\n• ERRATIC (red): High variability, may indicate changing conditions"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Dose Trend -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="↗ Dose Trend"
+            android:textColor="@color/pro_cyan"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Direction and strength of dose rate changes:\n• ↑ Rising: Readings increasing over time\n• ↓ Falling: Readings decreasing over time\n• → Stable: Readings staying constant\nBased on linear regression analysis."
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Prediction -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔮 Prediction"
+            android:textColor="@color/pro_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Predicted next reading based on current trend. The percentage shows prediction confidence (R² from regression):\n• High (>70%): Strong trend, reliable prediction\n• Medium (40-70%): Moderate reliability\n• Low (&lt;40%): Weak trend, less reliable"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Anomalies -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚠ Anomalies"
+            android:textColor="@color/pro_amber"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Readings that deviate significantly from the norm (>2.5 standard deviations):\n• Active: Currently in anomaly state\n• Recent: Anomalies detected in the analysis window\n\nAnomaly severity:\n• MEDIUM: 2.5-3σ deviation\n• HIGH: >3σ deviation"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Data Quality -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 Data Quality"
+            android:textColor="@color/pro_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Shows analysis reliability based on sample count:\n• Excellent (100+): Full statistical confidence\n• Good (50-99): Reliable analysis\n• Fair (20-49): Moderate confidence\n• Limited (&lt;20): More data needed"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Statistics -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📈 Statistics (Expanded View)"
+            android:textColor="@color/pro_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Tap the card to expand and see detailed statistics:\n• Min/Max: Range of readings\n• Mean: Average value\n• σ (Sigma): Standard deviation\n• CV%: Coefficient of variation (stability metric)\n• Background: Estimated normal background level"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="@color/pro_border" />
+
+        <!-- Alerts Badge -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔔 Alert Badge"
+            android:textColor="@color/pro_red"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="The badge shows active alerts:\n• Amber badge: Low/medium severity alerts\n• Red badge: High severity alerts\n\nAlerts trigger for:\n• Rising dose rate trend\n• High variability in readings\n• Elevated current reading"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
+
+    </LinearLayout>
+</ScrollView>

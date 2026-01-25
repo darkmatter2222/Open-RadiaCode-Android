@@ -1,0 +1,615 @@
+package com.radiacode.ble
+
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
+import kotlin.math.min
+
+/**
+ * Manages multiple simultaneous RadiaCode BLE connections.
+ * Each device gets its own BleClient instance and polling loop.
+ */
+class MultiDeviceBleManager(
+    private val context: Context,
+    private val onDeviceStateChanged: (DeviceState) -> Unit,
+    private val onDeviceReading: (String, Float, Float, Long) -> Unit,  // deviceId, uSvH, cps, timestampMs
+    private val onSpectrumReading: ((String, SpectrumData) -> Unit)? = null,  // deviceId, differential spectrum
+    private val onAccumulatedSpectrumReading: ((String, SpectrumData) -> Unit)? = null  // deviceId, accumulated spectrum
+) {
+    companion object {
+        private const val TAG = "RadiaCode"
+        private const val DEFAULT_POLL_MS = 1000L
+        private const val RECONNECT_BASE_DELAY_MS = 2_000L
+        private const val RECONNECT_MAX_DELAY_MS = 60_000L
+        private const val SPECTRUM_POLL_INTERVAL = 1  // Read spectrum every poll cycle (~1s) to match training data
+    }
+    
+    // Per-device state
+    private data class ManagedDevice(
+        val config: DeviceConfig,
+        var client: RadiacodeBleClient? = null,
+        var pollTask: ScheduledFuture<*>? = null,
+        var reconnectTask: ScheduledFuture<*>? = null,
+        var reconnectAttempts: Int = 0,
+        var consecutivePollFailures: Int = 0,
+        var lastSuccessfulPollMs: Long = 0L,
+        @Volatile var intentionalClose: Boolean = false,
+        var state: DeviceState = DeviceState(config),
+        var pollCycleCount: Int = 0,  // Track poll cycles for spectrum reading
+        var cachedCalibration: Triple<Float, Float, Float>? = null,  // a0, a1, a2
+        var previousSpectrum: IntArray? = null,  // For computing manual differential
+        var previousSpectrumTime: Long = 0L  // Timestamp of previous spectrum
+    )
+    
+    private val devices = ConcurrentHashMap<String, ManagedDevice>()
+    private val executor = Executors.newCachedThreadPool()
+    private val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
+    
+    @Volatile
+    private var isRunning = false
+    
+    /**
+     * Start the manager and connect to all enabled devices.
+     */
+    fun start() {
+        if (isRunning) return
+        isRunning = true
+        
+        // Migrate old single-device data if needed
+        Prefs.migrateToMultiDevice(context)
+        
+        // Load enabled devices and start connections
+        val enabledDevices = Prefs.getEnabledDevices(context)
+        Log.d(TAG, "MultiDeviceBleManager starting with ${enabledDevices.size} enabled devices")
+        
+        for (device in enabledDevices) {
+            addDevice(device)
+        }
+    }
+    
+    /**
+     * Stop all connections and clean up.
+     */
+    fun stop() {
+        isRunning = false
+        
+        for ((_, managed) in devices) {
+            disconnectDevice(managed, "Manager stopped")
+        }
+        devices.clear()
+        
+        try { scheduler.shutdownNow() } catch (_: Throwable) {}
+    }
+    
+    /**
+     * Add a device to be managed (and optionally connect).
+     */
+    fun addDevice(config: DeviceConfig, connect: Boolean = true) {
+        if (devices.containsKey(config.id)) {
+            Log.d(TAG, "Device ${config.id} already managed")
+            return
+        }
+        
+        val managed = ManagedDevice(
+            config = config,
+            state = DeviceState(config, DeviceConnectionState.DISCONNECTED)
+        )
+        devices[config.id] = managed
+        
+        Log.d(TAG, "Added device: ${config.displayName} (${config.macAddress})")
+        onDeviceStateChanged(managed.state)
+        
+        if (connect && config.enabled && isRunning) {
+            connectDevice(config.id)
+        }
+    }
+    
+    /**
+     * Remove a device from management.
+     */
+    fun removeDevice(deviceId: String) {
+        val managed = devices.remove(deviceId) ?: return
+        disconnectDevice(managed, "Device removed")
+        Log.d(TAG, "Removed device: ${managed.config.displayName}")
+    }
+    
+    /**
+     * Update device configuration (e.g., name change).
+     */
+    fun updateDevice(config: DeviceConfig) {
+        val managed = devices[config.id] ?: return
+        val wasEnabled = managed.config.enabled
+        
+        devices[config.id] = managed.copy(
+            config = config,
+            state = managed.state.copy(config = config)
+        )
+        
+        // Handle enable/disable change
+        if (!wasEnabled && config.enabled && isRunning) {
+            connectDevice(config.id)
+        } else if (wasEnabled && !config.enabled) {
+            disconnectDevice(managed, "Device disabled")
+        }
+        
+        onDeviceStateChanged(managed.state)
+    }
+    
+    /**
+     * Connect to a specific device.
+     */
+    @SuppressLint("MissingPermission")
+    fun connectDevice(deviceId: String) {
+        val managed = devices[deviceId] ?: return
+        
+        executor.execute {
+            managed.intentionalClose = true
+            
+            // Clean up existing connection
+            managed.reconnectTask?.cancel(true)
+            managed.reconnectTask = null
+            managed.pollTask?.cancel(true)
+            managed.pollTask = null
+            managed.client?.close()
+            managed.client = null
+            
+            Thread.sleep(200)
+            managed.intentionalClose = false
+            
+            // Update state
+            managed.state = managed.state.copy(
+                connectionState = DeviceConnectionState.CONNECTING,
+                statusMessage = "Connecting…"
+            )
+            onDeviceStateChanged(managed.state)
+            
+            val btManager = context.getSystemService(BluetoothManager::class.java)
+            val adapter = btManager?.adapter
+            
+            if (adapter == null || !adapter.isEnabled) {
+                scheduleReconnect(deviceId, "Bluetooth off")
+                return@execute
+            }
+            
+            val bleDevice: BluetoothDevice = try {
+                adapter.getRemoteDevice(managed.config.macAddress)
+            } catch (t: Throwable) {
+                managed.state = managed.state.copy(
+                    connectionState = DeviceConnectionState.ERROR,
+                    statusMessage = "Invalid MAC address"
+                )
+                onDeviceStateChanged(managed.state)
+                return@execute
+            }
+            
+            val client = RadiacodeBleClient(context) { msg ->
+                // Status callback
+                if (!managed.intentionalClose && 
+                    (msg.startsWith("Disconnected") || msg.startsWith("GATT error") || msg.startsWith("Service discovery failed"))) {
+                    scheduleReconnect(deviceId, msg)
+                }
+                managed.state = managed.state.copy(statusMessage = msg)
+                onDeviceStateChanged(managed.state)
+            }
+            
+            managed.client = client
+            
+            Log.d(TAG, "Connecting to ${managed.config.displayName} (${managed.config.macAddress})")
+            client.connect(bleDevice)
+            
+            client.ready()
+                .thenCompose { client.initializeSession() }
+                .thenRun {
+                    // Connection established!
+                    managed.reconnectAttempts = 0
+                    managed.consecutivePollFailures = 0
+                    managed.lastSuccessfulPollMs = System.currentTimeMillis()
+                    
+                    managed.state = managed.state.copy(
+                        connectionState = DeviceConnectionState.CONNECTED,
+                        statusMessage = "Connected"
+                    )
+                    onDeviceStateChanged(managed.state)
+                    
+                    Thread.sleep(300)
+                    startPolling(deviceId)
+                }
+                .exceptionally { t ->
+                    Log.e(TAG, "Connection failed for ${managed.config.displayName}", t)
+                    scheduleReconnect(deviceId, "Init failed")
+                    null
+                }
+        }
+    }
+    
+    /**
+     * Disconnect a specific device.
+     */
+    fun disconnectDevice(deviceId: String, reason: String = "User requested") {
+        val managed = devices[deviceId] ?: return
+        disconnectDevice(managed, reason)
+    }
+    
+    private fun disconnectDevice(managed: ManagedDevice, reason: String) {
+        Log.d(TAG, "Disconnecting ${managed.config.displayName}: $reason")
+        managed.intentionalClose = true
+        
+        managed.reconnectTask?.cancel(true)
+        managed.reconnectTask = null
+        managed.pollTask?.cancel(true)
+        managed.pollTask = null
+        managed.client?.close()
+        managed.client = null
+        
+        managed.state = managed.state.copy(
+            connectionState = DeviceConnectionState.DISCONNECTED,
+            statusMessage = reason
+        )
+        onDeviceStateChanged(managed.state)
+    }
+    
+    /**
+     * Force reconnect a device.
+     */
+    fun forceReconnect(deviceId: String) {
+        val managed = devices[deviceId] ?: return
+        Log.d(TAG, "Force reconnect: ${managed.config.displayName}")
+        managed.reconnectAttempts = 0
+        connectDevice(deviceId)
+    }
+    
+    /**
+     * Force reconnect all devices.
+     */
+    fun forceReconnectAll() {
+        for ((id, _) in devices) {
+            forceReconnect(id)
+        }
+    }
+    
+    private fun startPolling(deviceId: String) {
+        val managed = devices[deviceId] ?: return
+        managed.pollTask?.cancel(true)
+        managed.consecutivePollFailures = 0
+        scheduleNextPoll(deviceId, 0)
+    }
+    
+    private fun scheduleNextPoll(deviceId: String, delayMs: Long) {
+        val managed = devices[deviceId] ?: return
+        
+        managed.pollTask?.cancel(true)
+        managed.pollTask = scheduler.schedule(
+            {
+                val m = devices[deviceId] ?: return@schedule
+                val client = m.client ?: return@schedule
+                
+                // Increment poll cycle counter
+                m.pollCycleCount++
+                
+                // Check if we should read spectrum this cycle
+                val realtimeEnabled = Prefs.isIsotopeRealtimeEnabled(context)
+                val hasCallback = onSpectrumReading != null
+                val isSpectrumCycle = m.pollCycleCount % SPECTRUM_POLL_INTERVAL == 0
+                val shouldReadSpectrum = hasCallback && realtimeEnabled && isSpectrumCycle
+                
+                if (m.pollCycleCount % 10 == 0) {
+                    Log.d(TAG, "Poll cycle ${m.pollCycleCount} for $deviceId: realtimeEnabled=$realtimeEnabled hasCallback=$hasCallback isSpectrumCycle=$isSpectrumCycle")
+                }
+                
+                client.readDataBuf()
+                    .thenAccept { buf ->
+                        val decoded = RadiacodeDataBuf.decodeFullData(buf)
+                        val rt = decoded.realTimeData ?: return@thenAccept
+                        m.consecutivePollFailures = 0
+                        m.lastSuccessfulPollMs = System.currentTimeMillis()
+                        
+                        val uSvPerHour = rt.doseRate * 10000.0f
+                        val cps = rt.countRate
+                        val timestampMs = System.currentTimeMillis()
+                        
+                        // Update device state FIRST (fast, in-memory)
+                        m.state = m.state.copy(
+                            lastReading = DeviceReading(
+                                deviceId = deviceId,
+                                macAddress = m.config.macAddress,
+                                uSvPerHour = uSvPerHour,
+                                cps = cps,
+                                timestampMs = timestampMs,
+                                isConnected = true
+                            ),
+                            statusMessage = "${"%.3f".format(uSvPerHour)} μSv/h"
+                        )
+                        onDeviceStateChanged(m.state)
+                        
+                        // Callback IMMEDIATELY for fast UI updates (broadcast happens here)
+                        onDeviceReading(deviceId, uSvPerHour, cps, timestampMs)
+                        
+                        // Move heavy SharedPreferences writes to background thread
+                        // These parse 4000+ entry strings and are slow
+                        executor.execute {
+                            try {
+                                val reading = Prefs.LastReading(uSvPerHour, cps, timestampMs)
+                                Prefs.setDeviceLastReading(context, deviceId, uSvPerHour, cps, timestampMs)
+                                Prefs.addDeviceReading(context, deviceId, reading)
+                                
+                                // Also update global readings for compatibility
+                                Prefs.setLastReading(context, uSvPerHour, cps, timestampMs)
+                                Prefs.addRecentReading(context, reading)
+
+                                // Store device metadata (battery/temperature) when available
+                                decoded.metadata?.let { meta ->
+                                    Prefs.updateDeviceMetadata(
+                                        context = context,
+                                        deviceId = deviceId,
+                                        temperature = meta.temperature,
+                                        batteryLevel = meta.batteryLevel,
+                                        timestampMs = timestampMs
+                                    )
+                                }
+                            } catch (t: Throwable) {
+                                Log.w(TAG, "Background persistence failed", t)
+                            }
+                        }
+
+                        // Refresh RSSI (signal strength) after a successful poll
+                        client.readRemoteRssi()
+                            .thenAccept { rssi ->
+                                Prefs.setDeviceSignalStrength(context, deviceId, rssi)
+                            }
+                            .exceptionally {
+                                null
+                            }
+                        
+                        // Trigger spectrum read on a separate thread to avoid deadlock
+                        if (shouldReadSpectrum) {
+                            executor.execute { 
+                                readAndBroadcastSpectrum(deviceId, client, m) 
+                            }
+                        }
+                    }
+                    .exceptionally { t ->
+                        m.consecutivePollFailures += 1
+                        Log.e(TAG, "Poll failed for ${m.config.displayName} (count=${m.consecutivePollFailures})", t)
+                        
+                        val timeSinceSuccess = System.currentTimeMillis() - m.lastSuccessfulPollMs
+                        val shouldReconnect = m.consecutivePollFailures >= 5 || timeSinceSuccess > 30_000L
+                        
+                        if (shouldReconnect && m.consecutivePollFailures >= 3) {
+                            scheduleReconnect(deviceId, "Read failed")
+                        }
+                        null
+                    }
+                    .whenComplete { _, _ ->
+                        // Schedule next poll
+                        val mm = devices[deviceId]
+                        if (mm?.client != null && mm.reconnectTask?.isDone != false) {
+                            scheduleNextPoll(deviceId, Prefs.getPollIntervalMs(context, DEFAULT_POLL_MS))
+                        }
+                    }
+            },
+            delayMs,
+            TimeUnit.MILLISECONDS
+        )
+    }
+    
+    /**
+     * Read spectrum data and send to callback.
+     * 
+     * IMPORTANT: We compute the differential spectrum MANUALLY by subtracting the previous
+     * spectrum from the current spectrum. The device's VS_SPEC_DIFF register is unreliable -
+     * even the official Python library (cdump/radiacode) does not use it!
+     * 
+     * From show-spectrum.py:
+     *   spectrum = rc.spectrum()
+     *   counts_diff = actual_counts - previous_counts
+     * 
+     * This gives us consistent 1-second differential data for the spectrogram.
+     */
+    private fun readAndBroadcastSpectrum(deviceId: String, client: RadiacodeBleClient, managed: ManagedDevice) {
+        Log.d(TAG, "Starting spectrum read for $deviceId (manual differential)")
+        
+        // Use async chaining to avoid deadlocks
+        // First read calibration if not cached
+        val calibFuture = if (managed.cachedCalibration == null) {
+            client.readEnergyCalibration()
+                .thenApply { calib ->
+                    if (calib != null) {
+                        managed.cachedCalibration = Triple(calib.a0, calib.a1, calib.a2)
+                        Log.d(TAG, "Cached calibration for $deviceId: a0=${calib.a0} a1=${calib.a1} a2=${calib.a2}")
+                    }
+                    managed.cachedCalibration
+                }
+        } else {
+            java.util.concurrent.CompletableFuture.completedFuture(managed.cachedCalibration)
+        }
+        
+        // Read VS.SPECTRUM (not VS_SPEC_DIFF!) and compute differential manually
+        // This is how the official Python library does it and it's more reliable
+        calibFuture
+            .thenCompose { calib ->
+                client.readSpectrum().thenApply { spectrum -> Pair(calib, spectrum) }
+            }
+            .thenAccept { (calib, spectrum) ->
+                if (spectrum != null) {
+                    val now = System.currentTimeMillis()
+                    val currentCounts = spectrum.counts
+                    
+                    // Compute differential from previous spectrum
+                    val diffCounts = if (managed.previousSpectrum != null && 
+                        managed.previousSpectrum!!.size == currentCounts.size) {
+                        
+                        val prev = managed.previousSpectrum!!
+                        IntArray(currentCounts.size) { i ->
+                            // Counts can only increase in accumulated spectrum
+                            // Negative means spectrum was reset - treat as 0
+                            val diff = currentCounts[i] - prev[i]
+                            if (diff >= 0) diff else 0
+                        }
+                    } else {
+                        // First read - use zeros (will show as empty first row)
+                        IntArray(currentCounts.size) { 0 }
+                    }
+                    
+                    // Calculate time since last spectrum
+                    val elapsedSeconds = if (managed.previousSpectrumTime > 0) {
+                        ((now - managed.previousSpectrumTime) / 1000.0).toInt().coerceAtLeast(1)
+                    } else {
+                        1
+                    }
+                    
+                    // Store for next differential
+                    managed.previousSpectrum = currentCounts.copyOf()
+                    managed.previousSpectrumTime = now
+                    
+                    // Create differential spectrum with calibration
+                    val diffSpectrum = SpectrumData(
+                        durationSeconds = elapsedSeconds,
+                        a0 = calib?.first ?: spectrum.a0,
+                        a1 = calib?.second ?: spectrum.a1,
+                        a2 = calib?.third ?: spectrum.a2,
+                        counts = diffCounts,
+                        timestampMs = now
+                    )
+                    
+                    val totalDiffCounts = diffCounts.sum()
+                    val maxDiffCount = diffCounts.maxOrNull() ?: 0
+                    val nonZero = diffCounts.count { it > 0 }
+                    Log.d(TAG, "Manual differential for $deviceId: elapsed=${elapsedSeconds}s totalCounts=$totalDiffCounts maxCount=$maxDiffCount nonZero=$nonZero")
+                    
+                    // Send differential spectrum to spectrogram
+                    onSpectrumReading?.invoke(deviceId, diffSpectrum)
+                    
+                    // Also send accumulated spectrum if callback is set
+                    if (onAccumulatedSpectrumReading != null) {
+                        val fullSpectrum = if (calib != null) {
+                            spectrum.copy(a0 = calib.first, a1 = calib.second, a2 = calib.third)
+                        } else {
+                            spectrum
+                        }
+                        Log.d(TAG, "Accumulated spectrum for $deviceId: ${fullSpectrum.numChannels} ch, totalCounts=${fullSpectrum.totalCounts}, duration=${fullSpectrum.durationSeconds}s")
+                        onAccumulatedSpectrumReading?.invoke(deviceId, fullSpectrum)
+                    }
+                } else {
+                    Log.w(TAG, "Spectrum was null for $deviceId")
+                }
+            }
+            .exceptionally { t ->
+                Log.w(TAG, "Spectrum read failed for $deviceId", t)
+                null
+            }
+    }
+    
+    private fun scheduleReconnect(deviceId: String, reason: String) {
+        val managed = devices[deviceId] ?: return
+        
+        // Avoid spamming
+        if (managed.reconnectTask?.isDone == false) return
+        if (managed.intentionalClose) {
+            Log.d(TAG, "Reconnect ignored (intentional close) for ${managed.config.displayName}: $reason")
+            return
+        }
+        
+        managed.intentionalClose = true
+        
+        managed.pollTask?.cancel(true)
+        managed.pollTask = null
+        managed.client?.close()
+        managed.client = null
+        
+        managed.intentionalClose = false
+        
+        managed.reconnectAttempts += 1
+        val backoff = min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * managed.reconnectAttempts.toLong())
+        
+        Log.d(TAG, "Scheduling reconnect for ${managed.config.displayName} in ${backoff}ms: $reason")
+        
+        managed.state = managed.state.copy(
+            connectionState = DeviceConnectionState.RECONNECTING,
+            statusMessage = "Reconnecting… ($reason)"
+        )
+        onDeviceStateChanged(managed.state)
+        
+        managed.reconnectTask = scheduler.schedule(
+            { connectDevice(deviceId) },
+            backoff,
+            TimeUnit.MILLISECONDS
+        )
+    }
+    
+    /**
+     * Get current state for all devices.
+     */
+    fun getAllDeviceStates(): List<DeviceState> {
+        return devices.values.map { it.state }
+    }
+    
+    /**
+     * Get state for a specific device.
+     */
+    fun getDeviceState(deviceId: String): DeviceState? {
+        return devices[deviceId]?.state
+    }
+    
+    /**
+     * Get connected device count.
+     */
+    fun getConnectedCount(): Int {
+        return devices.values.count { it.state.connectionState == DeviceConnectionState.CONNECTED }
+    }
+    
+    /**
+     * Get total managed device count.
+     */
+    fun getTotalCount(): Int {
+        return devices.size
+    }
+    
+    /**
+     * Check if any device is connected.
+     */
+    fun hasAnyConnected(): Boolean {
+        return devices.values.any { it.state.connectionState == DeviceConnectionState.CONNECTED }
+    }
+    
+    /**
+     * Get BLE client for a device (for direct operations like spectrum reading).
+     * Returns the client for first connected device if deviceId is null.
+     */
+    internal fun getClient(deviceId: String? = null): RadiacodeBleClient? {
+        val targetId = deviceId ?: devices.values
+            .firstOrNull { it.state.connectionState == DeviceConnectionState.CONNECTED }
+            ?.config?.id
+        
+        return targetId?.let { devices[it]?.client }
+    }
+    
+    /**
+     * Reload devices from preferences and sync state.
+     */
+    fun reloadDevices() {
+        val savedDevices = Prefs.getDevices(context).associateBy { it.id }
+        
+        // Remove devices that are no longer in prefs
+        val toRemove = devices.keys.filter { !savedDevices.containsKey(it) }
+        for (id in toRemove) {
+            removeDevice(id)
+        }
+        
+        // Add/update devices from prefs
+        for ((id, config) in savedDevices) {
+            if (devices.containsKey(id)) {
+                updateDevice(config)
+            } else {
+                addDevice(config)
+            }
+        }
+    }
+}

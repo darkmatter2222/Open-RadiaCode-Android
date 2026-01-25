@@ -1,0 +1,17 @@
+# Vega Voice Synthesis API - Docker Requirements
+# Base dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# ML/Audio
+torch>=2.0.0
+numpy>=1.24,<1.26
+torchaudio>=2.0.0
+
+# Chatterbox TTS
+chatterbox-tts>=0.1.2
+
+# Audio processing (required by chatterbox)
+librosa>=0.10.0
+soundfile>=0.12.0

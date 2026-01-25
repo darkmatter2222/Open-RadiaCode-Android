@@ -1,0 +1,47 @@
+# Vega Ingress - Docker Compose
+# API Gateway for Vega services
+
+services:
+  vega-ingress:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-ingress:latest
+    container_name: vega-ingress
+    restart: unless-stopped
+    
+    # Environment
+    environment:
+      # Point to host services (use host.docker.internal on Docker Desktop,
+      # or actual host IP on Linux)
+      - VEGA_TTS_BACKEND=http://172.17.0.1:8010
+      - VEGA_LLM_BACKEND=http://172.17.0.1:8001
+      - VEGA_ISOTOPE_BACKEND=http://172.17.0.1:8020
+      - VEGA_BACKEND_TIMEOUT=120
+
+      # Ingress request/response logging (JSON payloads)
+      - VEGA_INGRESS_LOG_ENABLED=1
+      - VEGA_INGRESS_LOG_DIR=/var/log/vega-ingress
+      - VEGA_INGRESS_LOG_RETENTION_HOURS=24
+      - VEGA_INGRESS_LOG_CLEANUP_INTERVAL_SECONDS=600
+      - VEGA_INGRESS_LOG_MAX_BODY_BYTES=1048576
+    
+    # Expose on port 8080 (port 8000 may be used by Portainer)
+    ports:
+      - "8080:8080"
+
+    # Persist logs on the host
+    volumes:
+      - ./logs:/var/log/vega-ingress
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Add host access for Linux (Docker bridge network gateway)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

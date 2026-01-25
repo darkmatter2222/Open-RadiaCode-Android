@@ -1,0 +1,47 @@
+# Vega LLM API - Docker Compose
+# GPU-accelerated Qwen2.5 language model
+
+services:
+  vega-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-llm-api:latest
+    container_name: vega-llm
+    restart: unless-stopped
+    
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment
+    environment:
+      - VEGA_MODEL_ID=Qwen/Qwen2.5-0.5B-Instruct
+      - VEGA_DEVICE=cuda
+      - VEGA_MAX_TOKENS=2048
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_TOKEN=${HF_TOKEN}
+    
+    # Ports - using 8001 to not conflict with TTS on 8000
+    ports:
+      - "8001:8001"
+    
+    # Cache model downloads
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s  # Model download + load takes time
+
+volumes:
+  huggingface-cache:

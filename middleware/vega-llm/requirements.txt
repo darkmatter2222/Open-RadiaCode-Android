@@ -1,0 +1,18 @@
+# Vega LLM API - Python Dependencies
+
+# Core API
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# PyTorch - using CPU by default, CUDA installed in Docker
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.1.0
+
+# Transformers for Qwen3 - pinned for PyTorch 2.1 compatibility
+transformers>=4.40.0,<4.50.0
+accelerate>=0.27.0,<1.0.0
+sentencepiece>=0.1.99
+
+# HuggingFace Hub
+huggingface-hub>=0.20.0,<1.0.0

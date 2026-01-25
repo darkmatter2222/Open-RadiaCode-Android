@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
+
+    <!-- Legacy (Android 11 and below) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    
+    <!-- Location permissions for BLE scanning (legacy) and map feature (all versions) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Map tile caching -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+
+    <!-- Android 12+ -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Audio visualization for intro -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.RadiaCode"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".FindDevicesActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ChartFocusActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
+            android:name=".DetailedChartActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:label="Detailed Analysis" />
+
+        <activity
+            android:name=".FullscreenMapActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.RadiaCode.Fullscreen"
+            android:label="Radiation Map" />
+
+        <activity
+            android:name=".AlertConfigActivity"
+            android:exported="false"
+            android:label="Smart Alerts" />
+
+        <activity
+            android:name=".IsotopeSettingsActivity"
+            android:exported="false"
+            android:label="Isotope Settings" />
+
+        <activity
+            android:name=".VegaStatisticalSettingsActivity"
+            android:exported="false"
+            android:label="VEGA Intelligence" />
+
+        <activity
+            android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Widget Configuration">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".WidgetConfigActivityV2"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Configure Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".WidgetCrafterActivity"
+            android:exported="false"
+            android:label="Widget Crafter" />
+
+        <activity
+            android:name=".NotificationSettingsActivity"
+            android:exported="false"
+            android:label="Notification Settings" />
+
+        <activity
+            android:name=".SoundSettingsActivity"
+            android:exported="false"
+            android:label="Sound Settings" />
+
+        <!-- Dashboard Enhancement Activities -->
+        <activity
+            android:name=".SessionListActivity"
+            android:exported="false"
+            android:label="Recording Sessions" />
+
+        <activity
+            android:name=".HelpCenterActivity"
+            android:exported="false"
+            android:label="Help Center" />
+
+        <activity
+            android:name=".WidgetGalleryActivity"
+            android:exported="false"
+            android:label="Widget Gallery" />
+
+        <!-- Vega Spectral Analysis (Spectrogram) -->
+        <activity
+            android:name=".spectrogram.VegaSpectralAnalysisActivity"
+            android:exported="false"
+            android:label="Vega Spectral Analysis" />
+
+        <!-- Isotope Analysis Results (Full-screen) -->
+        <activity
+            android:name=".spectrogram.IsotopeAnalysisActivity"
+            android:exported="false"
+            android:label="Isotope Analysis"
+            android:theme="@style/Theme.RadiaCode" />
+
+        <service
+            android:name=".RadiaCodeForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Widget Quick Actions Receiver -->
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.radiacode.ble.widget.ACTION_START" />
+                <action android:name="com.radiacode.ble.widget.ACTION_STOP" />
+                <action android:name="com.radiacode.ble.widget.ACTION_TOGGLE" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SHARE" />
+                <action android:name="com.radiacode.ble.widget.ACTION_MAP" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SPECTRUM" />
+                <action android:name="com.radiacode.ble.widget.ACTION_SETTINGS" />
+                <action android:name="com.radiacode.ble.widget.ACTION_REFRESH" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Unified Widget - the only widget provider -->
+        <receiver
+            android:name=".UnifiedWidgetProvider"
+            android:exported="true"
+            android:label="RadiaCode Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_unified_info" />
+        </receiver>
+
+        <!-- Map Widget - radiation map visualization -->
+        <receiver
+            android:name=".MapWidgetProvider"
+            android:exported="true"
+            android:label="Open RadiaCode Maps">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_map_info" />
+        </receiver>
+
+        <activity
+            android:name=".MapWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RadiaCode"
+            android:label="Configure Map Widget">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+</manifest>

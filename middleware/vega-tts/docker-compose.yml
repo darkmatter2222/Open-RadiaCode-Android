@@ -1,0 +1,46 @@
+# Vega API - Docker Compose for local testing and deployment
+# For GPU support, ensure nvidia-docker2 is installed
+
+version: '3.8'
+
+services:
+  vega-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-tts-api:latest
+    container_name: vega-api
+    restart: unless-stopped
+    
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment
+    environment:
+      - VEGA_MODEL_DIR=/app/models/vega_tuned
+      - VEGA_DEVICE=cuda
+      - VEGA_MAX_TEXT_LENGTH=5000
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_TOKEN=${HF_TOKEN}
+    
+    # Ports
+    ports:
+      - "8000:8000"
+    
+    # Mount model files (alternative to baking them in)
+    volumes:
+      - ./models/vega_tuned:/app/models/vega_tuned:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Model loading takes time

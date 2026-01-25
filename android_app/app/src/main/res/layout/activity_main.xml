@@ -1,0 +1,2555 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background">
+
+    <androidx.coordinatorlayout.widget.CoordinatorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/pro_background">
+
+        <com.google.android.material.appbar.AppBarLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/pro_background"
+            app:elevation="0dp">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:minHeight="36dp"
+                android:background="@color/pro_background"
+                app:title="@string/app_name"
+                app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
+                app:titleTextColor="@color/pro_text_primary">
+
+                <!-- Live status indicator -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginEnd="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <!-- Spectrogram recording indicator -->
+                    <View
+                        android:id="@+id/spectrogramRecordingDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/status_dot"
+                        android:visibility="gone" />
+
+                    <View
+                        android:id="@+id/statusDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/status_dot" />
+
+                    <TextView
+                        android:id="@+id/statusLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="LIVE"
+                        android:textColor="@color/pro_status_live"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:id="@+id/readingPulseDot"
+                        android:layout_width="6dp"
+                        android:layout_height="6dp"
+                        android:layout_marginStart="10dp"
+                        android:alpha="0.6"
+                        android:background="@drawable/reading_pulse_dot" />
+
+                </LinearLayout>
+            </com.google.android.material.appbar.MaterialToolbar>
+        </com.google.android.material.appbar.AppBarLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/contentScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:background="@color/pro_background"
+            app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <!-- ==================== DASHBOARD PANEL ==================== -->
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+                    
+                <LinearLayout
+                    android:id="@+id/panelDashboard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <!-- Device Selector (hidden if only 1 device) - includes integrated metadata -->
+                    <com.radiacode.ble.ui.DeviceSelectorView
+                        android:id="@+id/deviceSelector"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:visibility="gone" />
+
+                    <!-- Metric Cards Row -->
+                    <LinearLayout
+                        android:id="@+id/metricsCardsRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.radiacode.ble.ui.MetricCardView
+                            android:id="@+id/doseCard"
+                            android:layout_width="0dp"
+                            android:layout_height="160dp"
+                            android:layout_weight="1"
+                            android:layout_marginEnd="6dp" />
+
+                        <com.radiacode.ble.ui.MetricCardView
+                            android:id="@+id/cpsCard"
+                            android:layout_width="0dp"
+                            android:layout_height="160dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp" />
+                    </LinearLayout>
+
+                    <!-- Intelligence Report Card -->
+                    <LinearLayout
+                        android:id="@+id/intelligenceCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="12dp"
+                        android:visibility="gone">
+
+                        <!-- Header Row with Title, Info Button, and Alert Badge -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="INTELLIGENCE REPORT"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <!-- Info Button -->
+                            <ImageView
+                                android:id="@+id/intelligenceInfoButton"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_marginEnd="8dp"
+                                android:src="@android:drawable/ic_dialog_info"
+                                android:tint="@color/pro_text_muted"
+                                android:contentDescription="Help"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:padding="2dp" />
+                            
+                            <!-- Alert badge count -->
+                            <TextView
+                                android:id="@+id/intelligenceAlertBadge"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/badge_background"
+                                android:paddingHorizontal="8dp"
+                                android:paddingVertical="2dp"
+                                android:text="0"
+                                android:textColor="@color/pro_background"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <!-- Stability and Data Quality Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <!-- Stability Indicator -->
+                            <TextView
+                                android:id="@+id/stabilityIndicator"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="● STABLE"
+                                android:textColor="@color/pro_green"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                            
+                            <View
+                                android:layout_width="1dp"
+                                android:layout_height="12dp"
+                                android:layout_marginHorizontal="10dp"
+                                android:background="@color/pro_border" />
+                            
+                            <!-- Data Quality -->
+                            <TextView
+                                android:id="@+id/dataQualityLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Good (50 samples)"
+                                android:textColor="@color/pro_text_secondary"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <!-- Summary text -->
+                        <TextView
+                            android:id="@+id/intelligenceSummary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Analyzing data..."
+                            android:textColor="@color/pro_text_secondary"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="4dp" />
+
+                        <!-- Main Metrics Row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+                            
+                            <!-- Dose Trend Column -->
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Dose Trend"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/doseTrendLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="—"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                            
+                            <!-- Prediction Column -->
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Predicted Next"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/predictedDoseLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="—"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="14sp" />
+                                
+                                <!-- Confidence indicator -->
+                                <TextView
+                                    android:id="@+id/predictionConfidenceLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="—"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                            
+                            <!-- Anomalies Column -->
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+                                
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Anomalies"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                                
+                                <TextView
+                                    android:id="@+id/anomalyCountLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="2dp"
+                                    android:text="0"
+                                    android:textColor="@color/pro_green"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+                                
+                                <!-- Active/Recent distinction -->
+                                <TextView
+                                    android:id="@+id/anomalyDetailLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="none"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Expandable Details Section -->
+                        <LinearLayout
+                            android:id="@+id/intelligenceExpandedSection"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+                            
+                            <!-- Divider -->
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="@color/pro_border" />
+                            
+                            <!-- Statistics Grid -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:orientation="horizontal">
+                                
+                                <!-- Min/Max Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Range"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsRangeLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Std Dev Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Std Dev (σ)"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsStdDevLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- CV% Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="CV%"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsCvLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </LinearLayout>
+                            
+                            <!-- Second Stats Row -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:orientation="horizontal">
+                                
+                                <!-- Background Level Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Est. Background"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsBackgroundLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Current vs Background Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="vs Background"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsVsBackgroundLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                                
+                                <!-- Current Z-Score Column -->
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+                                    
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Current Z"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="10sp" />
+                                    
+                                    <TextView
+                                        android:id="@+id/statsZScoreLabel"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="—"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Expand/Collapse Indicator -->
+                        <LinearLayout
+                            android:id="@+id/intelligenceExpandButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:orientation="horizontal"
+                            android:padding="4dp"
+                            android:background="?attr/selectableItemBackground">
+                            
+                            <TextView
+                                android:id="@+id/intelligenceExpandText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Show Details"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp" />
+                            
+                            <ImageView
+                                android:id="@+id/intelligenceExpandArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_marginStart="4dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                android:tint="@color/pro_text_muted"
+                                android:contentDescription="Expand" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Dose Chart -->
+                    <LinearLayout
+                        android:id="@+id/doseChartPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:id="@+id/doseChartTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="REAL TIME DOSE RATE — Last 1m"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <ImageButton
+                                android:id="@+id/doseChartGoRealtime"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_go_realtime"
+                                android:contentDescription="Go to real-time"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_cyan" />
+                            
+                            <ImageButton
+                                android:id="@+id/doseChartReset"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_reset_zoom"
+                                android:contentDescription="Reset zoom"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <com.radiacode.ble.ui.ProChartView
+                            android:id="@+id/doseChart"
+                            android:layout_width="match_parent"
+                            android:layout_height="160dp"
+                            android:layout_marginTop="8dp" />
+
+                        <com.radiacode.ble.ui.StatRowView
+                            android:id="@+id/doseStats"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+
+                    <!-- CPS Chart -->
+                    <LinearLayout
+                        android:id="@+id/cpsChartPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:id="@+id/cpsChartTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="REAL TIME COUNT RATE — Last 1m"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <ImageButton
+                                android:id="@+id/cpsChartGoRealtime"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_go_realtime"
+                                android:contentDescription="Go to real-time"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_cyan" />
+                            
+                            <ImageButton
+                                android:id="@+id/cpsChartReset"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_reset_zoom"
+                                android:contentDescription="Reset zoom"
+                                android:visibility="gone"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <com.radiacode.ble.ui.ProChartView
+                            android:id="@+id/cpsChart"
+                            android:layout_width="match_parent"
+                            android:layout_height="160dp"
+                            android:layout_marginTop="8dp" />
+
+                        <com.radiacode.ble.ui.StatRowView
+                            android:id="@+id/cpsStats"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+                    
+                    <!-- Live Map Card -->
+                    <com.radiacode.ble.ui.MapCardView
+                        android:id="@+id/mapCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp" />
+
+                    <!-- Isotope Detection Panel -->
+                    <LinearLayout
+                        android:id="@+id/isotopePanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="12dp"
+                        android:visibility="gone">
+
+                        <!-- Header with title and controls -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:id="@+id/isotopeChartTitle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="ISOTOPE IDENTIFICATION"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+                            
+                            <!-- Accumulation Mode Toggle (FULL / INT) -->
+                            <TextView
+                                android:id="@+id/isotopeAccumulationModeToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="4dp"
+                                android:text="FULL"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:background="@drawable/chip_outline_background" />
+                            
+                            <!-- Display Mode Toggle (Probability / Fraction) -->
+                            <TextView
+                                android:id="@+id/isotopeDisplayModeToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="4dp"
+                                android:text="PROB"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:background="@drawable/chip_outline_background" />
+                            
+                            <!-- Hide Background Toggle -->
+                            <TextView
+                                android:id="@+id/isotopeHideBackgroundToggle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="6dp"
+                                android:paddingHorizontal="6dp"
+                                android:paddingVertical="4dp"
+                                android:text="BKG"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:background="@drawable/chip_outline_background" />
+                            
+                            <!-- Chart Type Selector -->
+                            <ImageButton
+                                android:id="@+id/isotopeChartTypeBtn"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_chart_line"
+                                android:contentDescription="Chart type"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                            
+                            <!-- Settings -->
+                            <ImageButton
+                                android:id="@+id/isotopeSettingsBtn"
+                                android:layout_width="28dp"
+                                android:layout_height="28dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:src="@drawable/ic_settings"
+                                android:contentDescription="Isotope settings"
+                                android:scaleType="centerInside"
+                                android:padding="4dp"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <!-- Mode selector: Scan vs Real-time -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/isotopeScanBtn"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="SCAN"
+                                android:textSize="11sp"
+                                android:insetTop="0dp"
+                                android:insetBottom="0dp"
+                                android:minHeight="0dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="16dp"
+                                app:cornerRadius="18dp"
+                                app:strokeColor="@color/pro_cyan"
+                                android:textColor="@color/pro_cyan" />
+                            
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/isotopeRealtimeSwitch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="16dp"
+                                android:text="Real-time"
+                                android:textColor="@color/pro_text_secondary"
+                                android:textSize="12sp"
+                                app:thumbTint="@color/pro_cyan"
+                                app:trackTint="@color/pro_border" />
+                            
+                            <View
+                                android:layout_width="0dp"
+                                android:layout_height="1dp"
+                                android:layout_weight="1" />
+                            
+                            <!-- Status indicator -->
+                            <TextView
+                                android:id="@+id/isotopeStatusLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Idle"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="10sp" />
+                        </LinearLayout>
+
+                        <!-- Chart container (swappable views) -->
+                        <FrameLayout
+                            android:id="@+id/isotopeChartContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="180dp"
+                            android:layout_marginTop="8dp">
+                            
+                            <!-- Multi-line chart (default) -->
+                            <com.radiacode.ble.ui.IsotopeChartView
+                                android:id="@+id/isotopeMultiLineChart"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:visibility="visible" />
+                            
+                            <!-- Stacked area chart -->
+                            <com.radiacode.ble.ui.StackedAreaChartView
+                                android:id="@+id/isotopeStackedChart"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:visibility="gone" />
+                            
+                            <!-- Animated bar chart -->
+                            <com.radiacode.ble.ui.IsotopeBarChartView
+                                android:id="@+id/isotopeBarChart"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:visibility="gone" />
+                            
+                            <!-- Scan result placeholder -->
+                            <LinearLayout
+                                android:id="@+id/isotopeScanResultContainer"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:orientation="vertical"
+                                android:visibility="gone">
+                                
+                                <TextView
+                                    android:id="@+id/isotopeScanResultText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Press SCAN to identify isotopes"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="13sp"
+                                    android:gravity="center" />
+                                
+                                <ProgressBar
+                                    android:id="@+id/isotopeScanProgress"
+                                    android:layout_width="24dp"
+                                    android:layout_height="24dp"
+                                    android:layout_marginTop="8dp"
+                                    android:visibility="gone"
+                                    android:indeterminateTint="@color/pro_cyan" />
+                            </LinearLayout>
+                        </FrameLayout>
+
+                        <!-- Top isotope quick view (always visible at bottom) -->
+                        <LinearLayout
+                            android:id="@+id/isotopeQuickView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="TOP:"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+                            
+                            <TextView
+                                android:id="@+id/isotopeTopResult"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="8dp"
+                                android:text="—"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="11sp"
+                                android:singleLine="true"
+                                android:ellipsize="end" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Session Info -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/sessionInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="SESSION: 0s • 0 samples"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                </LinearLayout>
+                
+                <!-- All Devices overlay (shown when no specific device selected) -->
+                <LinearLayout
+                    android:id="@+id/allDevicesOverlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@color/pro_background"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="32dp"
+                    android:visibility="gone">
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="All Devices View"
+                        android:textColor="@color/pro_text_primary"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                    
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:text="Select a specific device from the dropdown above to view its data.\n\nMulti-device dashboard coming soon."
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="14sp" />
+                        
+                </LinearLayout>
+                
+                <!-- Edit Dashboard FAB -->
+                <com.google.android.material.floatingactionbutton.FloatingActionButton
+                    android:id="@+id/fabEditDashboard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|end"
+                    android:layout_margin="16dp"
+                    android:contentDescription="Edit dashboard layout"
+                    android:src="@drawable/ic_edit_dashboard"
+                    app:fabSize="mini"
+                    app:backgroundTint="@color/pro_surface"
+                    app:tint="@color/pro_cyan"
+                    app:elevation="4dp"
+                    app:borderWidth="1dp" />
+                
+                <!-- Edit Mode Toolbar (shown when editing) -->
+                <LinearLayout
+                    android:id="@+id/editModeToolbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_gravity="bottom"
+                    android:background="@color/pro_surface"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="12dp"
+                    android:visibility="gone"
+                    android:elevation="8dp">
+                    
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Editing Layout"
+                        android:textColor="@color/pro_cyan"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+                    
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnResetDashboard"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Reset"
+                        android:textColor="@color/pro_text_muted"
+                        app:icon="@android:drawable/ic_menu_revert"
+                        app:iconTint="@color/pro_text_muted"
+                        app:rippleColor="@color/pro_border" />
+                    
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDoneEditing"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Done"
+                        android:textColor="@color/pro_green"
+                        app:icon="@android:drawable/ic_menu_save"
+                        app:iconTint="@color/pro_green"
+                        app:rippleColor="@color/pro_green" />
+                </LinearLayout>
+                
+                </FrameLayout>
+
+                <!-- ==================== DEVICE PANEL ==================== -->
+                <LinearLayout
+                    android:id="@+id/panelDevice"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <!-- Summary Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <!-- Connection Summary -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <View
+                                android:id="@+id/connectionDot"
+                                android:layout_width="12dp"
+                                android:layout_height="12dp"
+                                android:background="@drawable/status_dot" />
+
+                            <TextView
+                                android:id="@+id/connectionStatus"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="12dp"
+                                android:text="No devices"
+                                android:textColor="@color/pro_text_primary"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+                                
+                            <TextView
+                                android:id="@+id/deviceCountText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0 devices"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/autoConnectSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="Auto-connect on startup"
+                            android:textColor="@color/pro_text_primary" />
+
+                    </LinearLayout>
+
+                    <!-- Devices Section Header -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="MY DEVICES"
+                            android:textColor="@color/pro_cyan"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1" />
+
+                    </LinearLayout>
+
+                    <!-- Device List Container -->
+                    <LinearLayout
+                        android:id="@+id/deviceListContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:divider="@drawable/list_divider"
+                        android:showDividers="middle" />
+
+                    <!-- No devices placeholder -->
+                    <TextView
+                        android:id="@+id/noDevicesText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/card_background"
+                        android:padding="24dp"
+                        android:gravity="center"
+                        android:text="No devices configured.\nTap 'Add Device' to scan for RadiaCode devices."
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="14sp"
+                        android:visibility="gone" />
+                        
+                    <!-- Legacy preferred device text (hidden, for compatibility) -->
+                    <TextView
+                        android:id="@+id/preferredDeviceText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:text="Not set" />
+
+                    <!-- Action Buttons -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/findDevicesButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="Add Device"
+                        app:icon="@drawable/ic_add"
+                        app:backgroundTint="@color/pro_cyan"
+                        android:textColor="@color/pro_background" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/reconnectButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Reconnect All"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        app:strokeColor="@color/pro_border"
+                        android:textColor="@color/pro_text_secondary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/stopServiceButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Stop All"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        app:strokeColor="@color/pro_border"
+                        android:textColor="@color/pro_text_muted" />
+
+                </LinearLayout>
+
+                <!-- ==================== SETTINGS PANEL ==================== -->
+                <LinearLayout
+                    android:id="@+id/panelSettings"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <!-- ===== APPLICATION SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Application -->
+                        <LinearLayout
+                            android:id="@+id/sectionAppHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="APPLICATION"
+                                android:textColor="@color/pro_green"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAppArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionAppContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Notification Settings -->
+                            <LinearLayout
+                                android:id="@+id/rowNotificationSettings"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Notification Settings"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Configure status bar notification content"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueNotificationStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Readings"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Play Intro -->
+                            <LinearLayout
+                                android:id="@+id/rowPlayIntro"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Play Introduction"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Meet Vega, your radiological companion"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_media_play"
+                                    app:tint="@color/pro_cyan" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== SOUNDS SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Sounds -->
+                        <LinearLayout
+                            android:id="@+id/sectionSoundsHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="SOUNDS"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionSoundsArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionSoundsContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Sound Settings -->
+                            <LinearLayout
+                                android:id="@+id/rowSoundSettings"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Sound Settings"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Audio feedback and ambient sounds"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueSoundSettings"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="3 enabled"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DASHBOARD SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Dashboard -->
+                        <LinearLayout
+                            android:id="@+id/sectionDashboardHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="DASHBOARD"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionDashboardArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionDashboardContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Edit Dashboard Layout -->
+                            <LinearLayout
+                                android:id="@+id/rowEditDashboard"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Edit Dashboard Layout"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Drag and resize panels to customize"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@drawable/ic_edit_dashboard"
+                                    app:tint="@color/pro_magenta" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.3" />
+
+                            <!-- Reset Dashboard Layout -->
+                            <LinearLayout
+                                android:id="@+id/rowResetDashboard"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Reset Dashboard Layout"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Restore default panel arrangement"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_revert"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== CHART SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Charts -->
+                        <LinearLayout
+                            android:id="@+id/sectionChartHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="CHART SETTINGS"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionChartArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionChartContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Window -->
+                            <LinearLayout
+                                android:id="@+id/rowWindow"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Time window"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueWindow"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="1m"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Smoothing -->
+                            <LinearLayout
+                                android:id="@+id/rowSmoothing"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Smoothing"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueSmoothing"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Off"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Spike Markers -->
+                            <LinearLayout
+                                android:id="@+id/rowSpikeMarkers"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Spike markers"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueSpikeMarkers"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="On"
+                                    android:textColor="@color/pro_green"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <!-- Divider -->
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Spike Percentages -->
+                            <LinearLayout
+                                android:id="@+id/rowSpikePercentages"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Spike percentages"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueSpikePercentages"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="On"
+                                    android:textColor="@color/pro_green"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DISPLAY SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Display -->
+                        <LinearLayout
+                            android:id="@+id/sectionDisplayHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="DISPLAY SETTINGS"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionDisplayArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionDisplayContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Units -->
+                            <LinearLayout
+                                android:id="@+id/rowUnits"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Units"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueUnits"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="μSv/h • cps"
+                                    android:textColor="@color/pro_cyan"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== MAP SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Map -->
+                        <LinearLayout
+                            android:id="@+id/sectionMapHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="MAP SETTINGS"
+                                android:textColor="@color/pro_cyan"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionMapArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionMapContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- GPS Tracking Toggle -->
+                            <LinearLayout
+                                android:id="@+id/rowGpsTracking"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="GPS Tracking"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Track location for radiation mapping"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <com.google.android.material.switchmaterial.SwitchMaterial
+                                    android:id="@+id/switchGpsTracking"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    app:thumbTint="@color/pro_cyan"
+                                    app:trackTint="@color/pro_surface" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Map Theme -->
+                            <LinearLayout
+                                android:id="@+id/rowMapTheme"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Map Theme"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Choose tile style for radiation map"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueMapTheme"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Dark Matter"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Clear Map Data -->
+                            <LinearLayout
+                                android:id="@+id/rowClearMapData"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Clear Map Data"
+                                        android:textColor="@color/pro_red"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Delete all hexagon readings from the map"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_delete"
+                                    app:tint="@color/pro_red" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== ALERTS SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Alerts -->
+                        <LinearLayout
+                            android:id="@+id/sectionAlertsHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="ALERTS"
+                                android:textColor="@color/pro_amber"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAlertsArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionAlertsContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Smart Alerts -->
+                            <LinearLayout
+                                android:id="@+id/rowSmartAlerts"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Smart Alerts"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Statistical notifications"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueSmartAlerts"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="0 active"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                            <FrameLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- VEGA Intelligence -->
+                            <LinearLayout
+                                android:id="@+id/rowVegaIntelligence"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="VEGA Intelligence"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Statistical analysis &amp; forecasting"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueVegaIntelligence"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="All off"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== DETECTION SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Detection -->
+                        <LinearLayout
+                            android:id="@+id/sectionDetectionHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="DETECTION"
+                                android:textColor="@color/pro_magenta"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionDetectionArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionDetectionContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Isotope Settings -->
+                            <LinearLayout
+                                android:id="@+id/rowIsotopeSettings"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Isotope Identification"
+                                        android:textColor="@color/pro_text_primary"
+                                        android:textSize="15sp" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:text="Configure isotope library"
+                                        android:textColor="@color/pro_text_muted"
+                                        android:textSize="12sp" />
+                                </LinearLayout>
+
+                                <TextView
+                                    android:id="@+id/valueIsotopeSettings"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="15 enabled"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="14sp"
+                                    android:fontFamily="monospace" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:layout_marginStart="8dp"
+                                    android:src="@android:drawable/ic_menu_more"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ===== ADVANCED SETTINGS SECTION ===== -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="4dp">
+
+                        <!-- Section Header: Advanced -->
+                        <LinearLayout
+                            android:id="@+id/sectionAdvancedHeader"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackground"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="ADVANCED"
+                                android:textColor="@color/pro_text_muted"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:letterSpacing="0.1" />
+
+                            <ImageView
+                                android:id="@+id/sectionAdvancedArrow"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:src="@android:drawable/arrow_down_float"
+                                app:tint="@color/pro_text_muted" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/sectionAdvancedContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginStart="16dp"
+                                android:layout_marginEnd="16dp"
+                                android:background="@color/pro_border"
+                                android:alpha="0.5" />
+
+                            <!-- Pause -->
+                            <LinearLayout
+                                android:id="@+id/rowPause"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Pause live updates"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valuePause"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Off"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+                            
+                            <!-- Show Trend Arrows -->
+                            <LinearLayout
+                                android:id="@+id/rowTrendArrows"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Show trend arrows"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <TextView
+                                    android:id="@+id/valueTrendArrows"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="On"
+                                    android:textColor="@color/pro_text_muted"
+                                    android:textSize="15sp"
+                                    android:fontFamily="monospace" />
+                            </LinearLayout>
+
+                            <!-- Download keV Calibration -->
+                            <LinearLayout
+                                android:id="@+id/rowDownloadCalibration"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/selectableItemBackground"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:padding="16dp">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="Download keV Calibration"
+                                    android:textColor="@color/pro_text_primary"
+                                    android:textSize="15sp" />
+
+                                <ImageView
+                                    android:layout_width="20dp"
+                                    android:layout_height="20dp"
+                                    android:src="@android:drawable/stat_sys_download"
+                                    app:tint="@color/pro_text_muted" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ==================== LOGS PANEL ==================== -->
+                <LinearLayout
+                    android:id="@+id/panelLogs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/card_background"
+                        android:orientation="vertical"
+                        android:padding="20dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="DATA EXPORT"
+                            android:textColor="@color/pro_text_muted"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.1" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Export all readings as CSV for analysis in external tools."
+                            android:textColor="@color/pro_text_secondary"
+                            android:textSize="14sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/shareCsvButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:text="Share CSV"
+                            app:backgroundTint="@color/pro_cyan"
+                            android:textColor="@color/pro_background"
+                            app:icon="@android:drawable/ic_menu_share"
+                            app:iconTint="@color/pro_background" />
+
+                    </LinearLayout>
+                </LinearLayout>
+
+            </FrameLayout>
+        </androidx.core.widget.NestedScrollView>
+    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/navView"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@color/pro_surface"
+        app:itemTextColor="@color/pro_text_primary"
+        app:itemIconTint="@color/pro_text_secondary"
+        app:menu="@menu/drawer_menu" />
+
+</androidx.drawerlayout.widget.DrawerLayout>

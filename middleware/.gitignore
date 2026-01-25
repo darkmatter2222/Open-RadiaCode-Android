@@ -1,0 +1,45 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment & Secrets
+.env
+.env.local
+.env.production
+.env.*
+!.env.example
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+# Logs
+*.log
+
+# Audio files (generated)
+*.wav
+*.mp3
+
+# Model files (large, mount separately in production)
+# Uncomment to exclude from git:
+# models/
+
+# OS
+.DS_Store
+Thumbs.db

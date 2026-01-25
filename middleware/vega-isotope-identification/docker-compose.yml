@@ -1,0 +1,43 @@
+# Vega Isotope Identification API - Docker Compose
+# For GPU support, ensure nvidia-docker2 is installed
+
+services:
+  vega-isotope:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-isotope-api:latest
+    container_name: vega-isotope
+    restart: unless-stopped
+    
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment
+    environment:
+      - VEGA_ISOTOPE_MODEL=/app/models/vega_2d_final.pt
+      - VEGA_DEVICE=cuda
+      - VEGA_DEFAULT_THRESHOLD=0.5
+      - NVIDIA_VISIBLE_DEVICES=all
+    
+    # Ports
+    ports:
+      - "8020:8020"
+    
+    # Mount model files (alternative to baking them in)
+    volumes:
+      - ./models:/app/models:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Model loading time

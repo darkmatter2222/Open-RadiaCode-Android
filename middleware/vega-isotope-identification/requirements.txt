@@ -1,0 +1,12 @@
+# Vega Isotope Identification API - Requirements
+# Base dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# ML
+torch>=2.0.0
+numpy>=2.0.0
+
+# HTTP client (for testing)
+httpx>=0.25.0

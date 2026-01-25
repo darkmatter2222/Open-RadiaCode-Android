@@ -1,0 +1,13 @@
+# Ignore these when building Docker image
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.env.*
+!.env.example
+.git/
+.gitignore
+*.md
+*.log
+.vscode/
+.idea/

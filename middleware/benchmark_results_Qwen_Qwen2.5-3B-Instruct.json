@@ -1,0 +1,856 @@
+{
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "device": "cuda",
+  "dtype": "torch.bfloat16",
+  "results": {
+    "baseline": [
+      {
+        "name": "Cs-137 Only (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 13225.146532058716,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [
+          "Co-60",
+          "K-40"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Co-60",
+          "K-40"
+        ],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Co-60 Only (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 12243.042469024658,
+        "expected": [
+          "Co-60"
+        ],
+        "found": [
+          "K-40",
+          "Na-22"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "K-40",
+          "Na-22"
+        ],
+        "false_negatives": [
+          "Co-60"
+        ]
+      },
+      {
+        "name": "Am-241 Only (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 12092.161417007446,
+        "expected": [
+          "Am-241"
+        ],
+        "found": [
+          "Cs-137",
+          "Am-241",
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Am-241"
+        ],
+        "false_positives": [
+          "Cs-137",
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Cs-137 Only (clean) [baseline]",
+        "passed": true,
+        "duration_ms": 2937.1135234832764,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Cs-137 + Co-60 (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 12273.597955703735,
+        "expected": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Co-60",
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Am-241 + Cs-137 + K-40 (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 11532.184600830078,
+        "expected": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [
+          "Cs-137",
+          "Ra-226",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Cs-137",
+          "K-40"
+        ],
+        "false_positives": [
+          "Co-60",
+          "Ra-226",
+          "Na-22"
+        ],
+        "false_negatives": [
+          "Am-241"
+        ]
+      },
+      {
+        "name": "4 Isotopes (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 12072.76701927185,
+        "expected": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "Na-22 Only (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 2878.091812133789,
+        "expected": [
+          "Na-22"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Na-22"
+        ]
+      },
+      {
+        "name": "Ba-133 + I-131 (bg) [baseline]",
+        "passed": true,
+        "duration_ms": 12181.50281906128,
+        "expected": [
+          "Ba-133",
+          "I-131"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Ba-133",
+          "I-131"
+        ]
+      },
+      {
+        "name": "5 Isotopes (no bg) [baseline]",
+        "passed": true,
+        "duration_ms": 11472.027778625488,
+        "expected": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "found": [
+          "Cs-137",
+          "Ra-226",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Na-22"
+        ],
+        "false_positives": [
+          "Ra-226"
+        ],
+        "false_negatives": [
+          "Am-241"
+        ]
+      }
+    ],
+    "step_by_step": [
+      {
+        "name": "Cs-137 Only (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12134.70721244812,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Co-60 Only (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12121.921062469482,
+        "expected": [
+          "Co-60"
+        ],
+        "found": [
+          "Cs-137",
+          "Ra-226",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Co-60"
+        ],
+        "false_positives": [
+          "Cs-137",
+          "Na-22",
+          "Ra-226",
+          "K-40"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Am-241 Only (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12170.92490196228,
+        "expected": [
+          "Am-241"
+        ],
+        "found": [
+          "Am-241",
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60",
+          "I-131"
+        ],
+        "true_positives": [
+          "Am-241"
+        ],
+        "false_positives": [
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60",
+          "I-131"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Cs-137 Only (clean) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12251.049041748047,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [
+          "Na-22"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Na-22"
+        ],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Cs-137 + Co-60 (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12368.717670440674,
+        "expected": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "found": [
+          "Na-22"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Na-22"
+        ],
+        "false_negatives": [
+          "Co-60",
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Am-241 + Cs-137 + K-40 (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12225.083112716675,
+        "expected": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "false_positives": [
+          "Co-60",
+          "Na-22"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "4 Isotopes (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12208.990573883057,
+        "expected": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "Na-22 Only (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12183.363914489746,
+        "expected": [
+          "Na-22"
+        ],
+        "found": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "true_positives": [
+          "Na-22"
+        ],
+        "false_positives": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Ba-133 + I-131 (bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12223.770141601562,
+        "expected": [
+          "Ba-133",
+          "I-131"
+        ],
+        "found": [
+          "Co-60"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Co-60"
+        ],
+        "false_negatives": [
+          "Ba-133",
+          "I-131"
+        ]
+      },
+      {
+        "name": "5 Isotopes (no bg) [step_by_step]",
+        "passed": true,
+        "duration_ms": 12295.017719268799,
+        "expected": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "found": [
+          "Cs-137",
+          "Ra-226",
+          "Am-241",
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60",
+          "I-131"
+        ],
+        "true_positives": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "false_positives": [
+          "Ba-133",
+          "Ra-226",
+          "I-131"
+        ],
+        "false_negatives": []
+      }
+    ],
+    "few_shot": [
+      {
+        "name": "Cs-137 Only (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12152.485132217407,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "true_positives": [
+          "Cs-137"
+        ],
+        "false_positives": [
+          "Co-60",
+          "K-40",
+          "Am-241"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Co-60 Only (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12146.073818206787,
+        "expected": [
+          "Co-60"
+        ],
+        "found": [
+          "Co-60",
+          "Cs-137",
+          "Am-241"
+        ],
+        "true_positives": [
+          "Co-60"
+        ],
+        "false_positives": [
+          "Cs-137",
+          "Am-241"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Am-241 Only (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12166.925430297852,
+        "expected": [
+          "Am-241"
+        ],
+        "found": [
+          "Co-60"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Co-60"
+        ],
+        "false_negatives": [
+          "Am-241"
+        ]
+      },
+      {
+        "name": "Cs-137 Only (clean) [few_shot]",
+        "passed": true,
+        "duration_ms": 12161.892414093018,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Cs-137 + Co-60 (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12194.708108901978,
+        "expected": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "found": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "true_positives": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "false_positives": [],
+        "false_negatives": []
+      },
+      {
+        "name": "Am-241 + Cs-137 + K-40 (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12184.803247451782,
+        "expected": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "4 Isotopes (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12190.723180770874,
+        "expected": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "Na-22 Only (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12196.288108825684,
+        "expected": [
+          "Na-22"
+        ],
+        "found": [
+          "Cs-137",
+          "Ra-226",
+          "Ba-133",
+          "K-40",
+          "Na-22",
+          "Co-60",
+          "I-131"
+        ],
+        "true_positives": [
+          "Na-22"
+        ],
+        "false_positives": [
+          "Cs-137",
+          "Ra-226",
+          "Ba-133",
+          "K-40",
+          "Co-60",
+          "I-131"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Ba-133 + I-131 (bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12210.414171218872,
+        "expected": [
+          "Ba-133",
+          "I-131"
+        ],
+        "found": [
+          "Co-60",
+          "Cs-137",
+          "Am-241"
+        ],
+        "true_positives": [],
+        "false_positives": [
+          "Co-60",
+          "Cs-137",
+          "Am-241"
+        ],
+        "false_negatives": [
+          "Ba-133",
+          "I-131"
+        ]
+      },
+      {
+        "name": "5 Isotopes (no bg) [few_shot]",
+        "passed": true,
+        "duration_ms": 12221.248626708984,
+        "expected": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "found": [],
+        "true_positives": [],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137",
+          "K-40",
+          "Na-22",
+          "Am-241",
+          "Co-60"
+        ]
+      }
+    ],
+    "peaks_only": [
+      {
+        "name": "Cs-137 Only (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 801.084041595459,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [
+          "Cs-137"
+        ],
+        "true_positives": [
+          "Cs-137"
+        ],
+        "false_positives": [],
+        "false_negatives": []
+      },
+      {
+        "name": "Co-60 Only (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 1546.0891723632812,
+        "expected": [
+          "Co-60"
+        ],
+        "found": [
+          "Co-60"
+        ],
+        "true_positives": [
+          "Co-60"
+        ],
+        "false_positives": [],
+        "false_negatives": []
+      },
+      {
+        "name": "Am-241 Only (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 1519.2031860351562,
+        "expected": [
+          "Am-241"
+        ],
+        "found": [
+          "K-40",
+          "Am-241"
+        ],
+        "true_positives": [
+          "Am-241"
+        ],
+        "false_positives": [
+          "K-40"
+        ],
+        "false_negatives": []
+      },
+      {
+        "name": "Cs-137 Only (clean) [peaks_only]",
+        "passed": true,
+        "duration_ms": 853.0421257019043,
+        "expected": [
+          "Cs-137"
+        ],
+        "found": [
+          "Cs-137"
+        ],
+        "true_positives": [
+          "Cs-137"
+        ],
+        "false_positives": [],
+        "false_negatives": []
+      },
+      {
+        "name": "Cs-137 + Co-60 (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 1519.9534893035889,
+        "expected": [
+          "Co-60",
+          "Cs-137"
+        ],
+        "found": [
+          "Co-60"
+        ],
+        "true_positives": [
+          "Co-60"
+        ],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137"
+        ]
+      },
+      {
+        "name": "Am-241 + Cs-137 + K-40 (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 2288.5119915008545,
+        "expected": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [
+          "Co-60",
+          "K-40"
+        ],
+        "true_positives": [
+          "K-40"
+        ],
+        "false_positives": [
+          "Co-60"
+        ],
+        "false_negatives": [
+          "Cs-137",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "4 Isotopes (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 1474.6026992797852,
+        "expected": [
+          "Co-60",
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ],
+        "found": [
+          "Co-60"
+        ],
+        "true_positives": [
+          "Co-60"
+        ],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137",
+          "K-40",
+          "Am-241"
+        ]
+      },
+      {
+        "name": "Na-22 Only (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 827.5198936462402,
+        "expected": [
+          "Na-22"
+        ],
+        "found": [
+          "Na-22"
+        ],
+        "true_positives": [
+          "Na-22"
+        ],
+        "false_positives": [],
+        "false_negatives": []
+      },
+      {
+        "name": "Ba-133 + I-131 (bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 788.1736755371094,
+        "expected": [
+          "Ba-133",
+          "I-131"
+        ],
+        "found": [
+          "Ba-133"
+        ],
+        "true_positives": [
+          "Ba-133"
+        ],
+        "false_positives": [],
+        "false_negatives": [
+          "I-131"
+        ]
+      },
+      {
+        "name": "5 Isotopes (no bg) [peaks_only]",
+        "passed": true,
+        "duration_ms": 3795.5193519592285,
+        "expected": [
+          "Cs-137",
+          "Am-241",
+          "K-40",
+          "Na-22",
+          "Co-60"
+        ],
+        "found": [
+          "Co-60",
+          "K-40",
+          "Na-22"
+        ],
+        "true_positives": [
+          "Co-60",
+          "K-40",
+          "Na-22"
+        ],
+        "false_positives": [],
+        "false_negatives": [
+          "Cs-137",
+          "Am-241"
+        ]
+      }
+    ]
+  }
+}

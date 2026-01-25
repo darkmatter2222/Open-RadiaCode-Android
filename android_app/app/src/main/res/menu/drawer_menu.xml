@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_dashboard"
+            android:icon="@android:drawable/ic_menu_compass"
+            android:title="Dashboard" />
+        <item
+            android:id="@+id/nav_device"
+            android:icon="@android:drawable/stat_sys_data_bluetooth"
+            android:title="Device" />
+        <item
+            android:id="@+id/nav_spectral_analysis"
+            android:icon="@android:drawable/ic_menu_manage"
+            android:title="Vega Spectral Analysis" />
+        <item
+            android:id="@+id/nav_widget_crafter"
+            android:icon="@android:drawable/ic_menu_gallery"
+            android:title="Widget Crafter" />
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:title="Settings" />
+        <item
+            android:id="@+id/nav_logs"
+            android:icon="@android:drawable/ic_menu_save"
+            android:title="Export" />
+    </group>
+</menu>

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.RadiaCode" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Professional dark theme colors -->
+        <item name="android:colorBackground">@color/pro_background</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="colorSurfaceVariant">@color/pro_surface_elevated</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorSecondary">@color/pro_magenta</item>
+        <item name="colorTertiary">@color/pro_green</item>
+        <item name="colorError">@color/pro_red</item>
+        <item name="colorOnBackground">@color/pro_text_primary</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/pro_text_secondary</item>
+        <item name="colorOutline">@color/pro_border</item>
+        
+        <!-- System bars -->
+        <item name="android:statusBarColor">@color/pro_background</item>
+        <item name="android:navigationBarColor">@color/pro_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Fullscreen immersive theme for map -->
+    <style name="Theme.RadiaCode.Fullscreen" parent="Theme.RadiaCode">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
+
+    <!-- Dialog theme for alert configuration -->
+    <style name="Theme.RadiaCodeBLE.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">@color/pro_bg_card</item>
+        <item name="colorSurface">@color/pro_bg_card</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="buttonBarPositiveButtonStyle">@style/DialogButton.Positive</item>
+        <item name="buttonBarNegativeButtonStyle">@style/DialogButton.Negative</item>
+    </style>
+
+    <style name="DialogButton.Positive" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/pro_cyan</item>
+    </style>
+
+    <style name="DialogButton.Negative" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/pro_text_muted</item>
+    </style>
+
+    <!-- Dark dialog theme for device editing -->
+    <style name="DarkDialogTheme" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">@color/pro_surface</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="colorOnSurface">@color/pro_text_primary</item>
+        <item name="colorPrimary">@color/pro_cyan</item>
+        <item name="colorOnPrimary">@color/pro_background</item>
+        <item name="android:textColorPrimary">@color/pro_text_primary</item>
+        <item name="android:textColorSecondary">@color/pro_text_secondary</item>
+    </style>
+
+    <!-- Fullscreen dialog theme for Vega intro -->
+    <style name="Theme.RadiaCode.Dialog.FullScreen" parent="Theme.RadiaCode">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@color/pro_background</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+
+    <!-- Bottom sheet theme -->
+    <style name="Theme.RadiaCodeBLE.BottomSheet" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:colorBackground">@color/pro_surface</item>
+        <item name="colorSurface">@color/pro_surface</item>
+        <item name="bottomSheetStyle">@style/BottomSheetStyle</item>
+    </style>
+
+    <style name="BottomSheetStyle" parent="Widget.Material3.BottomSheet">
+        <item name="backgroundTint">@color/pro_surface</item>
+        <item name="shapeAppearance">@style/BottomSheetShape</item>
+    </style>
+
+    <style name="BottomSheetShape" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
+</resources>
