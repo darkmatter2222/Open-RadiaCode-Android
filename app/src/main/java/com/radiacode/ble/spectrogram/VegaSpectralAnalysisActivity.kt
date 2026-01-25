@@ -975,6 +975,18 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
                     showExportDialog()
                 })
                 
+                addView(createDivider(density))
+                
+                // DEBUG section
+                addView(createSectionHeader("Debug / Training", density))
+                
+                addView(createActionRow("Export API Payload (CSV)", density) {
+                    dialog.dismiss()
+                    exportIsotopeApiPayload()
+                })
+                
+                addView(createDivider(density))
+                
                 addView(createDangerRow("Clear All Data", density) {
                     dialog.dismiss()
                     showClearConfirmation()
@@ -1329,6 +1341,115 @@ class VegaSpectralAnalysisActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Export Spectrogram"))
+    }
+    
+    /**
+     * Export the exact payload that would be sent to the Vega Isotope Analysis API.
+     * This is useful for collecting training data for the isotope classification model.
+     * 
+     * The payload matches what performIsotopeAnalysis() sends:
+     * - For DIFFERENTIAL mode: Sum of all differential snapshots within history window
+     * - For ACCUMULATED mode: Latest snapshot minus baseline (if set)
+     * 
+     * Format: CSV with header row (channel_0, channel_1, ..., channel_1022, total_counts, source_type)
+     */
+    private fun exportIsotopeApiPayload() {
+        val deviceId = this.deviceId ?: run {
+            Toast.makeText(this, "No device connected", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        try {
+            // Replicate the exact logic from performIsotopeAnalysis()
+            val source = SpectrogramPrefs.getSpectrumSource(this)
+            val historyMs = SpectrogramPrefs.getHistoryDepthMs(this)
+            val startTime = System.currentTimeMillis() - historyMs
+            
+            val wantDifferential = source == SpectrumSourceType.DIFFERENTIAL
+            val snapshots = SpectrogramRepository.getInstance(this)
+                .getSnapshots(deviceId, startTime, System.currentTimeMillis())
+                .filter { it.isDifferential == wantDifferential }
+            
+            if (snapshots.isEmpty()) {
+                Toast.makeText(this, "No spectrum data available", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // Get the spectrum exactly as it would be sent to the API
+            val spectrumToAnalyze: IntArray = if (wantDifferential) {
+                // Differential mode: sum all snapshots (same as VegaIsotopeApiClient.combineSnapshots)
+                VegaIsotopeApiClient.combineSnapshots(snapshots)
+            } else {
+                // Accumulated mode: use the latest snapshot with baseline subtraction
+                val latest = snapshots.last()
+                var displayCounts = latest.spectrumData.counts
+                
+                val baseline = SpectrogramPrefs.getBaselineSpectrum(this, deviceId)
+                if (baseline != null && baseline.size == displayCounts.size) {
+                    displayCounts = IntArray(displayCounts.size) { i ->
+                        maxOf(0, displayCounts[i] - baseline[i])
+                    }
+                }
+                displayCounts
+            }
+            
+            // Truncate to 1023 channels (what the API expects)
+            val apiSpectrum = if (spectrumToAnalyze.size == VegaIsotopeApiClient.EXPECTED_CHANNELS) {
+                spectrumToAnalyze
+            } else if (spectrumToAnalyze.size == 1024) {
+                spectrumToAnalyze.take(1023).toIntArray()
+            } else {
+                IntArray(VegaIsotopeApiClient.EXPECTED_CHANNELS) { i ->
+                    if (i < spectrumToAnalyze.size) spectrumToAnalyze[i] else 0
+                }
+            }
+            
+            val totalCounts = apiSpectrum.sum()
+            
+            // Build CSV with header
+            val sb = StringBuilder()
+            
+            // Header row: channel_0, channel_1, ..., channel_1022, total_counts, source_type, snapshot_count, history_ms
+            for (i in 0 until VegaIsotopeApiClient.EXPECTED_CHANNELS) {
+                sb.append("channel_$i")
+                sb.append(",")
+            }
+            sb.append("total_counts,source_type,snapshot_count,history_ms\n")
+            
+            // Data row
+            for (count in apiSpectrum) {
+                sb.append(count)
+                sb.append(",")
+            }
+            sb.append(totalCounts)
+            sb.append(",")
+            sb.append(if (wantDifferential) "DIFFERENTIAL" else "ACCUMULATED")
+            sb.append(",")
+            sb.append(snapshots.size)
+            sb.append(",")
+            sb.append(historyMs)
+            sb.append("\n")
+            
+            // Write to file
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val sourceTag = if (wantDifferential) "diff" else "accum"
+            val file = File(cacheDir, "vega_api_payload_${sourceTag}_$timestamp.csv")
+            file.writeText(sb.toString())
+            
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Export API Payload for Training"))
+            
+            Toast.makeText(this, "Exporting $totalCounts total counts from ${snapshots.size} snapshots", Toast.LENGTH_LONG).show()
+            
+        } catch (e: Exception) {
+            android.util.Log.e("VegaSpectral", "Export API payload failed", e)
+            Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun showClearConfirmation() {
