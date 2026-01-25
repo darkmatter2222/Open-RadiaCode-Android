@@ -29,7 +29,7 @@ class MultiDeviceBleManager(
         private const val DEFAULT_POLL_MS = 1000L
         private const val RECONNECT_BASE_DELAY_MS = 2_000L
         private const val RECONNECT_MAX_DELAY_MS = 60_000L
-        private const val SPECTRUM_POLL_INTERVAL = 3  // Read spectrum every N poll cycles
+        private const val SPECTRUM_POLL_INTERVAL = 1  // Read spectrum every poll cycle (~1s) to match training data
     }
     
     // Per-device state
