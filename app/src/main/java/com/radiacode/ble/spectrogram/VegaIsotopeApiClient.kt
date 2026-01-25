@@ -11,14 +11,18 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /**
- * Vega Isotope Identification API Client
+ * Vega Isotope Identification API Client (v2.0)
  * 
- * Communicates with the Vega Isotope Identification API to analyze gamma spectra
+ * Communicates with the Vega 2D Isotope Identification API to analyze gamma spectra
  * and identify radioactive isotopes with probabilities and estimated activities.
  * 
  * API Endpoint: POST /identify
- * Input: 2D matrix of spectrum snapshots (each row is a 1-second differential snapshot with 1023 channels)
+ * Input: 2D matrix (60 time intervals x 1023 energy channels)
+ *   - Axis 0: Time intervals (60 one-second intervals)
+ *   - Axis 1: Energy channels (1023 channels, 20 keV to 3000 keV)
  * Output: List of detected isotopes with probabilities and activity estimates
+ * 
+ * API Version: 2.0.0
  */
 object VegaIsotopeApiClient {
 
@@ -28,8 +32,9 @@ object VegaIsotopeApiClient {
     private const val API_BASE_URL = "http://99.122.58.29:443"
     private const val IDENTIFY_ENDPOINT = "/identify"
     
-    // Expected channel count for the API
-    const val EXPECTED_CHANNELS = 1023
+    // Spectrum dimensions (fixed by model architecture)
+    const val EXPECTED_CHANNELS = 1023          // Energy channels
+    const val REQUIRED_TIME_INTERVALS = 60      // Time dimension (1-second intervals)
     
     private val executor: Executor = Executors.newSingleThreadExecutor()
     
@@ -100,6 +105,11 @@ object VegaIsotopeApiClient {
                     matrix.put(row)
                 }
                 
+                // Validate matrix dimensions (API v2.0 requires 60x1023)
+                if (snapshots.size != REQUIRED_TIME_INTERVALS) {
+                    Log.w(TAG, "Warning: Expected $REQUIRED_TIME_INTERVALS time intervals, got ${snapshots.size}")
+                }
+                
                 // Build request JSON with 2D spectrum matrix
                 val requestJson = JSONObject().apply {
                     put("spectrum", matrix)
@@ -107,7 +117,7 @@ object VegaIsotopeApiClient {
                     put("return_all", returnAll)
                 }
                 
-                Log.d(TAG, "Sending ${snapshots.size} rows x $EXPECTED_CHANNELS channels, " +
+                Log.d(TAG, "Sending ${snapshots.size}x$EXPECTED_CHANNELS matrix, " +
                         "total counts: $totalCounts")
                 
                 // Make HTTP request
