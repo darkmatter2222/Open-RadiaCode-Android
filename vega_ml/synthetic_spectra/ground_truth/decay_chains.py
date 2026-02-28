@@ -238,6 +238,57 @@ def get_chain_daughters(parent: str, include_parent: bool = True) -> List[str]:
     return daughters
 
 
+def get_full_descendants(isotope_name: str, include_self: bool = True) -> List[str]:
+    """
+    Get ALL descendants from any isotope in any decay chain.
+    
+    This traverses the full chain from the given isotope to the end,
+    which is critical for generating realistic spectra (e.g., Ra-226
+    should include Pb-214, Bi-214, etc. in secular equilibrium).
+    
+    Args:
+        isotope_name: Starting isotope (e.g., "Ra-226")
+        include_self: Whether to include the starting isotope
+    
+    Returns:
+        List of isotope names from this point to end of chain
+    """
+    result = []
+    if include_self:
+        result.append(isotope_name)
+    
+    # Check each defined chain to see if this isotope is a member
+    for chain_name, chain in DECAY_CHAINS.items():
+        member_names = chain.get_member_names()
+        if isotope_name in member_names:
+            # Found it - get all members AFTER this one
+            idx = member_names.index(isotope_name)
+            descendants = member_names[idx + 1:]
+            # Add any not already in result
+            for d in descendants:
+                if d not in result:
+                    result.append(d)
+            break
+    
+    return result
+
+
+def get_chain_containing(isotope_name: str) -> Optional[DecayChain]:
+    """
+    Find the decay chain that contains a given isotope.
+    
+    Args:
+        isotope_name: Isotope to search for
+    
+    Returns:
+        The DecayChain containing this isotope, or None
+    """
+    for chain_name, chain in DECAY_CHAINS.items():
+        if isotope_name in chain.get_member_names():
+            return chain
+    return None
+
+
 def infer_parent_from_daughters(
     detected_isotopes: Set[str]
 ) -> List[Tuple[str, ChainSignature, float]]:

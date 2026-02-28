@@ -1372,5 +1372,6 @@ def get_isotopes_with_gamma_in_range(
     return results
 
 
-# Number of isotopes in database
-print(f"Isotope database loaded: {len(ISOTOPE_DATABASE)} isotopes")
+# Number of isotopes in database (only print when run directly)
+if __name__ == "__main__":
+    print(f"Isotope database loaded: {len(ISOTOPE_DATABASE)} isotopes")

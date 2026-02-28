@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 TTS_BACKEND = os.getenv("VEGA_TTS_BACKEND", "http://host.docker.internal:8010")
 LLM_BACKEND = os.getenv("VEGA_LLM_BACKEND", "http://host.docker.internal:8001")
 ISOTOPE_BACKEND = os.getenv("VEGA_ISOTOPE_BACKEND", "http://host.docker.internal:8020")
+BINOMIAL_BACKEND = os.getenv("VEGA_BINOMIAL_BACKEND", "http://host.docker.internal:8021")
 
 # Timeout for backend requests (seconds)
 BACKEND_TIMEOUT = float(os.getenv("VEGA_BACKEND_TIMEOUT", "120"))
@@ -322,6 +323,13 @@ async def health_check():
     except Exception as e:
         backends["isotope"] = {"status": "unreachable", "error": str(e)}
     
+    # Check Binomial Detection
+    try:
+        resp = await http_client.get(f"{BINOMIAL_BACKEND}/health", timeout=5)
+        backends["binomial"] = resp.json() if resp.status_code == 200 else {"status": "error", "code": resp.status_code}
+    except Exception as e:
+        backends["binomial"] = {"status": "unreachable", "error": str(e)}
+    
     all_healthy = all(
         b.get("status") in ["healthy", "ok"] 
         for b in backends.values()
@@ -337,21 +345,24 @@ async def get_info():
     """Get information about available services."""
     return {
         "service": "vega-ingress",
-        "version": "1.3.0",
+        "version": "1.4.0",
         "routes": {
             "/tts/*": "Text-to-Speech service",
             "/llm/*": "Language Model service",
             "/isotope/*": "Isotope Identification service (v2.0 - 2D model)",
+            "/binomial/*": "Bulk Binomial Isotope Detection service (per-isotope models)",
             "/api/tts/*": "Alias for TTS",
             "/api/llm/*": "Alias for LLM",
             "/api/isotope/*": "Alias for Isotope Identification",
+            "/api/binomial/*": "Alias for Binomial Detection",
             "/logs": "List recent ingress request logs",
             "/logs/{id}": "Retrieve a specific ingress request log by ID",
         },
         "backends": {
             "tts": TTS_BACKEND,
             "llm": LLM_BACKEND,
-            "isotope": ISOTOPE_BACKEND
+            "isotope": ISOTOPE_BACKEND,
+            "binomial": BINOMIAL_BACKEND
         },
         "logging": {
             "enabled": INGRESS_LOG_ENABLED,
@@ -596,6 +607,50 @@ async def identify_batch(request: Request):
 async def list_isotopes(request: Request):
     """Direct route to list all supported isotopes."""
     return await proxy_request(request, ISOTOPE_BACKEND, "isotopes")
+
+# ==============================================================================
+# Binomial Detection Routes (Bulk per-isotope binary classifiers)
+# ==============================================================================
+
+@app.api_route("/binomial/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_binomial(request: Request, path: str):
+    """Proxy requests to Binomial Detection service."""
+    return await proxy_request(request, BINOMIAL_BACKEND, path)
+
+@app.api_route("/api/binomial/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def proxy_api_binomial(request: Request, path: str):
+    """Alias: Proxy requests to Binomial Detection service."""
+    return await proxy_request(request, BINOMIAL_BACKEND, path)
+
+# Direct convenience routes for binomial detection
+@app.post("/detect")
+async def detect_isotopes(request: Request):
+    """
+    Direct route to bulk binomial isotope detection.
+    
+    Accepts a 2D gamma spectrum (300 time intervals x 1023 channels) with device
+    calibration coefficients. Translates spectrum to training energy axis and runs
+    inference through all loaded per-isotope binary models.
+    
+    Returns detailed results including per-isotope probabilities, detection decisions,
+    and comprehensive timing information for every processing step.
+    """
+    return await proxy_request(request, BINOMIAL_BACKEND, "detect")
+
+@app.post("/detect/1d")
+async def detect_1d(request: Request):
+    """
+    Direct route to binomial detection from 1D spectrum.
+    
+    Accepts a 1D gamma spectrum (1023 channels) which is expanded to 2D
+    by replicating across the time dimension.
+    """
+    return await proxy_request(request, BINOMIAL_BACKEND, "detect/1d")
+
+@app.post("/detect/batch")
+async def detect_batch(request: Request):
+    """Direct route to batch binomial detection for multiple spectra."""
+    return await proxy_request(request, BINOMIAL_BACKEND, "detect/batch")
 
 # ==============================================================================
 # Main

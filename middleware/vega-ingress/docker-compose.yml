@@ -17,6 +17,7 @@ services:
       - VEGA_TTS_BACKEND=http://172.17.0.1:8010
       - VEGA_LLM_BACKEND=http://172.17.0.1:8001
       - VEGA_ISOTOPE_BACKEND=http://172.17.0.1:8020
+      - VEGA_BINOMIAL_BACKEND=http://172.17.0.1:8021
       - VEGA_BACKEND_TIMEOUT=120
 
       # Ingress request/response logging (JSON payloads)

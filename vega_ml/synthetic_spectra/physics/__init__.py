@@ -17,6 +17,7 @@ from .spectrum_physics import (
     calculate_expected_counts,
     generate_peak_spectrum,
     generate_compton_continuum,
+    generate_peak_with_compton,
     generate_exponential_background,
     generate_polynomial_background,
     generate_environmental_background,

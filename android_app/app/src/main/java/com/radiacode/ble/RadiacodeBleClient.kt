@@ -55,8 +55,10 @@ internal class RadiacodeBleClient(
     private var expectedResponseBytes: Int? = null
     private var responseBuffer = ByteArrayOutputStream()
 
-    // Single in-flight request
-    private var pending: PendingRequest? = null
+    // Request/response is strictly serialized over BLE. We allow callers to issue concurrent
+    // commands by queueing them here, rather than throwing.
+    private var activeRequest: PendingRequest? = null
+    private val requestQueue: ArrayDeque<PendingRequest> = ArrayDeque()
 
     // Single in-flight RSSI read
     private var pendingRssi: CompletableFuture<Int>? = null
@@ -70,6 +72,7 @@ internal class RadiacodeBleClient(
 
     private data class PendingRequest(
         val header4: ByteArray,
+        val requestBytes: ByteArray,
         val future: CompletableFuture<ByteArray>,
         val command: Int,
         val reqSeqNo: Int,
@@ -87,8 +90,25 @@ internal class RadiacodeBleClient(
 
     fun close() {
         executor.execute {
-            pending?.future?.completeExceptionally(IllegalStateException("Disconnected"))
-            pending = null
+            val toFail: List<PendingRequest> = synchronized(this) {
+                val list = ArrayList<PendingRequest>(1 + requestQueue.size)
+                activeRequest?.let { list.add(it) }
+                activeRequest = null
+                while (requestQueue.isNotEmpty()) {
+                    list.add(requestQueue.removeFirst())
+                }
+                expectedResponseBytes = null
+                responseBuffer.reset()
+                list
+            }
+
+            for (p in toFail) {
+                try {
+                    p.timeoutTask?.cancel(true)
+                } catch (_: Throwable) {
+                }
+                p.future.completeExceptionally(IllegalStateException("Disconnected"))
+            }
 
             pendingRssi?.completeExceptionally(IllegalStateException("Disconnected"))
             pendingRssi = null
@@ -512,40 +532,62 @@ internal class RadiacodeBleClient(
         val header4 = req.copyOfRange(4, 8) // first 4 bytes after length prefix
 
         val future = CompletableFuture<ByteArray>()
+        val p = PendingRequest(header4 = header4, requestBytes = req, future = future, command = command, reqSeqNo = reqSeq)
 
+        val shouldStartNow: Boolean
         synchronized(this) {
-            if (pending != null) {
-                return CompletableFuture.failedFuture(IllegalStateException("Only one in-flight request supported"))
+            if (activeRequest == null) {
+                activeRequest = p
+                shouldStartNow = true
+            } else {
+                requestQueue.addLast(p)
+                shouldStartNow = false
             }
-            val p = PendingRequest(header4 = header4, future = future, command = command, reqSeqNo = reqSeq)
-            p.timeoutTask = timeoutScheduler.schedule(
+        }
+
+        if (shouldStartNow) {
+            armAndStartActiveRequest(g, w)
+        }
+
+        return future
+    }
+
+    private fun armAndStartActiveRequest(g: BluetoothGatt, w: BluetoothGattCharacteristic) {
+        val p = synchronized(this) {
+            val cur = activeRequest ?: return
+
+            val timeoutMs = timeoutMsForCommand(cur.command)
+            cur.timeoutTask = timeoutScheduler.schedule(
                 {
-                    val shouldFail = synchronized(this) { pending?.future === future }
+                    val shouldFail = synchronized(this) { activeRequest?.future === cur.future }
                     if (shouldFail) {
-                        failPending(TimeoutException("Timeout waiting for response cmd=0x${command.toString(16)} seq=$reqSeq"))
+                        failActiveAndStartNext(
+                            TimeoutException(
+                                "Timeout waiting for response cmd=0x${cur.command.toString(16)} seq=${cur.reqSeqNo}"
+                            )
+                        )
                     }
                 },
                 timeoutMs,
                 TimeUnit.MILLISECONDS
             )
-            pending = p
+
             expectedResponseBytes = null
             responseBuffer.reset()
 
             // Chunk into 18-byte writes (same as python), but sequence them via callbacks.
-            pendingWriteChunks = req.asListChunks(18)
+            pendingWriteChunks = cur.requestBytes.asListChunks(18)
             pendingWriteIndex = 0
+            cur
         }
 
         executor.execute {
             try {
                 startNextChunkWrite(g, w)
             } catch (t: Throwable) {
-                failPending(t)
+                failActiveAndStartNext(t)
             }
         }
-
-        return future
     }
 
     private fun ByteArray.asListChunks(chunkSize: Int): List<ByteArray> {
@@ -583,14 +625,14 @@ internal class RadiacodeBleClient(
         }
 
         if (!ok) {
-            failPending(IllegalStateException("writeCharacteristic failed"))
+            failActiveAndStartNext(IllegalStateException("writeCharacteristic failed"))
         }
     }
 
-    private fun failPending(t: Throwable) {
+    private fun failActiveAndStartNext(t: Throwable) {
         val p = synchronized(this) {
-            val cur = pending
-            pending = null
+            val cur = activeRequest
+            activeRequest = null
             expectedResponseBytes = null
             responseBuffer.reset()
             cur
@@ -600,6 +642,29 @@ internal class RadiacodeBleClient(
         } catch (_: Throwable) {
         }
         p?.future?.completeExceptionally(t)
+
+        startNextQueuedRequest()
+    }
+
+    private fun startNextQueuedRequest() {
+        val next: PendingRequest? = synchronized(this) {
+            if (activeRequest != null) return
+            if (requestQueue.isEmpty()) return
+            val n = requestQueue.removeFirst()
+            activeRequest = n
+            n
+        }
+
+        val g = gatt
+        val w = writeChar
+        if (next == null) return
+
+        if (g == null || w == null) {
+            failActiveAndStartNext(IllegalStateException("Not connected"))
+            return
+        }
+
+        armAndStartActiveRequest(g, w)
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -677,7 +742,7 @@ internal class RadiacodeBleClient(
             if (characteristic.uuid != RadiacodeProtocol.WRITE_UUID) return
             if (statusCode != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "onCharacteristicWrite failed status=$statusCode")
-                failPending(IllegalStateException("Characteristic write failed: $statusCode"))
+                failActiveAndStartNext(IllegalStateException("Characteristic write failed: $statusCode"))
                 return
             }
 
@@ -734,7 +799,7 @@ internal class RadiacodeBleClient(
         val completed: ByteArray? = synchronized(this@RadiacodeBleClient) {
             // We only support request/response. If a response arrives after we timed out (or when disconnected),
             // ignore it and keep the reassembly state clean for the next request.
-            if (pending == null) {
+            if (activeRequest == null) {
                 expectedResponseBytes = null
                 responseBuffer.reset()
                 return@synchronized null
@@ -743,7 +808,7 @@ internal class RadiacodeBleClient(
                 if (value.size < 4) return@synchronized null
                 val len = ByteBuffer.wrap(value, 0, 4).order(ByteOrder.LITTLE_ENDIAN).int
                 if (len < 0) {
-                    failPending(IllegalStateException("Negative response length: $len"))
+                    failActiveAndStartNext(IllegalStateException("Negative response length: $len"))
                     return@synchronized null
                 }
                 expectedResponseBytes = len
@@ -767,8 +832,8 @@ internal class RadiacodeBleClient(
 
     private fun handleCompletedResponse(message: ByteArray) {
         val p = synchronized(this) {
-            val cur = pending
-            pending = null
+            val cur = activeRequest
+            activeRequest = null
             expectedResponseBytes = null
             responseBuffer.reset()
             cur
@@ -796,6 +861,8 @@ internal class RadiacodeBleClient(
             Log.e(TAG, "response handling failed", t)
             p.future.completeExceptionally(t)
         }
+
+        startNextQueuedRequest()
     }
 
     private fun ByteArray.hexPreview(maxBytes: Int = MAX_HEX_PREVIEW): String {

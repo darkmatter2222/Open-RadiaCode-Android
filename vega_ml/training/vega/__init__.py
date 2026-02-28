@@ -14,13 +14,24 @@ Features:
 
 from .model import VegaModel, VegaConfig
 from .dataset import SpectrumDataset, create_data_loaders
-from .train import train_vega, VegaTrainer
 
-__all__ = [
-    'VegaModel',
-    'VegaConfig', 
-    'SpectrumDataset',
-    'create_data_loaders',
-    'train_vega',
-    'VegaTrainer'
-]
+# NOTE: scikit-learn is only required for training/metrics. Keeping this import
+# optional allows lightweight inference environments (e.g., field deployments).
+try:
+    from .train import train_vega, VegaTrainer
+
+    __all__ = [
+        "VegaModel",
+        "VegaConfig",
+        "SpectrumDataset",
+        "create_data_loaders",
+        "train_vega",
+        "VegaTrainer",
+    ]
+except ImportError:
+    __all__ = [
+        "VegaModel",
+        "VegaConfig",
+        "SpectrumDataset",
+        "create_data_loaders",
+    ]

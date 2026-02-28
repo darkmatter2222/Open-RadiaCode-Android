@@ -93,6 +93,23 @@ object Prefs {
     private const val KEY_SOUND_VOLUME_ANOMALY = "sound_volume_anomaly"
     private const val KEY_SOUND_VOLUME_AMBIENT = "sound_volume_ambient"
     
+    // Geiger Tick Synthesizer keys
+    private const val KEY_GEIGER_TICK_ENABLED = "geiger_tick_enabled"
+    private const val KEY_GEIGER_VOLUME = "geiger_volume"
+    private const val KEY_GEIGER_TONE_FREQUENCY = "geiger_tone_frequency"
+    private const val KEY_GEIGER_ATTACK_TIME = "geiger_attack_time"
+    private const val KEY_GEIGER_DECAY_RATE = "geiger_decay_rate"
+    private const val KEY_GEIGER_CLICK_DURATION = "geiger_click_duration"
+    private const val KEY_GEIGER_NOISE_AMOUNT = "geiger_noise_amount"
+    private const val KEY_GEIGER_TONE_AMOUNT = "geiger_tone_amount"
+    private const val KEY_GEIGER_HARMONIC_AMOUNT = "geiger_harmonic_amount"
+    private const val KEY_GEIGER_HARMONIC_FREQ_RATIO = "geiger_harmonic_freq_ratio"
+    private const val KEY_GEIGER_RESONANCE_FREQ = "geiger_resonance_freq"
+    private const val KEY_GEIGER_RESONANCE_AMOUNT = "geiger_resonance_amount"
+    private const val KEY_GEIGER_LOW_PASS_CUTOFF = "geiger_low_pass_cutoff"
+    private const val KEY_GEIGER_PREVIEW_CPS = "geiger_preview_cps"
+    private const val KEY_GEIGER_PRESET = "geiger_preset"
+    
     // VegaTTS Settings keys
     private const val KEY_VEGA_TTS_ENABLED = "vega_tts_enabled"
     private const val KEY_VEGA_TTS_API_URL = "vega_tts_api_url"
@@ -2303,6 +2320,240 @@ object Prefs {
         if (isSoundEnabled(context, SoundType.ANOMALY)) enabled.add("Anomaly")
         if (isSoundEnabled(context, SoundType.AMBIENT)) enabled.add("Ambient")
         return if (enabled.isEmpty()) "All off" else "${enabled.size} enabled"
+    }
+    
+    // ========== Geiger Tick Synthesizer Settings ==========
+    
+    fun isGeigerTickEnabled(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_GEIGER_TICK_ENABLED, false)
+    }
+    
+    fun setGeigerTickEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_GEIGER_TICK_ENABLED, enabled)
+            .apply()
+    }
+    
+    fun getGeigerVolume(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_VOLUME, 0.3f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerVolume(context: Context, volume: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_VOLUME, volume.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Primary tone frequency in Hz (100-12000). */
+    fun getGeigerToneFrequency(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_TONE_FREQUENCY, 800f).coerceIn(100f, 12000f)
+    }
+    
+    fun setGeigerToneFrequency(context: Context, freq: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_TONE_FREQUENCY, freq.coerceIn(100f, 12000f))
+            .apply()
+    }
+    
+    /** Attack ramp time in ms (0.1-10). */
+    fun getGeigerAttackTime(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_ATTACK_TIME, 0.5f).coerceIn(0.1f, 10f)
+    }
+    
+    fun setGeigerAttackTime(context: Context, ms: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_ATTACK_TIME, ms.coerceIn(0.1f, 10f))
+            .apply()
+    }
+    
+    /** Exponential decay rate (0.5-50). Higher = faster decay. */
+    fun getGeigerDecayRate(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_DECAY_RATE, 8f).coerceIn(0.5f, 50f)
+    }
+    
+    fun setGeigerDecayRate(context: Context, rate: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_DECAY_RATE, rate.coerceIn(0.5f, 50f))
+            .apply()
+    }
+    
+    /** Total click duration in ms (1-80). */
+    fun getGeigerClickDuration(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_CLICK_DURATION, 5f).coerceIn(1f, 80f)
+    }
+    
+    fun setGeigerClickDuration(context: Context, ms: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_CLICK_DURATION, ms.coerceIn(1f, 80f))
+            .apply()
+    }
+    
+    /** White noise mix amount (0-1). */
+    fun getGeigerNoiseAmount(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_NOISE_AMOUNT, 0.15f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerNoiseAmount(context: Context, amount: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_NOISE_AMOUNT, amount.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Primary tone amplitude (0-1). */
+    fun getGeigerToneAmount(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_TONE_AMOUNT, 0.6f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerToneAmount(context: Context, amount: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_TONE_AMOUNT, amount.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Second harmonic amplitude (0-1). */
+    fun getGeigerHarmonicAmount(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_HARMONIC_AMOUNT, 0f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerHarmonicAmount(context: Context, amount: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_HARMONIC_AMOUNT, amount.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Harmonic frequency ratio (0.5-8). */
+    fun getGeigerHarmonicFreqRatio(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_HARMONIC_FREQ_RATIO, 2.0f).coerceIn(0.5f, 8f)
+    }
+    
+    fun setGeigerHarmonicFreqRatio(context: Context, ratio: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_HARMONIC_FREQ_RATIO, ratio.coerceIn(0.5f, 8f))
+            .apply()
+    }
+    
+    /** Resonance click frequency in Hz (100-12000). */
+    fun getGeigerResonanceFreq(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_RESONANCE_FREQ, 2000f).coerceIn(100f, 12000f)
+    }
+    
+    fun setGeigerResonanceFreq(context: Context, freq: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_RESONANCE_FREQ, freq.coerceIn(100f, 12000f))
+            .apply()
+    }
+    
+    /** Resonance mix amount (0-1). */
+    fun getGeigerResonanceAmount(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_RESONANCE_AMOUNT, 0f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerResonanceAmount(context: Context, amount: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_RESONANCE_AMOUNT, amount.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Low-pass filter cutoff (0-1, 1=no filter). */
+    fun getGeigerLowPassCutoff(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_GEIGER_LOW_PASS_CUTOFF, 1.0f).coerceIn(0f, 1f)
+    }
+    
+    fun setGeigerLowPassCutoff(context: Context, cutoff: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_GEIGER_LOW_PASS_CUTOFF, cutoff.coerceIn(0f, 1f))
+            .apply()
+    }
+    
+    /** Preview CPS rate for settings test playback (1-500). */
+    fun getGeigerPreviewCps(context: Context): Int {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getInt(KEY_GEIGER_PREVIEW_CPS, 10).coerceIn(1, 500)
+    }
+    
+    fun setGeigerPreviewCps(context: Context, cps: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_GEIGER_PREVIEW_CPS, cps.coerceIn(1, 500))
+            .apply()
+    }
+    
+    /** Geiger preset name (enum name from GeigerTickEngine.GeigerPreset). */
+    fun getGeigerPreset(context: Context): String {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_GEIGER_PRESET, "RADIACODE") ?: "RADIACODE"
+    }
+    
+    fun setGeigerPreset(context: Context, presetName: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_GEIGER_PRESET, presetName)
+            .apply()
+    }
+    
+    /** Reset all Geiger tick parameters to defaults. */
+    fun resetGeigerDefaults(context: Context) {
+        val editor = context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        editor.putFloat(KEY_GEIGER_VOLUME, 0.3f)
+        editor.putFloat(KEY_GEIGER_TONE_FREQUENCY, 800f)
+        editor.putFloat(KEY_GEIGER_ATTACK_TIME, 0.5f)
+        editor.putFloat(KEY_GEIGER_DECAY_RATE, 8f)
+        editor.putFloat(KEY_GEIGER_CLICK_DURATION, 5f)
+        editor.putFloat(KEY_GEIGER_NOISE_AMOUNT, 0.15f)
+        editor.putFloat(KEY_GEIGER_TONE_AMOUNT, 0.6f)
+        editor.putFloat(KEY_GEIGER_HARMONIC_AMOUNT, 0f)
+        editor.putFloat(KEY_GEIGER_HARMONIC_FREQ_RATIO, 2.0f)
+        editor.putFloat(KEY_GEIGER_RESONANCE_FREQ, 2000f)
+        editor.putFloat(KEY_GEIGER_RESONANCE_AMOUNT, 0f)
+        editor.putFloat(KEY_GEIGER_LOW_PASS_CUTOFF, 1.0f)
+        editor.putInt(KEY_GEIGER_PREVIEW_CPS, 10)
+        editor.putString(KEY_GEIGER_PRESET, "RADIACODE")
+        editor.apply()
+    }
+    
+    /** Apply a preset's parameters to all Geiger settings. */
+    fun applyGeigerPreset(context: Context, params: GeigerTickEngine.TickParams, presetName: String) {
+        val editor = context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        editor.putFloat(KEY_GEIGER_VOLUME, params.volume)
+        editor.putFloat(KEY_GEIGER_TONE_FREQUENCY, params.toneFrequencyHz)
+        editor.putFloat(KEY_GEIGER_ATTACK_TIME, params.attackTimeMs)
+        editor.putFloat(KEY_GEIGER_DECAY_RATE, params.decayRate)
+        editor.putFloat(KEY_GEIGER_CLICK_DURATION, params.clickDurationMs)
+        editor.putFloat(KEY_GEIGER_NOISE_AMOUNT, params.noiseAmount)
+        editor.putFloat(KEY_GEIGER_TONE_AMOUNT, params.toneAmount)
+        editor.putFloat(KEY_GEIGER_HARMONIC_AMOUNT, params.harmonicAmount)
+        editor.putFloat(KEY_GEIGER_HARMONIC_FREQ_RATIO, params.harmonicFreqRatio)
+        editor.putFloat(KEY_GEIGER_RESONANCE_FREQ, params.resonanceFreqHz)
+        editor.putFloat(KEY_GEIGER_RESONANCE_AMOUNT, params.resonanceAmount)
+        editor.putFloat(KEY_GEIGER_LOW_PASS_CUTOFF, params.lowPassCutoff)
+        editor.putString(KEY_GEIGER_PRESET, presetName)
+        editor.apply()
     }
     
     // ========== VEGA TTS Settings ==========

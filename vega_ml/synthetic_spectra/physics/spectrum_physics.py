@@ -97,50 +97,132 @@ def detector_efficiency(
     detector_config: Optional[DetectorConfig] = None
 ) -> float:
     """
-    Calculate detector full-energy peak efficiency.
+    Calculate detector full-energy peak efficiency for small CsI scintillators.
     
-    For CsI and GAGG scintillators, efficiency varies with energy.
-    This is a simplified model - real efficiency curves should be
-    measured for each detector.
+    This models the PHOTOPEAK (full-energy deposition) efficiency, NOT the
+    total detection efficiency. For small (~1 cm³) CsI crystals:
+    
+    - Low energy (<100 keV): Efficiency limited by housing absorption and
+      photoelectric effect dominates, efficiency ~50-80%
+    - Medium energy (100-300 keV): Peak efficiency ~40-60%  
+    - High energy (>400 keV): Compton scatter dominates, most gammas escape
+      after partial energy deposition. Photopeak efficiency drops dramatically.
+    
+    The key insight is that a 609 keV gamma has a very small probability
+    of depositing ALL its energy in a 1 cm³ crystal - most Compton scatter
+    and escape, contributing to the Compton continuum instead.
     
     Args:
         energy_kev: Gamma energy in keV
         detector_config: Detector configuration
     
     Returns:
-        Efficiency as fraction (0-1)
+        Photopeak efficiency as fraction (0-1)
     """
     if detector_config is None:
         detector_config = get_default_config()
     
-    # Simplified efficiency model for ~1 cm³ scintillator
-    # Low energy: efficiency increases (more stopping power)
-    # High energy: efficiency decreases (photons pass through)
-    # Peak around 100-300 keV for small scintillators
+    if energy_kev < 20:
+        return 0.0
     
-    # This is a phenomenological model
-    # Real efficiency should be calibrated
+    # Volume-dependent characteristic length
+    # For ~1 cm³, char_length ~ 1 cm
+    vol = detector_config.detector_volume_cm3
+    char_length = vol ** (1/3)
+    
+    # CsI mass attenuation coefficients (approximate, from NIST XCOM)
+    # At different energies (cm²/g), CsI density = 4.51 g/cm³
+    # 50 keV: ~6.0 cm²/g, 100 keV: ~1.5 cm²/g, 200 keV: ~0.4 cm²/g
+    # 300 keV: ~0.22 cm²/g, 500 keV: ~0.12 cm²/g, 1000 keV: ~0.07 cm²/g
+    
+    # Photoelectric fraction (probability of full absorption vs Compton)
+    # Drops very rapidly with energy in the 100-500 keV range
+    if energy_kev < 100:
+        # Photoelectric dominates below 100 keV
+        pe_fraction = 0.85 - 0.3 * (energy_kev - 50) / 50
+    elif energy_kev < 300:
+        # Transition region - Compton becomes significant
+        pe_fraction = 0.55 * np.exp(-((energy_kev - 100) / 150))
+    else:
+        # High energy - Compton dominates, photopeak very weak
+        # At 609 keV, only ~3-5% of detected events are full energy
+        pe_fraction = 0.15 * np.exp(-((energy_kev - 300) / 400))
+    
+    # Geometric detection probability (solid angle / attenuation)
+    # Low energy cutoff (housing absorption ~0.5mm Al)
+    low_cutoff = 1.0 - np.exp(-energy_kev / 40.0)
+    
+    # Total interaction probability (will gamma interact at all?)
+    # Linear attenuation coeff * path length
+    # Higher energy = longer path, lower interaction prob
+    mu_rho = 0.5 * np.exp(-energy_kev / 200.0) + 0.08  # cm²/g (simplified)
+    density = 4.51  # CsI g/cm³
+    mu = mu_rho * density  # Linear attenuation (1/cm)
+    interaction_prob = 1.0 - np.exp(-mu * char_length)
+    
+    # Photopeak efficiency = interact AND deposit full energy
+    eff = interaction_prob * pe_fraction * low_cutoff
+    
+    # Empirical scaling to match real detector behavior
+    # RadiaCode 110 with ~1 cm³ crystal
+    eff *= 0.5  # Overall geometric/collection efficiency factor
+    
+    return max(0.0, min(1.0, eff))
+
+
+def total_interaction_efficiency(
+    energy_kev: float,
+    detector_config: Optional[DetectorConfig] = None
+) -> float:
+    """
+    Calculate total interaction efficiency (any energy deposition).
+    
+    This is the probability that a gamma interacts AT ALL in the crystal,
+    regardless of whether it deposits full energy or partial energy.
+    This is higher than photopeak efficiency, especially at high energies.
+    
+    Used to calculate Compton scatter contributions.
+    
+    Args:
+        energy_kev: Gamma energy in keV
+        detector_config: Detector configuration
+    
+    Returns:
+        Total interaction efficiency as fraction (0-1)
+    """
+    if detector_config is None:
+        detector_config = get_default_config()
     
     if energy_kev < 20:
         return 0.0
     
-    # Simple model: efficiency peaks around 100-200 keV
-    # Falls off at low energy (absorption in housing)
-    # Falls off at high energy (less stopping power)
+    vol = detector_config.detector_volume_cm3
+    char_length = vol ** (1/3)
     
-    # Low energy cutoff (absorption)
-    low_eff = 1.0 - np.exp(-energy_kev / 50.0)
+    # Approximate total linear attenuation coefficient for CsI
+    # Includes both photoelectric and Compton cross-sections
+    # CsI density = 4.51 g/cm³
     
-    # High energy falloff (escape)
-    # For 1 cm³ CsI, efficiency drops significantly above ~500 keV
-    high_eff = np.exp(-energy_kev / 2000.0)
+    # Mass attenuation coefficients (cm²/g) from NIST XCOM
+    # These are TOTAL (PE + Compton + pair), not just PE
+    if energy_kev < 100:
+        mu_rho = 6.0 * np.exp(-(energy_kev - 50) / 50) + 0.5
+    elif energy_kev < 500:
+        mu_rho = 0.5 * np.exp(-(energy_kev - 100) / 300) + 0.12
+    else:
+        mu_rho = 0.12 * np.exp(-(energy_kev - 500) / 800) + 0.06
     
-    # Combine effects
-    eff = 0.8 * low_eff * high_eff
+    density = 4.51
+    mu = mu_rho * density  # Linear attenuation (1/cm)
     
-    # Scale by detector volume
-    volume_factor = (detector_config.detector_volume_cm3 / 1.0) ** (1/3)
-    eff *= min(1.0, volume_factor)
+    # Probability of at least one interaction
+    interaction_prob = 1.0 - np.exp(-mu * char_length)
+    
+    # Housing absorption for low energies
+    low_cutoff = 1.0 - np.exp(-energy_kev / 40.0)
+    
+    # Geometric efficiency
+    eff = interaction_prob * low_cutoff * 0.5
     
     return max(0.0, min(1.0, eff))
 
@@ -222,45 +304,168 @@ def generate_compton_continuum(
     energy_bins: np.ndarray,
     peak_energy: float,
     peak_counts: float,
-    compton_to_peak_ratio: float = 0.5
+    compton_to_peak_ratio: float = 0.5,
+    detector_config: Optional[DetectorConfig] = None
 ) -> np.ndarray:
     """
-    Generate simplified Compton continuum for a gamma line.
+    Generate realistic Compton continuum for a gamma line in small CsI scintillators.
     
-    The Compton continuum extends from 0 to the Compton edge.
-    Compton edge energy = E * (1 - 1/(1 + 2*E/(511)))
+    For RadiaCode devices (~1 cm³ CsI crystal), the Compton continuum has 
+    characteristic shape:
+    - Relatively flat plateau from low energy to near Compton edge
+    - Mild rise near Compton edge (not a sharp peak like in large detectors)
+    - The plateau level is significant because most gammas scatter once and escape
+    - Very low energies (<50 keV) are absorbed/attenuated by housing
     
     Args:
         energy_bins: Array of energy bin centers (keV)
         peak_energy: Energy of the gamma line (keV)
         peak_counts: Total counts in the photopeak
         compton_to_peak_ratio: Ratio of Compton counts to peak counts
+        detector_config: Detector configuration for response modeling
     
     Returns:
         Array of Compton continuum counts
     """
-    # Compton edge energy
-    alpha = peak_energy / 511.0  # E / m_e c²
+    if peak_energy < 50:
+        return np.zeros_like(energy_bins)
+    
+    # Compton edge energy: E_edge = E * 2α / (1 + 2α) where α = E / 511 keV
+    alpha = peak_energy / 511.0
     compton_edge = peak_energy * (2 * alpha) / (1 + 2 * alpha)
     
-    # Create continuum (simplified flat + edge shape)
-    continuum = np.zeros_like(energy_bins)
+    # Backscatter peak energy (180 degree scatter)
+    backscatter_energy = peak_energy / (1 + 2 * alpha)
     
-    # Mask for energies below Compton edge
-    mask = energy_bins < compton_edge
+    continuum = np.zeros_like(energy_bins, dtype=np.float64)
     
-    if np.any(mask):
-        # Simple model: roughly flat with enhancement near edge
-        base_level = peak_counts * compton_to_peak_ratio / np.sum(mask)
-        continuum[mask] = base_level
-        
-        # Add edge enhancement (Klein-Nishina-like shape)
-        edge_region = (energy_bins > 0.8 * compton_edge) & (energy_bins < compton_edge)
-        if np.any(edge_region):
-            enhancement = 1.5 * np.exp(-((energy_bins[edge_region] - compton_edge) / (0.05 * compton_edge)) ** 2)
-            continuum[edge_region] *= (1 + enhancement)
+    # Compton continuum extends from low energy to Compton edge
+    # But for small detectors, even energies above edge can have some counts
+    # due to multiple scatter and incomplete energy deposition
+    mask = (energy_bins > 30) & (energy_bins < compton_edge * 1.05)
+    
+    if not np.any(mask):
+        return continuum
+    
+    E = energy_bins[mask]
+    
+    # Normalized position in continuum (0 = lowest, 1 = Compton edge)
+    x = E / compton_edge
+    x = np.clip(x, 0, 1.05)
+    
+    # Klein-Nishina differential cross section (simplified)
+    # For small scintillators, the shape is dominated by:
+    # 1. Relatively FLAT plateau (single scatter + escape)
+    # 2. Moderate rise near Compton edge
+    # 3. Mild backscatter bump around 170-220 keV
+    # 4. Low-energy attenuation from housing
+    
+    # Housing attenuation (reduces counts below ~50-80 keV)
+    housing_atten = 1.0 - np.exp(-(E - 30) / 30.0)
+    
+    # Main plateau - relatively flat for small detectors
+    # The Klein-Nishina shape is "smeared" by multiple scatter/escape
+    plateau = 0.7 + 0.3 * x  # Nearly flat with slight rise
+    
+    # Compton edge region - broader enhancement for poor resolution
+    edge_sigma = 0.15  # Broader than large detectors
+    edge_enhancement = 1.0 + 0.5 * np.exp(-((x - 0.95) / edge_sigma)**2)
+    
+    # Backscatter bump (broad)
+    bs_x = backscatter_energy / compton_edge
+    backscatter_bump = 0.3 * np.exp(-((x - bs_x) / 0.15)**2)
+    
+    # Combine components
+    shape = housing_atten * (plateau + backscatter_bump) * edge_enhancement
+    
+    # Handle energies slightly above Compton edge (tail)
+    above_edge = x > 1.0
+    if np.any(above_edge):
+        shape[above_edge] *= np.exp(-((x[above_edge] - 1.0) / 0.03)**2)
+    
+    # Normalize and scale
+    total_compton = peak_counts * compton_to_peak_ratio
+    shape_sum = np.sum(shape)
+    if shape_sum > 0:
+        continuum[mask] = shape * (total_compton / shape_sum)
     
     return continuum
+
+
+def generate_peak_with_compton(
+    energy_bins: np.ndarray,
+    peak_params: PeakParameters,
+    detector_config: Optional[DetectorConfig] = None,
+    include_compton: bool = True,
+    compton_ratio: float = 0.6
+) -> np.ndarray:
+    """
+    Generate a gamma peak with associated Compton continuum.
+    
+    The Compton continuum is calculated based on the difference between
+    total interaction probability and photopeak efficiency. This means
+    high-energy gammas that interact but don't deposit full energy
+    contribute to the Compton continuum.
+    
+    For small CsI scintillators (~1 cm³), high-energy gammas have:
+    - Low photopeak efficiency (hard to deposit ALL energy)
+    - Moderate total interaction probability (often interact at least once)
+    - High Compton contribution (difference between the two)
+    
+    Args:
+        energy_bins: Array of energy bin centers (keV)
+        peak_params: Peak parameters
+        detector_config: Detector configuration
+        include_compton: Whether to add Compton continuum
+        compton_ratio: Scaling factor for Compton (typically 0.5-1.0)
+    
+    Returns:
+        Array of counts including peak and continuum
+    """
+    if detector_config is None:
+        detector_config = get_default_config()
+    
+    # Generate photopeak using photopeak efficiency
+    peak = generate_peak_spectrum(energy_bins, peak_params, detector_config)
+    
+    if not include_compton or peak_params.energy_kev < 100:
+        return peak
+    
+    E = peak_params.energy_kev
+    
+    # Get efficiencies
+    eff_photopeak = detector_efficiency(E, detector_config)
+    eff_total = total_interaction_efficiency(E, detector_config)
+    
+    # Compton events = interactions that don't deposit full energy
+    # = total interactions - photopeak events
+    # Scale by compton_ratio for tuning
+    eff_compton = (eff_total - eff_photopeak) * compton_ratio
+    
+    if eff_compton <= 0:
+        return peak
+    
+    # Calculate expected Compton counts
+    # This is based on the same formula as photopeak but with Compton efficiency
+    expected_compton = (
+        peak_params.activity_bq *
+        peak_params.live_time_s *
+        peak_params.intensity *
+        eff_compton
+    )
+    
+    if expected_compton > 0:
+        compton = generate_compton_continuum(
+            energy_bins,
+            E,
+            expected_compton,  # Use expected Compton counts directly
+            compton_to_peak_ratio=1.0,  # Already calculated the counts
+            detector_config=detector_config
+        )
+        peak += compton
+    
+    return peak
+    return peak
 
 
 # =============================================================================

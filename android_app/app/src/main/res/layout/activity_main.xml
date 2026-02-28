@@ -45,6 +45,18 @@
                         android:background="@drawable/status_dot"
                         android:visibility="gone" />
 
+                    <!-- Geiger tick toggle (sound icon) -->
+                    <ImageView
+                        android:id="@+id/btnGeigerToggle"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:layout_marginEnd="10dp"
+                        android:src="@android:drawable/ic_lock_silent_mode_off"
+                        android:contentDescription="Toggle Geiger ticks"
+                        android:alpha="0.4"
+                        android:clickable="true"
+                        android:focusable="true" />
+
                     <View
                         android:id="@+id/statusDot"
                         android:layout_width="8dp"

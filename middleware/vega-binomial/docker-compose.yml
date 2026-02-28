@@ -1,0 +1,44 @@
+# Vega Bulk Binomial Detection API - Docker Compose
+# For GPU support, ensure nvidia-docker2 is installed
+
+services:
+  vega-binomial:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-binomial-api:latest
+    container_name: vega-binomial
+    restart: unless-stopped
+    
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment
+    environment:
+      - VEGA_BINOMIAL_MODELS_DIR=/app/models
+      - VEGA_DEVICE=cuda
+      - VEGA_DEFAULT_THRESHOLD=0.5
+      - VEGA_MODEL_VERSION=v5-micro-2000per
+      - NVIDIA_VISIBLE_DEVICES=all
+    
+    # Ports
+    ports:
+      - "8021:8021"
+    
+    # Mount model files
+    volumes:
+      - ./models:/app/models:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Model loading time (many models)

@@ -25,5 +25,7 @@ from .decay_chains import (
     ChainSignature,
     get_decay_chain,
     get_chain_daughters,
+    get_full_descendants,
+    get_chain_containing,
     infer_parent_from_daughters,
 )

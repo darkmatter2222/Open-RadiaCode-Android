@@ -497,12 +497,13 @@ class Vega2DInference:
         if current_rows == target_rows:
             return spectrum
         elif current_rows > target_rows:
-            # Truncate - take last N intervals (most recent data)
-            return spectrum[-target_rows:]
+            # Truncate: take evenly spaced intervals to preserve temporal coverage
+            indices = np.linspace(0, current_rows - 1, target_rows, dtype=int)
+            return spectrum[indices, :]
         else:
-            # Pad with zeros at the beginning
-            padding = np.zeros((target_rows - current_rows, spectrum.shape[1]))
-            return np.vstack([padding, spectrum])
+            # Pad with zeros at the end
+            padding = np.zeros((target_rows - current_rows, spectrum.shape[1]), dtype=spectrum.dtype)
+            return np.vstack([spectrum, padding])
     
     def preprocess(self, spectrum: np.ndarray, normalize: bool = True) -> torch.Tensor:
         """

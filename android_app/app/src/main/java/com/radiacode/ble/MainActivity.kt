@@ -87,6 +87,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
     private lateinit var allDevicesOverlay: View
 
+    // Dashboard - Geiger tick
+    private lateinit var btnGeigerToggle: ImageView
+    private var geigerTickEngine: GeigerTickEngine? = null
+
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
     private lateinit var cpsCard: MetricCardView
@@ -322,6 +326,11 @@ class MainActivity : AppCompatActivity() {
             val uSvH = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_USV_H, 0f)
             val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
             val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
+
+            // Feed Geiger tick engine regardless of device selection
+            if (Prefs.isGeigerTickEnabled(this@MainActivity)) {
+                geigerTickEngine?.onDataReceived(cps)
+            }
 
             // Always feed the map (map cares about location + radiation, not device identity).
             if (ts > 0L && ts != lastMapReadingTimestampMs) {
@@ -701,6 +710,21 @@ class MainActivity : AppCompatActivity() {
         // Device selector for multi-device dashboard
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
+
+        // Geiger tick toggle (toolbar icon)
+        btnGeigerToggle = findViewById(R.id.btnGeigerToggle)
+        updateGeigerIconAlpha(Prefs.isGeigerTickEnabled(this))
+        btnGeigerToggle.setOnClickListener {
+            val nowEnabled = !Prefs.isGeigerTickEnabled(this)
+            Prefs.setGeigerTickEnabled(this, nowEnabled)
+            updateGeigerIconAlpha(nowEnabled)
+            if (nowEnabled) {
+                geigerTickEngine = GeigerTickEngine.getInstance(this)
+                geigerTickEngine?.start()
+            } else {
+                geigerTickEngine?.stop()
+            }
+        }
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -1808,8 +1832,26 @@ class MainActivity : AppCompatActivity() {
         startUiLoop()
         refreshSettingsRows()
         
+        // Geiger tick engine: start if enabled
+        if (Prefs.isGeigerTickEnabled(this)) {
+            geigerTickEngine = GeigerTickEngine.getInstance(this)
+            geigerTickEngine?.start()
+        }
+        updateGeigerIconAlpha(Prefs.isGeigerTickEnabled(this))
+
         // Update spectrogram recording indicator
         updateSpectrogramRecordingIndicator()
+    }
+    
+    private fun updateGeigerIconAlpha(active: Boolean) {
+        btnGeigerToggle.alpha = if (active) 1f else 0.3f
+        // Tint color: amber when active, muted when off
+        val color = if (active) {
+            android.graphics.Color.parseColor("#FFB300")  // pro_amber
+        } else {
+            android.graphics.Color.parseColor("#80FFFFFF")
+        }
+        btnGeigerToggle.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN)
     }
     
     /**
@@ -1921,6 +1963,7 @@ class MainActivity : AppCompatActivity() {
         mapCard.stopLocationTracking()
         stopUiLoop()
         Prefs.setAppInForeground(this, false)
+        // Geiger ticks continue in background via RadiaCodeForegroundService
     }
 
     override fun onDestroy() {
@@ -1929,6 +1972,8 @@ class MainActivity : AppCompatActivity() {
         chartLoadFuture?.cancel(true)
         mapLoadFuture?.cancel(true)
         ioExecutor.shutdownNow()
+        // GeigerTickEngine lifecycle managed by RadiaCodeForegroundService
+        geigerTickEngine = null
     }
 
     private fun hasAllPermissions(): Boolean {
@@ -1987,8 +2032,18 @@ class MainActivity : AppCompatActivity() {
     }
     
     private var pendingCalibrationReceiver: BroadcastReceiver? = null
+    private var isCalibrationDownloadInProgress: Boolean = false
     
     private fun downloadKevCalibration() {
+        if (isCalibrationDownloadInProgress) {
+            android.widget.Toast.makeText(this, "Calibration download already in progress…", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isCalibrationDownloadInProgress = true
+        rowDownloadCalibration.isEnabled = false
+        rowDownloadCalibration.alpha = 0.5f
+
         val selectedDeviceId = selectedDeviceIdCache
         
         // Show progress
@@ -2005,6 +2060,10 @@ class MainActivity : AppCompatActivity() {
                     // Unregister immediately
                     try { unregisterReceiver(this) } catch (_: Exception) {}
                     pendingCalibrationReceiver = null
+
+                    isCalibrationDownloadInProgress = false
+                    rowDownloadCalibration.isEnabled = true
+                    rowDownloadCalibration.alpha = 1.0f
                     
                     // Check for error
                     val success = intent.getBooleanExtra("success", true)
@@ -2040,6 +2099,9 @@ class MainActivity : AppCompatActivity() {
             pendingCalibrationReceiver?.let {
                 try { unregisterReceiver(it) } catch (_: Exception) {}
                 pendingCalibrationReceiver = null
+                isCalibrationDownloadInProgress = false
+                rowDownloadCalibration.isEnabled = true
+                rowDownloadCalibration.alpha = 1.0f
                 android.widget.Toast.makeText(this, "Calibration request timed out. Is device connected?", android.widget.Toast.LENGTH_LONG).show()
             }
         }, 10_000)

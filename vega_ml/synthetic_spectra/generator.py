@@ -21,11 +21,13 @@ from .ground_truth import (
     get_all_isotopes,
     DECAY_CHAINS,
     get_chain_daughters,
+    get_full_descendants,
     infer_parent_from_daughters,
 )
 from .physics import (
     PeakParameters,
     generate_peak_spectrum,
+    generate_peak_with_compton,
     generate_environmental_background,
     apply_poisson_noise,
     apply_electronic_noise,
@@ -75,6 +77,24 @@ class SpectrumConfig:
     # Normalization
     normalize: bool = True
     normalization_method: str = "max"  # max, sum, log, sqrt
+    
+    # === Domain randomization for better generalization ===
+    # Include Compton continuum (critical for realism)
+    include_compton: bool = True
+    compton_ratio: float = 0.6  # Compton to peak ratio (0.3-1.0 typical)
+    
+    # FWHM variation (detector-to-detector variance)
+    fwhm_variation: float = 0.1  # +/- 10% FWHM variation
+    
+    # Efficiency curve variation
+    efficiency_variation: float = 0.15  # +/- 15% efficiency variation
+    
+    # Energy calibration jitter (keV)
+    calibration_offset_kev: float = 0.0  # Will be randomized if cal_jitter > 0
+    calibration_jitter_kev: float = 5.0  # Random offset up to +/- this value
+    
+    # Gain variation (multiplicative energy scale)
+    gain_variation: float = 0.02  # +/- 2% gain variation
 
 
 @dataclass
@@ -154,19 +174,40 @@ class SpectrumGenerator:
         source_isotopes = []
         background_isotopes = []
         
+        # Get domain randomization settings from background_config
+        include_compton = background_config.get('include_compton', True)
+        compton_ratio = background_config.get('compton_ratio', 0.6)
+        fwhm_variation = background_config.get('fwhm_variation', 0.0)
+        efficiency_variation = background_config.get('efficiency_variation', 0.0)
+        calibration_offset = background_config.get('calibration_offset_kev', 0.0)
+        gain_factor = background_config.get('gain_factor', 1.0)
+        
+        # Create a modified detector config if we have variations
+        effective_detector = self.detector_config
+        if fwhm_variation != 0 or efficiency_variation != 0:
+            # Copy and modify
+            from copy import deepcopy
+            effective_detector = deepcopy(self.detector_config)
+            if fwhm_variation != 0:
+                fwhm_mult = 1.0 + np.random.uniform(-fwhm_variation, fwhm_variation)
+                effective_detector.fwhm_at_662 *= fwhm_mult
+        
+        # Apply calibration offset to energy bins for this interval
+        effective_energy_bins = self.energy_bins * gain_factor + calibration_offset
+        
         # Add background
         if include_background:
             if background_config is None:
                 background_config = {}
             
             bg_spectrum, bg_isotopes = generate_environmental_background(
-                self.energy_bins,
+                effective_energy_bins,
                 interval_duration,
                 background_cps=background_config.get('background_cps', 5.0),
                 include_k40=background_config.get('include_k40', True),
                 include_radon=background_config.get('include_radon', True),
                 include_thorium=background_config.get('include_thorium', True),
-                detector_config=self.detector_config
+                detector_config=effective_detector
             )
             spectrum += bg_spectrum
             background_isotopes = bg_isotopes
@@ -187,43 +228,49 @@ class SpectrumGenerator:
                 )
                 activity *= variation
             
-            # Add gamma lines from this isotope
-            for gamma_line in isotope.gamma_lines:
-                peak_params = PeakParameters(
-                    energy_kev=gamma_line.energy_kev,
-                    intensity=gamma_line.intensity,
-                    activity_bq=activity,
-                    live_time_s=interval_duration
-                )
+            # Get all isotopes to include (source + full decay chain if requested)
+            isotopes_to_add = [source.isotope_name]
+            if source.include_daughters:
+                # Use full descendants, not just immediate daughters
+                descendants = get_full_descendants(source.isotope_name, include_self=False)
+                isotopes_to_add.extend(descendants)
+            
+            # Add gamma lines from all isotopes in the chain
+            for iso_name in isotopes_to_add:
+                iso = get_isotope(iso_name)
+                if iso is None:
+                    continue
                 
-                peak = generate_peak_spectrum(
-                    self.energy_bins,
-                    peak_params,
-                    self.detector_config
-                )
-                spectrum += peak
-            
-            source_isotopes.append(source.isotope_name)
-            
-            # Include daughters if requested
-            if source.include_daughters and isotope.daughters:
-                for daughter_name in isotope.daughters:
-                    daughter = get_isotope(daughter_name)
-                    if daughter:
-                        for gamma_line in daughter.gamma_lines:
-                            peak_params = PeakParameters(
-                                energy_kev=gamma_line.energy_kev,
-                                intensity=gamma_line.intensity,
-                                activity_bq=activity,  # Secular equilibrium assumed
-                                live_time_s=interval_duration
-                            )
-                            peak = generate_peak_spectrum(
-                                self.energy_bins,
-                                peak_params,
-                                self.detector_config
-                            )
-                            spectrum += peak
-                        source_isotopes.append(daughter_name)
+                for gamma_line in iso.gamma_lines:
+                    # Apply gain/offset to peak energy
+                    effective_energy = gamma_line.energy_kev * gain_factor + calibration_offset
+                    
+                    peak_params = PeakParameters(
+                        energy_kev=effective_energy,
+                        intensity=gamma_line.intensity,
+                        activity_bq=activity,  # Secular equilibrium assumed
+                        live_time_s=interval_duration
+                    )
+                    
+                    # Use Compton-inclusive generation
+                    if include_compton:
+                        peak = generate_peak_with_compton(
+                            effective_energy_bins,
+                            peak_params,
+                            effective_detector,
+                            include_compton=True,
+                            compton_ratio=compton_ratio
+                        )
+                    else:
+                        peak = generate_peak_spectrum(
+                            effective_energy_bins,
+                            peak_params,
+                            effective_detector
+                        )
+                    spectrum += peak
+                
+                if iso_name not in source_isotopes:
+                    source_isotopes.append(iso_name)
         
         return spectrum, list(set(source_isotopes)), background_isotopes
     
@@ -257,12 +304,35 @@ class SpectrumGenerator:
         all_source_isotopes = []
         all_background_isotopes = []
         
-        # Generate each time interval
+        # Apply domain randomization: compute per-spectrum random variations
+        # These are fixed for the whole spectrum (not per-interval)
+        calibration_offset = config.calibration_offset_kev
+        if config.calibration_jitter_kev > 0:
+            calibration_offset += np.random.uniform(
+                -config.calibration_jitter_kev, 
+                config.calibration_jitter_kev
+            )
+        
+        gain_factor = 1.0
+        if config.gain_variation > 0:
+            gain_factor = 1.0 + np.random.uniform(
+                -config.gain_variation,
+                config.gain_variation
+            )
+        
+        # Generate each time interval with domain randomization settings
         background_config = {
             'background_cps': config.background_cps,
             'include_k40': config.include_k40,
             'include_radon': config.include_radon,
             'include_thorium': config.include_thorium,
+            # Domain randomization
+            'include_compton': config.include_compton,
+            'compton_ratio': config.compton_ratio,
+            'fwhm_variation': config.fwhm_variation,
+            'efficiency_variation': config.efficiency_variation,
+            'calibration_offset_kev': calibration_offset,
+            'gain_factor': gain_factor,
         }
         
         for i in range(num_intervals):

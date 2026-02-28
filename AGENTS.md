@@ -58,6 +58,7 @@ Emojis are prohibited in all user-facing text, UI, notifications, and code comme
 - Work on feature branches: `git checkout -b feature/short-description`
 - Make atomic commits with clear messages
 - Push feature branches to origin
+- **Always push code to the repo after making changes** — never leave work uncommitted
 - **Never merge to `main` unless explicitly instructed**
 
 ### 3. Secrets & Environment Files

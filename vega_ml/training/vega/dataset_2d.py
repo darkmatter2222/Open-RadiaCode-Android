@@ -115,7 +115,9 @@ class SpectrumDataset2D(Dataset):
     def _detect_format(self) -> str:
         """Detect storage format: v4, v3, or legacy."""
         # Check for v4 binary format
-        lbl_files = list(self.spectra_dir.glob("s*.lbl"))
+        # v4 originally stored flat files under spectra/. v5+ may store per-class
+        # subdirectories under spectra/<isotope>/.
+        lbl_files = list(self.spectra_dir.rglob("s*.lbl"))
         if len(lbl_files) > 0:
             return "v4"
         
@@ -138,8 +140,17 @@ class SpectrumDataset2D(Dataset):
     
     def _scan_v4_samples(self) -> List[str]:
         """Scan directory for v4 sample IDs."""
-        npy_files = sorted(self.spectra_dir.glob("s*.npy"))
-        return [f.stem for f in npy_files]
+        # v4 originally stored flat files under spectra/.
+        # v5+ may store per-class subdirectories under spectra/<isotope>/.
+        npy_files = sorted(self.spectra_dir.rglob("s*.npy"))
+
+        sample_ids: List[str] = []
+        for f in npy_files:
+            rel = f.relative_to(self.spectra_dir)
+            # Store sample_id without suffix, preserving any subdirectory prefix.
+            sample_ids.append(str(rel.with_suffix("")))
+
+        return sample_ids
     
     def _load_v4_metadata(self):
         """Load v4 metadata including isotope index mapping."""

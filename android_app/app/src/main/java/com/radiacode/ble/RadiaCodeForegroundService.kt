@@ -190,6 +190,9 @@ class RadiaCodeForegroundService : Service() {
     
     // Spectrogram recording - just a flag, data flows via existing spectrum callbacks
     private var isSpectrogramRecording = false
+    
+    // Geiger tick engine - runs in service for background audio
+    private var geigerTickEngine: GeigerTickEngine? = null
 
     private var lastMapSaveLogMs: Long = 0L
     private var lastNoLocationLogMs: Long = 0L
@@ -224,6 +227,12 @@ class RadiaCodeForegroundService : Service() {
         
         // Initialize VEGA TTS
         VegaTTS.init(this)
+        
+        // Initialize Geiger tick engine for background audio
+        if (Prefs.isGeigerTickEnabled(this)) {
+            geigerTickEngine = GeigerTickEngine.getInstance(this)
+            geigerTickEngine?.start()
+        }
         
         // Initialize multi-device manager
         deviceManager = MultiDeviceBleManager(
@@ -387,6 +396,8 @@ class RadiaCodeForegroundService : Service() {
         stopInternal("Service destroyed")
         locationController?.releaseBackground(backgroundLocationToken)
         backgroundLocationToken = null
+        geigerTickEngine?.stop()
+        geigerTickEngine = null
         SoundManager.release()  // Release sound resources
         VegaTTS.release()  // Release VEGA TTS resources
         try { unregisterReceiver(btStateReceiver) } catch (_: Throwable) {}
@@ -658,6 +669,17 @@ class RadiaCodeForegroundService : Service() {
         // Audio gating: don't keep audio pipeline hot while background/locked.
         if (shouldPlayDataTick()) {
             SoundManager.play(this, Prefs.SoundType.DATA_TICK)
+        }
+        
+        // Feed Geiger tick engine (always, for background audio)
+        if (Prefs.isGeigerTickEnabled(this)) {
+            if (geigerTickEngine == null || !geigerTickEngine!!.isActive()) {
+                geigerTickEngine = GeigerTickEngine.getInstance(this)
+                geigerTickEngine?.start()
+            }
+            geigerTickEngine?.onDataReceived(cps)
+        } else if (geigerTickEngine?.isActive() == true) {
+            geigerTickEngine?.stop()
         }
 
         // Hold-last-fix strategy: attach most recent location fix to each reading.
