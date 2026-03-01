@@ -95,6 +95,7 @@ object Prefs {
     
     // Geiger Tick Synthesizer keys
     private const val KEY_GEIGER_TICK_ENABLED = "geiger_tick_enabled"
+    private const val KEY_GEIGER_TICK_MODE = "geiger_tick_mode"
     private const val KEY_GEIGER_VOLUME = "geiger_volume"
     private const val KEY_GEIGER_TONE_FREQUENCY = "geiger_tone_frequency"
     private const val KEY_GEIGER_ATTACK_TIME = "geiger_attack_time"
@@ -2323,17 +2324,43 @@ object Prefs {
     }
     
     // ========== Geiger Tick Synthesizer Settings ==========
-    
-    fun isGeigerTickEnabled(context: Context): Boolean {
-        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    /** Tri-state mode for geiger tick audio source. */
+    enum class GeigerTickMode { OFF, CPS, NSV }
+
+    fun getGeigerTickMode(context: Context): GeigerTickMode {
+        val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_GEIGER_TICK_MODE, null)
+        if (name != null) {
+            return try { GeigerTickMode.valueOf(name) } catch (_: Exception) { GeigerTickMode.OFF }
+        }
+        // Migrate from old boolean pref
+        val legacyOn = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getBoolean(KEY_GEIGER_TICK_ENABLED, false)
+        return if (legacyOn) GeigerTickMode.CPS else GeigerTickMode.OFF
+    }
+
+    fun setGeigerTickMode(context: Context, mode: GeigerTickMode) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_GEIGER_TICK_MODE, mode.name)
+            .putBoolean(KEY_GEIGER_TICK_ENABLED, mode != GeigerTickMode.OFF)
+            .apply()
+    }
+
+    fun isGeigerTickEnabled(context: Context): Boolean {
+        return getGeigerTickMode(context) != GeigerTickMode.OFF
     }
     
     fun setGeigerTickEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_GEIGER_TICK_ENABLED, enabled)
-            .apply()
+        if (enabled) {
+            // When toggling on generically, use CPS as default
+            if (getGeigerTickMode(context) == GeigerTickMode.OFF) {
+                setGeigerTickMode(context, GeigerTickMode.CPS)
+            }
+        } else {
+            setGeigerTickMode(context, GeigerTickMode.OFF)
+        }
     }
     
     fun getGeigerVolume(context: Context): Float {

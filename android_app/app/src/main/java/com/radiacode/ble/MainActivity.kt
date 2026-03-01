@@ -327,9 +327,15 @@ class MainActivity : AppCompatActivity() {
             val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
             val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
 
-            // Feed Geiger tick engine regardless of device selection
-            if (Prefs.isGeigerTickEnabled(this@MainActivity)) {
-                geigerTickEngine?.onDataReceived(cps)
+            // Feed Geiger tick engine based on selected mode
+            val geigerMode = Prefs.getGeigerTickMode(this@MainActivity)
+            if (geigerMode != Prefs.GeigerTickMode.OFF) {
+                val rate = when (geigerMode) {
+                    Prefs.GeigerTickMode.CPS -> cps
+                    Prefs.GeigerTickMode.NSV -> (uSvH * 1000f) / 100f  // nSv/h scaled
+                    else -> cps
+                }
+                geigerTickEngine?.onDataReceived(rate)
             }
 
             // Always feed the map (map cares about location + radiation, not device identity).
@@ -711,20 +717,10 @@ class MainActivity : AppCompatActivity() {
         deviceSelector = findViewById(R.id.deviceSelector)
         allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
 
-        // Geiger tick toggle (toolbar icon)
+        // Geiger tick toggle (toolbar icon) - shows mode picker modal
         btnGeigerToggle = findViewById(R.id.btnGeigerToggle)
-        updateGeigerIconAlpha(Prefs.isGeigerTickEnabled(this))
-        btnGeigerToggle.setOnClickListener {
-            val nowEnabled = !Prefs.isGeigerTickEnabled(this)
-            Prefs.setGeigerTickEnabled(this, nowEnabled)
-            updateGeigerIconAlpha(nowEnabled)
-            if (nowEnabled) {
-                geigerTickEngine = GeigerTickEngine.getInstance(this)
-                geigerTickEngine?.start()
-            } else {
-                geigerTickEngine?.stop()
-            }
-        }
+        updateGeigerIcon()
+        btnGeigerToggle.setOnClickListener { showGeigerModeDialog() }
 
         doseCard = findViewById(R.id.doseCard)
         cpsCard = findViewById(R.id.cpsCard)
@@ -1837,13 +1833,44 @@ class MainActivity : AppCompatActivity() {
             geigerTickEngine = GeigerTickEngine.getInstance(this)
             geigerTickEngine?.start()
         }
-        updateGeigerIconAlpha(Prefs.isGeigerTickEnabled(this))
+        updateGeigerIcon()
 
         // Update spectrogram recording indicator
         updateSpectrogramRecordingIndicator()
     }
     
-    private fun updateGeigerIconAlpha(active: Boolean) {
+    private fun showGeigerModeDialog() {
+        val modes = arrayOf("CPS (Counts Per Second)", "nSv/h (Nano Sieverts)", "Off")
+        val currentMode = Prefs.getGeigerTickMode(this)
+        val checkedIndex = when (currentMode) {
+            Prefs.GeigerTickMode.CPS -> 0
+            Prefs.GeigerTickMode.NSV -> 1
+            Prefs.GeigerTickMode.OFF -> 2
+        }
+        AlertDialog.Builder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+            .setTitle("Geiger Tick Audio Source")
+            .setSingleChoiceItems(modes, checkedIndex) { dialog, which ->
+                val selected = when (which) {
+                    0 -> Prefs.GeigerTickMode.CPS
+                    1 -> Prefs.GeigerTickMode.NSV
+                    else -> Prefs.GeigerTickMode.OFF
+                }
+                Prefs.setGeigerTickMode(this, selected)
+                updateGeigerIcon()
+                if (selected != Prefs.GeigerTickMode.OFF) {
+                    geigerTickEngine = GeigerTickEngine.getInstance(this)
+                    geigerTickEngine?.start()
+                } else {
+                    geigerTickEngine?.stop()
+                }
+                dialog.dismiss()
+            }
+            .show()
+    }
+
+    private fun updateGeigerIcon() {
+        val mode = Prefs.getGeigerTickMode(this)
+        val active = mode != Prefs.GeigerTickMode.OFF
         btnGeigerToggle.alpha = if (active) 1f else 0.3f
         // Tint color: amber when active, muted when off
         val color = if (active) {

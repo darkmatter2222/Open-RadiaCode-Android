@@ -672,12 +672,18 @@ class RadiaCodeForegroundService : Service() {
         }
         
         // Feed Geiger tick engine (always, for background audio)
-        if (Prefs.isGeigerTickEnabled(this)) {
+        val geigerMode = Prefs.getGeigerTickMode(this)
+        if (geigerMode != Prefs.GeigerTickMode.OFF) {
             if (geigerTickEngine == null || !geigerTickEngine!!.isActive()) {
                 geigerTickEngine = GeigerTickEngine.getInstance(this)
                 geigerTickEngine?.start()
             }
-            geigerTickEngine?.onDataReceived(cps)
+            val rate = when (geigerMode) {
+                Prefs.GeigerTickMode.CPS -> cps
+                Prefs.GeigerTickMode.NSV -> (uSvPerHour * 1000f) / 100f  // nSv/h scaled: 100 nSv/h -> 1 tick/s
+                else -> cps
+            }
+            geigerTickEngine?.onDataReceived(rate)
         } else if (geigerTickEngine?.isActive() == true) {
             geigerTickEngine?.stop()
         }
