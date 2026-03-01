@@ -680,7 +680,7 @@ class RadiaCodeForegroundService : Service() {
             }
             val rate = when (geigerMode) {
                 Prefs.GeigerTickMode.CPS -> cps
-                Prefs.GeigerTickMode.NSV -> (uSvPerHour * 1000f) / 100f  // nSv/h scaled: 100 nSv/h -> 1 tick/s
+                Prefs.GeigerTickMode.NSV -> (uSvPerHour * 1000f) / 10f  // nSv/h scaled: 10 nSv/h -> 1 tick/s
                 else -> cps
             }
             geigerTickEngine?.onDataReceived(rate)
