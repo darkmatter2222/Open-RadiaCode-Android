@@ -90,6 +90,7 @@ class MainActivity : AppCompatActivity() {
     // Dashboard - Geiger tick
     private lateinit var btnGeigerToggle: ImageView
     private var geigerTickEngine: GeigerTickEngine? = null
+    private var deltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
 
     // Dashboard - Metric cards
     private lateinit var doseCard: MetricCardView
@@ -331,8 +332,16 @@ class MainActivity : AppCompatActivity() {
             val geigerMode = Prefs.getGeigerTickMode(this@MainActivity)
             if (geigerMode != Prefs.GeigerTickMode.OFF) {
                 val rate = when (geigerMode) {
-                    Prefs.GeigerTickMode.CPS -> cps
-                    Prefs.GeigerTickMode.NSV -> uSvH * 1000f  // nSv/h direct: 55 nSv/h -> 55 ticks/s
+                    Prefs.GeigerTickMode.CPS -> {
+                        geigerTickEngine?.deltaDirection = 0
+                        cps
+                    }
+                    Prefs.GeigerTickMode.NSV -> {
+                        geigerTickEngine?.deltaDirection = 0
+                        uSvH * 1000f
+                    }
+                    Prefs.GeigerTickMode.DELTA_CPS -> computeDeltaRate(cps)
+                    Prefs.GeigerTickMode.DELTA_NSV -> computeDeltaRate(uSvH * 1000f)
                     else -> cps
                 }
                 geigerTickEngine?.onDataReceived(rate)
@@ -1840,12 +1849,20 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun showGeigerModeDialog() {
-        val modes = arrayOf("CPS (Counts Per Second)", "nSv/h (Nano Sieverts)", "Off")
+        val modes = arrayOf(
+            "CPS (Counts Per Second)",
+            "nSv/h (Nano Sieverts)",
+            "\u0394 Count Rate (delta CPS)",
+            "\u0394 Dose Rate (delta nSv/h)",
+            "Off"
+        )
         val currentMode = Prefs.getGeigerTickMode(this)
         val checkedIndex = when (currentMode) {
             Prefs.GeigerTickMode.CPS -> 0
             Prefs.GeigerTickMode.NSV -> 1
-            Prefs.GeigerTickMode.OFF -> 2
+            Prefs.GeigerTickMode.DELTA_CPS -> 2
+            Prefs.GeigerTickMode.DELTA_NSV -> 3
+            Prefs.GeigerTickMode.OFF -> 4
         }
         AlertDialog.Builder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("Geiger Tick Audio Source")
@@ -1853,10 +1870,14 @@ class MainActivity : AppCompatActivity() {
                 val selected = when (which) {
                     0 -> Prefs.GeigerTickMode.CPS
                     1 -> Prefs.GeigerTickMode.NSV
+                    2 -> Prefs.GeigerTickMode.DELTA_CPS
+                    3 -> Prefs.GeigerTickMode.DELTA_NSV
                     else -> Prefs.GeigerTickMode.OFF
                 }
                 Prefs.setGeigerTickMode(this, selected)
                 updateGeigerIcon()
+                // Reset delta baselines when switching modes
+                deltaBaseline = Float.NaN
                 if (selected != Prefs.GeigerTickMode.OFF) {
                     geigerTickEngine = GeigerTickEngine.getInstance(this)
                     geigerTickEngine?.start()
@@ -1879,6 +1900,47 @@ class MainActivity : AppCompatActivity() {
             android.graphics.Color.parseColor("#80FFFFFF")
         }
         btnGeigerToggle.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN)
+    }
+
+    /**
+     * Compute tick rate from delta (change) in a value.
+     * Uses an EMA baseline; returns a tick rate proportional to % change.
+     * Sets deltaDirection on the engine: +1 for increase (high pitch), -1 for decrease (low pitch).
+     * Dead zone: changes below 2% are silent.
+     */
+    private fun computeDeltaRate(currentValue: Float): Float {
+        val ema_alpha = 0.15f  // smoothing factor: ~7 readings to converge
+        val deadZone = 0.02f   // 2% dead zone
+
+        if (deltaBaseline.isNaN()) {
+            deltaBaseline = currentValue
+            geigerTickEngine?.deltaDirection = 0
+            return 0.1f  // near-silent while baseline initializes
+        }
+
+        // Update EMA baseline
+        val oldBaseline = deltaBaseline
+        deltaBaseline = ema_alpha * currentValue + (1f - ema_alpha) * oldBaseline
+
+        // Percent change from baseline
+        val pctChange = if (oldBaseline > 0.001f) {
+            (currentValue - oldBaseline) / oldBaseline
+        } else {
+            0f
+        }
+
+        // Dead zone: small fluctuations are silent
+        if (kotlin.math.abs(pctChange) < deadZone) {
+            geigerTickEngine?.deltaDirection = 0
+            return 0.1f  // near-silent
+        }
+
+        // Direction: +1 = increase (high pitch), -1 = decrease (low pitch)
+        geigerTickEngine?.deltaDirection = if (pctChange > 0) 1 else -1
+
+        // Map |change| to tick rate: 2% -> ~1 tick/s, 100% -> ~50 ticks/s
+        val magnitude = kotlin.math.abs(pctChange)
+        return (magnitude * 50f).coerceIn(1f, 500f)
     }
     
     /**

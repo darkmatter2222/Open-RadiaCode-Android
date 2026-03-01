@@ -69,6 +69,13 @@ class GeigerTickEngine private constructor(private val context: Context) {
     private var tickSamples: ShortArray? = null
     private var tickParamsHash: Int = 0
 
+    // Delta-mode alternate tick buffers (higher/lower pitch for increase/decrease)
+    private var deltaUpSamples: ShortArray? = null
+    private var deltaDownSamples: ShortArray? = null
+
+    // Delta direction: 0 = normal tick, +1 = increase (high pitch), -1 = decrease (low pitch)
+    @Volatile var deltaDirection: Int = 0
+
     // ----- Continuous rate interpolation -----
     // Written by onDataReceived / playPreview on any thread; read by the audio loop.
     @Volatile private var targetCps: Float = MIN_CPS
@@ -272,6 +279,15 @@ class GeigerTickEngine private constructor(private val context: Context) {
         val hash = params.hashCode()
         if (hash != tickParamsHash || tickSamples == null) {
             tickSamples = synthesizeTick(params)
+            // Delta-mode variants: higher pitch for increase, lower for decrease
+            deltaUpSamples = synthesizeTick(params.copy(
+                toneFrequencyHz = params.toneFrequencyHz * 1.5f,
+                clickDurationMs = (params.clickDurationMs * 0.7f).coerceAtLeast(1f)
+            ))
+            deltaDownSamples = synthesizeTick(params.copy(
+                toneFrequencyHz = params.toneFrequencyHz * 0.5f,
+                clickDurationMs = (params.clickDurationMs * 1.3f).coerceAtMost(30f)
+            ))
             tickParamsHash = hash
         }
     }
@@ -372,7 +388,12 @@ class GeigerTickEngine private constructor(private val context: Context) {
             if (tickSamples == null) {
                 ensureTickBuffer(loadParams())
             }
-            val tick = tickSamples ?: continue
+            // Select tick buffer: delta mode uses pitch-shifted variants
+            val tick = when (deltaDirection) {
+                1  -> deltaUpSamples ?: tickSamples
+                -1 -> deltaDownSamples ?: tickSamples
+                else -> tickSamples
+            } ?: continue
 
             // ---- Interpolate CPS ----
             val cpsNow = interpolateCps()
@@ -493,6 +514,8 @@ class GeigerTickEngine private constructor(private val context: Context) {
     fun invalidateTickBuffer() {
         tickParamsHash = 0
         tickSamples = null
+        deltaUpSamples = null
+        deltaDownSamples = null
     }
 
     fun isActive(): Boolean = isRunning.get()

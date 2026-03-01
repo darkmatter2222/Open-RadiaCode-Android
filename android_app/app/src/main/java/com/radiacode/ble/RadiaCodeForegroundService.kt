@@ -193,6 +193,7 @@ class RadiaCodeForegroundService : Service() {
     
     // Geiger tick engine - runs in service for background audio
     private var geigerTickEngine: GeigerTickEngine? = null
+    private var geigerDeltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
 
     private var lastMapSaveLogMs: Long = 0L
     private var lastNoLocationLogMs: Long = 0L
@@ -679,8 +680,16 @@ class RadiaCodeForegroundService : Service() {
                 geigerTickEngine?.start()
             }
             val rate = when (geigerMode) {
-                Prefs.GeigerTickMode.CPS -> cps
-                Prefs.GeigerTickMode.NSV -> uSvPerHour * 1000f  // nSv/h direct: 55 nSv/h -> 55 ticks/s
+                Prefs.GeigerTickMode.CPS -> {
+                    geigerTickEngine?.deltaDirection = 0
+                    cps
+                }
+                Prefs.GeigerTickMode.NSV -> {
+                    geigerTickEngine?.deltaDirection = 0
+                    uSvPerHour * 1000f
+                }
+                Prefs.GeigerTickMode.DELTA_CPS -> computeServiceDeltaRate(cps)
+                Prefs.GeigerTickMode.DELTA_NSV -> computeServiceDeltaRate(uSvPerHour * 1000f)
                 else -> cps
             }
             geigerTickEngine?.onDataReceived(rate)
@@ -1190,6 +1199,40 @@ class RadiaCodeForegroundService : Service() {
      * Convert lat/lng to hex ID for Tier 4 geospatial intelligence.
      * Matches the hexagon system used in MapCardView.
      */
+    /**
+     * Compute delta tick rate from a raw value (CPS or nSv/h).
+     * Tracks an EMA baseline, computes % change, sets engine direction, returns tick rate.
+     */
+    private fun computeServiceDeltaRate(rawValue: Float): Float {
+        val engine = geigerTickEngine ?: return 0f
+        val alpha = 0.15f
+        val deadZone = 0.02f  // 2% dead zone
+
+        if (geigerDeltaBaseline.isNaN()) {
+            geigerDeltaBaseline = rawValue
+            engine.deltaDirection = 0
+            return 0f
+        }
+
+        val pctChange = if (geigerDeltaBaseline > 0.001f) {
+            (rawValue - geigerDeltaBaseline) / geigerDeltaBaseline
+        } else {
+            0f
+        }
+
+        // Update baseline with EMA
+        geigerDeltaBaseline = alpha * rawValue + (1f - alpha) * geigerDeltaBaseline
+
+        val absPct = kotlin.math.abs(pctChange)
+        if (absPct < deadZone) {
+            engine.deltaDirection = 0
+            return 0f
+        }
+
+        engine.deltaDirection = if (pctChange > 0) 1 else -1
+        return (absPct * 50f).coerceIn(1f, 500f)  // |delta%| * 50, clamped 1-500
+    }
+
     private fun latLngToHexId(lat: Double, lng: Double): String {
         val hexSize = 50.0  // 50 meter hexagons
         val metersPerDegLat = 111320.0

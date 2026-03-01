@@ -2326,7 +2326,7 @@ object Prefs {
     // ========== Geiger Tick Synthesizer Settings ==========
 
     /** Tri-state mode for geiger tick audio source. */
-    enum class GeigerTickMode { OFF, CPS, NSV }
+    enum class GeigerTickMode { OFF, CPS, NSV, DELTA_CPS, DELTA_NSV }
 
     fun getGeigerTickMode(context: Context): GeigerTickMode {
         val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
