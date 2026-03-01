@@ -37,7 +37,7 @@ class GeigerTickEngine private constructor(private val context: Context) {
     companion object {
         private const val TAG = "GeigerTickEngine"
         private const val SAMPLE_RATE = 22050
-        private const val MAX_CPS = 500f            // Audio overload cap
+        private const val MAX_CPS = 2000f           // Audio overload cap (supports high nSv/h values)
         private const val MIN_CPS = 0.2f            // Floor: ~1 tick per 5 s (background always exists)
         private const val INTERPOLATION_MS = 200f   // Smooth CPS ramp duration
         private const val SILENCE_CHUNK_SAMPLES = 1102 // ~50 ms at 22050 Hz
@@ -378,13 +378,18 @@ class GeigerTickEngine private constructor(private val context: Context) {
             val cpsNow = interpolateCps()
 
             // ---- Total samples for one tick interval ----
-            val intervalSamples = (SAMPLE_RATE / cpsNow).toInt()
-            val silenceNeeded = (intervalSamples - tick.size).coerceAtLeast(0)
+            val intervalSamples = (SAMPLE_RATE / cpsNow).toInt().coerceAtLeast(4)
 
-            // ---- Write the tick ----
+            // At high rates the tick may be longer than the interval.
+            // Truncate the tick so it fits, leaving at least 1 sample of silence
+            // for audible separation between clicks.
+            val tickLen = tick.size.coerceAtMost(intervalSamples - 1).coerceAtLeast(2)
+            val silenceNeeded = (intervalSamples - tickLen).coerceAtLeast(0)
+
+            // ---- Write the tick (possibly truncated) ----
             try {
                 val track = audioTrack ?: break
-                val written = track.write(tick, 0, tick.size)
+                val written = track.write(tick, 0, tickLen)
                 if (written < 0) break // error or track released
             } catch (_: Exception) {
                 break
@@ -395,8 +400,9 @@ class GeigerTickEngine private constructor(private val context: Context) {
             while (silenceWritten < silenceNeeded && isRunning.get()) {
                 // Re-interpolate for responsive rate changes mid-gap
                 val cpsInner = interpolateCps()
-                val newInterval = (SAMPLE_RATE / cpsInner).toInt()
-                val newSilence = (newInterval - tick.size).coerceAtLeast(0)
+                val newInterval = (SAMPLE_RATE / cpsInner).toInt().coerceAtLeast(4)
+                val newTickLen = tick.size.coerceAtMost(newInterval - 1).coerceAtLeast(2)
+                val newSilence = (newInterval - newTickLen).coerceAtLeast(0)
 
                 // If rate went up enough, the gap is already filled
                 if (silenceWritten >= newSilence) break
