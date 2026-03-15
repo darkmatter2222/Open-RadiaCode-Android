@@ -11,8 +11,8 @@ android {
         applicationId = "com.radiacode.ble"
         minSdk = 26
         targetSdk = 34
-        versionCode = 111
-        versionName = "1.37"
+        versionCode = 112
+        versionName = "1.38"
     }
 
     // The repo’s audio files live in app/audio/. Copy any provided sound assets into res/raw
@@ -70,6 +70,13 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+
+    // Fragment + ViewPager2 for tab-based navigation
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+
+    // Preferences for proper settings screen
+    implementation("androidx.preference:preference-ktx:1.2.1")
 
     // Fused Location Provider (battery-friendly location)
     implementation("com.google.android.gms:play-services-location:21.3.0")

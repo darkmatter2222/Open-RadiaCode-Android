@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen Map tab with GPS tier selector and export controls -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background">
+
+    <!-- Map fills the entire tab -->
+    <com.radiacode.ble.ui.MapCardView
+        android:id="@+id/mapCard"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- GPS Tier Selector overlay (top) -->
+    <LinearLayout
+        android:id="@+id/gpsTierBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#CC0D0D0F"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:elevation="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPS:"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginEnd="8dp" />
+
+        <!-- Passive mode (default, zero battery) -->
+        <TextView
+            android:id="@+id/chipGpsPassive"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="5dp"
+            android:layout_marginEnd="6dp"
+            android:text="PASSIVE"
+            android:textColor="@color/pro_green"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:background="@drawable/chip_outline_background" />
+
+        <!-- Balanced mode (Wi-Fi/cell, ~100m accuracy) -->
+        <TextView
+            android:id="@+id/chipGpsBalanced"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="5dp"
+            android:layout_marginEnd="6dp"
+            android:text="BALANCED"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:background="@drawable/chip_outline_background" />
+
+        <!-- High precision (GPS radio, 1-3m accuracy) -->
+        <TextView
+            android:id="@+id/chipGpsHigh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="5dp"
+            android:text="HIGH"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:background="@drawable/chip_outline_background" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- GPS accuracy indicator -->
+        <TextView
+            android:id="@+id/gpsAccuracyLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="~0m"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <!-- Map theme selector (top-right, below GPS bar) -->
+    <ImageButton
+        android:id="@+id/btnMapTheme"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="52dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/card_background"
+        android:src="@android:drawable/ic_menu_mapmode"
+        android:contentDescription="Map theme"
+        android:scaleType="centerInside"
+        android:padding="8dp"
+        app:tint="@color/pro_text_secondary"
+        android:elevation="4dp" />
+
+    <!-- Bottom controls bar: Export, Route Recording, Session History -->
+    <LinearLayout
+        android:id="@+id/mapBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#CC0D0D0F"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="12dp"
+        android:elevation="4dp">
+
+        <!-- Route Recording Status -->
+        <LinearLayout
+            android:id="@+id/routeRecordingBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <View
+                android:id="@+id/routeRecordingDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/status_dot"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/routeRecordingLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Recording route..."
+                android:textColor="@color/pro_red"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/routeRecordingTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Action Buttons Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Export button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnExportData"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="EXPORT"
+                android:textSize="10sp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="0dp"
+                app:icon="@android:drawable/ic_menu_save"
+                app:iconSize="14dp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/pro_cyan"
+                android:textColor="@color/pro_cyan"
+                app:iconTint="@color/pro_cyan" />
+
+            <!-- Sessions button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSessions"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="SESSIONS"
+                android:textSize="10sp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="0dp"
+                app:icon="@android:drawable/ic_menu_recent_history"
+                app:iconSize="14dp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/pro_text_muted"
+                android:textColor="@color/pro_text_secondary"
+                app:iconTint="@color/pro_text_secondary" />
+
+            <!-- Clear map data -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearMapData"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:text="CLEAR"
+                android:textSize="10sp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="0dp"
+                app:icon="@android:drawable/ic_menu_delete"
+                app:iconSize="14dp"
+                app:cornerRadius="18dp"
+                app:strokeColor="@color/pro_text_muted"
+                android:textColor="@color/pro_text_secondary"
+                app:iconTint="@color/pro_text_secondary" />
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

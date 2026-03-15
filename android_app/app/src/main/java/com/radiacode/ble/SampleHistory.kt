@@ -2,7 +2,7 @@ package com.radiacode.ble
 
 import kotlin.math.min
 
-internal class SampleHistory(private var capacity: Int) {
+class SampleHistory(private var capacity: Int) {
     private var timestamps = LongArray(capacity)
     private var values = FloatArray(capacity)
 
@@ -13,6 +13,8 @@ internal class SampleHistory(private var capacity: Int) {
         size = 0
         head = 0
     }
+
+    fun size(): Int = size
 
     fun ensureCapacity(newCapacity: Int) {
         if (newCapacity <= capacity) return

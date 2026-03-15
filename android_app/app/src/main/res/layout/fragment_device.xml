@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Device management panel -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Connection Status Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <View
+                    android:id="@+id/connectionDot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/status_dot" />
+
+                <TextView
+                    android:id="@+id/connectionStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="10dp"
+                    android:text="Disconnected"
+                    android:textColor="@color/pro_text_secondary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/deviceCountText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 devices"
+                    android:textColor="@color/pro_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/autoConnectSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Auto-connect on startup"
+                android:textColor="@color/pro_text_secondary"
+                android:textSize="14sp"
+                app:thumbTint="@color/pro_cyan"
+                app:trackTint="@color/pro_border" />
+        </LinearLayout>
+
+        <!-- MY DEVICES Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:text="MY DEVICES"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1" />
+
+        <!-- Device List Container -->
+        <LinearLayout
+            android:id="@+id/deviceListContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/noDevicesText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="No devices configured.\nTap 'Add Device' to scan for RadiaCode devices."
+            android:textColor="@color/pro_text_muted"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Legacy preferred device -->
+        <TextView
+            android:id="@+id/preferredDeviceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+
+        <!-- Action Buttons -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/findDevicesButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Add Device"
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/pro_cyan"
+            android:textColor="@color/pro_cyan"
+            app:icon="@android:drawable/ic_menu_search"
+            app:iconTint="@color/pro_cyan" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reconnectButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Reconnect All"
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/pro_text_muted"
+            android:textColor="@color/pro_text_secondary"
+            app:icon="@android:drawable/ic_menu_rotate"
+            app:iconTint="@color/pro_text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/stopServiceButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Stop All"
+            app:cornerRadius="8dp"
+            app:strokeColor="@color/pro_red"
+            android:textColor="@color/pro_red"
+            app:icon="@android:drawable/ic_menu_close_clear_cancel"
+            app:iconTint="@color/pro_red" />
+
+    </LinearLayout>
+</ScrollView>

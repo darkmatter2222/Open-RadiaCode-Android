@@ -62,6 +62,7 @@ object Prefs {
     private const val KEY_MAP_GRID_ORIGIN_LNG = "map_grid_origin_lng"
     private const val KEY_MAP_THEME = "map_theme"
     private const val KEY_GPS_TRACKING_ENABLED = "gps_tracking_enabled"
+    private const val KEY_GPS_TIER = "gps_tier"
     private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
     
     // Intro/Welcome keys
@@ -162,6 +163,14 @@ object Prefs {
     /**
      * Notification style - controls what appears in the persistent notification
      */
+    /**
+     * GPS precision tiers (Point 12): trade battery for accuracy.
+     * PASSIVE = zero extra drain, uses whatever the OS already has.
+     * BALANCED = cell/Wi-Fi, ~100 m.
+     * HIGH = GPS radio, ~3 m.
+     */
+    enum class GpsTier { PASSIVE, BALANCED, HIGH }
+
     enum class NotificationStyle {
         NONE,                   // Hidden/None - minimal notification, guide to disable in Android settings
         OFF,                    // Minimal notification (required for foreground service, but minimal content)
@@ -294,6 +303,10 @@ object Prefs {
         return runCatching { DoseUnit.valueOf(raw) }.getOrDefault(default)
     }
 
+    /** Convenience: true when dose display is in nSv/h mode. */
+    fun isDoseNanoMode(context: Context): Boolean =
+        getDoseUnit(context) == DoseUnit.NSV_H
+
     fun setDoseUnit(context: Context, unit: DoseUnit) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
@@ -306,6 +319,10 @@ object Prefs {
             .getString(KEY_COUNT_UNIT, default.name) ?: default.name
         return runCatching { CountUnit.valueOf(raw) }.getOrDefault(default)
     }
+
+    /** Convenience: true when count display is in CPM mode. */
+    fun isCountCpmMode(context: Context): Boolean =
+        getCountUnit(context) == CountUnit.CPM
 
     fun setCountUnit(context: Context, unit: CountUnit) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -1995,6 +2012,29 @@ object Prefs {
             .apply()
     }
     
+    /**
+     * Get the current GPS precision tier.
+     */
+    fun getGpsTier(context: Context): GpsTier {
+        val name = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_GPS_TIER, GpsTier.PASSIVE.name)
+        return try {
+            GpsTier.valueOf(name ?: GpsTier.PASSIVE.name)
+        } catch (e: Exception) {
+            GpsTier.PASSIVE
+        }
+    }
+
+    /**
+     * Set the GPS precision tier.
+     */
+    fun setGpsTier(context: Context, tier: GpsTier) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_GPS_TIER, tier.name)
+            .apply()
+    }
+
     /**
      * Get the current map theme.
      */

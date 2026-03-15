@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified activity layout: Toolbar + TabLayout + ViewPager2 (Point 1) -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/pro_background"
+        app:elevation="0dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:minHeight="36dp"
+            android:background="@color/pro_background"
+            app:title="@string/app_name"
+            app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
+            app:titleTextColor="@color/pro_text_primary">
+
+            <!-- Toolbar status indicators -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginEnd="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- Spectrogram recording indicator -->
+                <View
+                    android:id="@+id/spectrogramRecordingDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/status_dot"
+                    android:visibility="gone" />
+
+                <!-- Geiger tick toggle (sound icon) -->
+                <ImageView
+                    android:id="@+id/btnGeigerToggle"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_volume_up"
+                    android:alpha="0.3"
+                    android:contentDescription="Geiger audio" />
+
+                <!-- Settings gear icon (Point 8 - opens SettingsActivity) -->
+                <ImageView
+                    android:id="@+id/btnSettingsGear"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_settings"
+                    android:contentDescription="Settings"
+                    app:tint="@color/pro_text_muted" />
+
+                <!-- Reading pulse dot -->
+                <View
+                    android:id="@+id/readingPulseDot"
+                    android:layout_width="6dp"
+                    android:layout_height="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:alpha="0.6"
+                    android:background="@drawable/status_dot" />
+
+                <!-- Status dot + label -->
+                <LinearLayout
+                    android:id="@+id/statusContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/statusDot"
+                        android:layout_width="6dp"
+                        android:layout_height="6dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/status_dot" />
+
+                    <TextView
+                        android:id="@+id/statusLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="OFF"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.appbar.MaterialToolbar>
+
+        <!-- Tab navigation (Point 1: Dashboard / Map / Isotope ID / Device) -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabLayout"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:background="@color/pro_surface"
+            app:tabMode="fixed"
+            app:tabGravity="fill"
+            app:tabTextColor="@color/pro_text_muted"
+            app:tabSelectedTextColor="@color/pro_cyan"
+            app:tabIndicatorColor="@color/pro_cyan"
+            app:tabIndicatorHeight="2dp"
+            app:tabRippleColor="@android:color/transparent"
+            app:tabTextAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <!-- ViewPager2 hosts all tab fragments -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/pro_background"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -16,6 +16,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.radiacode.ble.Prefs
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -49,6 +50,10 @@ class LocationController private constructor(appContext: Context) {
 
     @Volatile
     private var currentMode: Mode = Mode.STOPPED
+
+    /** Current GPS precision tier set by the UI (Point 12). */
+    @Volatile
+    private var gpsTier: Prefs.GpsTier = Prefs.GpsTier.PASSIVE
 
     // Tokens to avoid boolean state races across multiple clients.
     private val interactiveTokens = mutableSetOf<UUID>()
@@ -149,6 +154,18 @@ class LocationController private constructor(appContext: Context) {
         reevaluateMode()
     }
 
+    /**
+     * Set the GPS precision tier from the UI (Point 12).
+     * Forces a mode re-evaluation so the correct priority is applied.
+     */
+    fun setGpsTier(tier: Prefs.GpsTier) {
+        gpsTier = tier
+        // Force restart with new priority
+        val prev = currentMode
+        currentMode = Mode.STOPPED
+        reevaluateMode()
+    }
+
     private fun desiredModeLocked(): Mode {
         val wantsAnything = interactiveTokens.isNotEmpty() || backgroundTokens.isNotEmpty()
         if (!wantsAnything) return Mode.STOPPED
@@ -207,9 +224,31 @@ class LocationController private constructor(appContext: Context) {
 
         stopUpdatesInternal()
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, FOREGROUND_INTERVAL_MS)
-            .setMinUpdateIntervalMillis(FOREGROUND_MIN_INTERVAL_MS)
-            .setMinUpdateDistanceMeters(FOREGROUND_MIN_DISTANCE_M)
+        // Apply GPS tier (Point 12): PASSIVE/BALANCED/HIGH
+        val (priority, interval, minInterval, minDist) = when (gpsTier) {
+            Prefs.GpsTier.PASSIVE -> Quadruple(
+                Priority.PRIORITY_PASSIVE,
+                PASSIVE_INTERVAL_MS,
+                PASSIVE_MIN_INTERVAL_MS,
+                0f
+            )
+            Prefs.GpsTier.BALANCED -> Quadruple(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                BALANCED_INTERVAL_MS,
+                BALANCED_MIN_INTERVAL_MS,
+                BALANCED_MIN_DISTANCE_M
+            )
+            Prefs.GpsTier.HIGH -> Quadruple(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                FOREGROUND_INTERVAL_MS,
+                FOREGROUND_MIN_INTERVAL_MS,
+                FOREGROUND_MIN_DISTANCE_M
+            )
+        }
+
+        val request = LocationRequest.Builder(priority, interval)
+            .setMinUpdateIntervalMillis(minInterval)
+            .setMinUpdateDistanceMeters(minDist)
             .setMaxUpdateDelayMillis(0L)
             .build()
 
@@ -251,13 +290,25 @@ class LocationController private constructor(appContext: Context) {
         }
     }
 
+    /** Simple 4-tuple for destructuring. */
+    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
     companion object {
         private const val TAG = "RadiaCode"
 
-        // Foreground: responsive for map UI.
+        // Foreground HIGH: responsive for map UI.
         private const val FOREGROUND_INTERVAL_MS = 1_500L
         private const val FOREGROUND_MIN_INTERVAL_MS = 1_000L
         private const val FOREGROUND_MIN_DISTANCE_M = 1f
+
+        // BALANCED: cell/Wi-Fi positioning, moderate battery.
+        private const val BALANCED_INTERVAL_MS = 5_000L
+        private const val BALANCED_MIN_INTERVAL_MS = 3_000L
+        private const val BALANCED_MIN_DISTANCE_M = 5f
+
+        // PASSIVE: zero additional battery, piggyback on other apps.
+        private const val PASSIVE_INTERVAL_MS = 30_000L
+        private const val PASSIVE_MIN_INTERVAL_MS = 10_000L
 
         // Background: battery-friendly. Displacement-driven, batched.
         private const val BACKGROUND_INTERVAL_MS = 10_000L

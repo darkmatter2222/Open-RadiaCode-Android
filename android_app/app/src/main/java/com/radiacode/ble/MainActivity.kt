@@ -1,4 +1,4 @@
-package com.radiacode.ble
+﻿package com.radiacode.ble
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -17,36 +17,21 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
-import androidx.core.view.GravityCompat
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.core.content.FileProvider
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
-import com.google.android.material.navigation.NavigationView
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import com.radiacode.ble.spectrogram.VegaSpectralAnalysisActivity
 import com.radiacode.ble.spectrogram.SpectrogramPrefs
-import com.google.android.material.switchmaterial.SwitchMaterial
-import com.radiacode.ble.ui.MetricCardView
 import com.radiacode.ble.ui.ProChartView
-import com.radiacode.ble.ui.StatRowView
-import com.radiacode.ble.ui.IsotopeChartView
-import com.radiacode.ble.ui.StackedAreaChartView
-import com.radiacode.ble.ui.IsotopeBarChartView
-import com.radiacode.ble.dashboard.DashboardGridLayout
-import com.radiacode.ble.dashboard.DashboardLayout
-import com.radiacode.ble.dashboard.DashboardReorderHelper
-import com.radiacode.ble.dashboard.PanelType
 import com.radiacode.ble.ui.VegaIntroDialog
 import com.radiacode.ble.ui.VegaGpsWarningDialog
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.io.File
 import java.util.ArrayDeque
 import java.util.Locale
@@ -64,17 +49,11 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_CHART_POINTS = 800
     }
 
-    // Navigation
-    private lateinit var drawerLayout: DrawerLayout
-    private lateinit var navView: NavigationView
+    // Navigation - Tab layout (Point 1)
+    private lateinit var tabLayout: TabLayout
+    private lateinit var viewPager: ViewPager2
     private lateinit var toolbar: MaterialToolbar
-
-    // Panels
-    private lateinit var panelDashboard: View
-    private lateinit var panelDevice: View
-    private lateinit var panelSettings: View
-    private lateinit var panelLogs: View
-    private var currentPanel: Panel = Panel.Dashboard
+    private lateinit var btnSettingsGear: ImageView
 
     // Toolbar status
     private lateinit var statusDot: View
@@ -83,59 +62,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var readingPulseDot: View
     private lateinit var spectrogramRecordingDot: View
 
-    // Dashboard - Device Selector
-    private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
-    private lateinit var allDevicesOverlay: View
-
-    // Dashboard - Geiger tick
+    // Geiger tick
     private lateinit var btnGeigerToggle: ImageView
     private var geigerTickEngine: GeigerTickEngine? = null
     private var deltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
-
-    // Dashboard - Metric cards
-    private lateinit var doseCard: MetricCardView
-    private lateinit var cpsCard: MetricCardView
-
-    // Dashboard - Chart Panels (for click handling)
-    private lateinit var doseChartPanel: View
-    private lateinit var cpsChartPanel: View
-
-    // Dashboard - Charts
-    private lateinit var doseChartTitle: TextView
-    private lateinit var doseChart: ProChartView
-    private lateinit var doseChartReset: android.widget.ImageButton
-    private lateinit var doseChartGoRealtime: android.widget.ImageButton
-    private lateinit var doseStats: StatRowView
-
-    private lateinit var cpsChartTitle: TextView
-    private lateinit var cpsChart: ProChartView
-    private lateinit var cpsChartReset: android.widget.ImageButton
-    private lateinit var cpsChartGoRealtime: android.widget.ImageButton
-    private lateinit var cpsStats: StatRowView
-    
-    // Live Map Card
-    private lateinit var mapCard: com.radiacode.ble.ui.MapCardView
-
-    // Isotope detection panel
-    private lateinit var isotopePanel: LinearLayout
-    private lateinit var isotopeChartTitle: TextView
-    private lateinit var isotopeAccumulationModeToggle: TextView
-    private lateinit var isotopeDisplayModeToggle: TextView
-    private lateinit var isotopeHideBackgroundToggle: TextView
-    private lateinit var isotopeChartTypeBtn: android.widget.ImageButton
-    private lateinit var isotopeSettingsBtn: android.widget.ImageButton
-    private lateinit var isotopeScanBtn: MaterialButton
-    private lateinit var isotopeRealtimeSwitch: SwitchMaterial
-    private lateinit var isotopeStatusLabel: TextView
-    private lateinit var isotopeChartContainer: android.widget.FrameLayout
-    private lateinit var isotopeMultiLineChart: IsotopeChartView
-    private lateinit var isotopeStackedChart: StackedAreaChartView
-    private lateinit var isotopeBarChart: IsotopeBarChartView
-    private lateinit var isotopeScanResultContainer: LinearLayout
-    private lateinit var isotopeScanResultText: TextView
-    private lateinit var isotopeScanProgress: android.widget.ProgressBar
-    private lateinit var isotopeQuickView: LinearLayout
-    private lateinit var isotopeTopResult: TextView
     
     // Isotope detection state
     private var isotopeDetector: IsotopeDetector? = null
@@ -149,143 +79,19 @@ class MainActivity : AppCompatActivity() {
     // In FULL_DURATION mode, we never reset; in INTERVAL mode, we use the chart time window
     private val spectrumAccumulationStart = mutableMapOf<String, Long>()
 
-    private lateinit var sessionInfo: TextView
-    
-    // Intelligence card
-    private lateinit var intelligenceCard: LinearLayout
-    private lateinit var intelligenceSummary: TextView
-    private lateinit var intelligenceAlertBadge: TextView
-    private lateinit var doseTrendLabel: TextView
-    private lateinit var predictedDoseLabel: TextView
-    private lateinit var anomalyCountLabel: TextView
-    private lateinit var intelligenceInfoButton: ImageView
-    private lateinit var stabilityIndicator: TextView
-    private lateinit var dataQualityLabel: TextView
-    private lateinit var predictionConfidenceLabel: TextView
-    private lateinit var anomalyDetailLabel: TextView
-    private lateinit var intelligenceExpandedSection: LinearLayout
-    private lateinit var intelligenceExpandButton: LinearLayout
-    private lateinit var intelligenceExpandText: TextView
-    private lateinit var intelligenceExpandArrow: ImageView
-    private lateinit var statsRangeLabel: TextView
-    private lateinit var statsStdDevLabel: TextView
-    private lateinit var statsCvLabel: TextView
-    private lateinit var statsBackgroundLabel: TextView
-    private lateinit var statsVsBackgroundLabel: TextView
-    private lateinit var statsZScoreLabel: TextView
-    private var intelligenceExpanded = false
-
-    // Device panel
-    private lateinit var connectionDot: View
-    private lateinit var connectionStatus: TextView
-    private lateinit var preferredDeviceText: TextView
-    private lateinit var autoConnectSwitch: SwitchMaterial
-    private lateinit var findDevicesButton: MaterialButton
-    private lateinit var reconnectButton: MaterialButton
-    private lateinit var stopServiceButton: MaterialButton
-    private lateinit var deviceListContainer: android.widget.LinearLayout
-    private lateinit var noDevicesText: TextView
-
-    // Settings panel
-    private lateinit var rowWindow: View
-    private lateinit var rowSmoothing: View
-    private lateinit var rowSpikeMarkers: View
-    private lateinit var rowUnits: View
-    private lateinit var rowPause: View
-    private lateinit var rowSpikePercentages: View
-    private lateinit var rowSmartAlerts: View
-    private lateinit var rowVegaIntelligence: View
-    private lateinit var rowTrendArrows: View
-    private lateinit var rowIsotopeSettings: View
-    private lateinit var rowDownloadCalibration: View
-
-    private lateinit var valueWindow: TextView
-    private lateinit var valueSmoothing: TextView
-    private lateinit var valueSpikeMarkers: TextView
-    private lateinit var valueSpikePercentages: TextView
-    private lateinit var valueUnits: TextView
-    private lateinit var valuePause: TextView
-    private lateinit var valueSmartAlerts: TextView
-    private lateinit var valueVegaIntelligence: TextView
-    private lateinit var valueTrendArrows: TextView
-    private lateinit var valueNotificationStyle: TextView
-    private lateinit var valueIsotopeSettings: TextView
-    
-    // Settings sections (expandable)
-    private lateinit var sectionAppHeader: View
-    private lateinit var sectionAppContent: View
-    private lateinit var sectionAppArrow: android.widget.ImageView
-    private lateinit var sectionSoundsHeader: View
-    private lateinit var sectionSoundsContent: View
-    private lateinit var sectionSoundsArrow: android.widget.ImageView
-    private lateinit var sectionChartHeader: View
-    private lateinit var sectionChartContent: View
-    private lateinit var sectionChartArrow: android.widget.ImageView
-    private lateinit var sectionDisplayHeader: View
-    private lateinit var sectionDisplayContent: View
-    private lateinit var sectionDisplayArrow: android.widget.ImageView
-    private lateinit var sectionMapHeader: View
-    private lateinit var sectionMapContent: View
-    private lateinit var sectionMapArrow: android.widget.ImageView
-    private lateinit var sectionAlertsHeader: View
-    private lateinit var sectionAlertsContent: View
-    private lateinit var sectionAlertsArrow: android.widget.ImageView
-    private lateinit var sectionDetectionHeader: View
-    private lateinit var sectionDetectionContent: View
-    private lateinit var sectionDetectionArrow: android.widget.ImageView
-    private lateinit var sectionAdvancedHeader: View
-    private lateinit var sectionAdvancedContent: View
-    private lateinit var sectionAdvancedArrow: android.widget.ImageView
-    
-    // Dashboard settings section
-    private lateinit var sectionDashboardHeader: View
-    private lateinit var sectionDashboardContent: View
-    private lateinit var sectionDashboardArrow: android.widget.ImageView
-    private lateinit var rowEditDashboard: View
-    private lateinit var rowResetDashboard: View
-    
-    // Application settings rows
-    private lateinit var rowNotificationSettings: View
-    private lateinit var rowPlayIntro: View
-    
-    // Sound settings rows
-    private lateinit var rowSoundSettings: View
-    private lateinit var valueSoundSettings: TextView
-    
-    // Map settings rows
-    private lateinit var rowGpsTracking: View
-    private lateinit var switchGpsTracking: com.google.android.material.switchmaterial.SwitchMaterial
-    private lateinit var rowMapTheme: View
-    private lateinit var valueMapTheme: android.widget.TextView
-    private lateinit var rowClearMapData: View
-    
-    // Dashboard edit mode
-    private lateinit var fabEditDashboard: FloatingActionButton
-    private lateinit var editModeToolbar: LinearLayout
-    private lateinit var btnResetDashboard: MaterialButton
-    private lateinit var btnDoneEditing: MaterialButton
-    private var isDashboardEditMode: Boolean = false
-    private var dashboardReorderHelper: DashboardReorderHelper? = null
-    
-    // Dashboard section wrappers for drag reordering
-    private lateinit var metricsCardsRow: LinearLayout
-    private lateinit var dashboardContainer: LinearLayout
-
-    // Logs panel
-    private lateinit var shareCsvButton: MaterialButton
-
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private var chartLoadFuture: Future<*>? = null
-    private var mapLoadFuture: Future<*>? = null
     private var chartLoadToken: Int = 0
 
     private var uiRunnable: Runnable? = null
     private var lastReadingTimestampMs: Long = 0L
-    private var lastMapReadingTimestampMs: Long = 0L  // Separate tracker for map readings
-    private var sessionStartMs: Long = System.currentTimeMillis()
-    private var sampleCount: Int = 0
+    private var lastMapReadingTimestampMs: Long = 0L
+    var sessionStartMs: Long = System.currentTimeMillis()
+        private set
+    var sampleCount: Int = 0
+        private set
 
     // Cache selection state to avoid frequent Prefs reads on the UI thread.
     private var selectedDeviceIdCache: String? = null
@@ -347,10 +153,10 @@ class MainActivity : AppCompatActivity() {
                 geigerTickEngine?.onDataReceived(rate)
             }
 
-            // Always feed the map (map cares about location + radiation, not device identity).
+            // Forward to map fragment
             if (ts > 0L && ts != lastMapReadingTimestampMs) {
                 lastMapReadingTimestampMs = ts
-                mapCard.addReading(uSvH, cps)
+                getMapFragment()?.addReading(uSvH, cps)
             }
 
             // In all-devices mode, keep charts/metrics quiet (overlay explains why).
@@ -369,7 +175,13 @@ class MainActivity : AppCompatActivity() {
                 lastReadingTimestampMs = ts
                 val last = Prefs.LastReading(uSvPerHour = uSvH, cps = cps, timestampMs = ts)
                 lastShownReading = last
-                updateMetricCards(last)
+                
+                // Calculate trends
+                val trendDose = uSvH - previousDose
+                val trendCps = cps - previousCps
+                previousDose = uSvH
+                previousCps = cps
+                getDashboardFragment()?.updateMetricCards(uSvH, cps, trendDose, trendCps)
 
                 ensureHistoryCapacity()
                 doseHistory.add(ts, uSvH)
@@ -390,45 +202,7 @@ class MainActivity : AppCompatActivity() {
     private val statisticalReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action != RadiaCodeForegroundService.ACTION_STATISTICAL_UPDATE) return
-            
-            // Only show forecast if user has it enabled
-            if (!Prefs.isStatisticalForecastEnabled(this@MainActivity)) {
-                doseChart.clearForecast()
-                return
-            }
-            
-            // Extract forecast data
-            val forecast30s = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S, Float.NaN)
-            val forecast30sLower = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S_LOWER, Float.NaN)
-            val forecast30sUpper = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_30S_UPPER, Float.NaN)
-            val forecast60s = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S, Float.NaN)
-            val forecast60sLower = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S_LOWER, Float.NaN)
-            val forecast60sUpper = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_DOSE_FORECAST_60S_UPPER, Float.NaN)
-            
-            // Build forecast points if data is valid
-            if (!forecast30s.isNaN() && !forecast60s.isNaN()) {
-                // Convert to display units
-                val du = Prefs.getDoseUnit(this@MainActivity, Prefs.DoseUnit.USV_H)
-                val conversionFactor = if (du == Prefs.DoseUnit.NSV_H) 1000f else 1f
-                
-                val forecastPoints = listOf(
-                    ProChartView.ForecastPoint(
-                        secondsAhead = 30,
-                        predicted = forecast30s * conversionFactor,
-                        lowerBound = forecast30sLower * conversionFactor,
-                        upperBound = forecast30sUpper * conversionFactor
-                    ),
-                    ProChartView.ForecastPoint(
-                        secondsAhead = 60,
-                        predicted = forecast60s * conversionFactor,
-                        lowerBound = forecast60sLower * conversionFactor,
-                        upperBound = forecast60sUpper * conversionFactor
-                    )
-                )
-                doseChart.setForecast(forecastPoints)
-            } else {
-                doseChart.clearForecast()
-            }
+            getDashboardFragment()?.onStatisticalUpdate(intent)
         }
     }
     
@@ -440,15 +214,7 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         if (now - lastChartUpdateMs < chartUpdateThrottleMs) return
         lastChartUpdateMs = now
-        
-        val paused = Prefs.isPauseLiveEnabled(this)
-        if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
-            pausedSnapshotDose = currentWindowSeriesDose()
-            pausedSnapshotCps = currentWindowSeriesCps()
-        }
-        val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
-        val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
-        updateCharts(doseSeries, cpsSeries)
+        getDashboardFragment()?.refreshCharts()
         uiDirty = false
     }
 
@@ -485,8 +251,8 @@ class MainActivity : AppCompatActivity() {
                 DeviceConnectionState.DISCONNECTED
             }
             deviceConnectionStates[deviceId] = state
-            // Update device selector with new states
-            updateDeviceSelectorStates()
+            // Forward to device fragment
+            getDeviceFragment()?.updateConnectionStatus()
         }
     }
     
@@ -577,25 +343,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_main_tabs)
 
         // Migrate single device to multi-device if needed
         Prefs.migrateToMultiDevice(this)
 
         bindViews()
-        setupNavigation()
-        setupDevicePanel()
-        setupSettingsPanel()
-        setupLogsPanel()
-        setupMetricCards()
-        setupCharts()
-        setupMapCard()
-        setupIsotopePanel()
-        setupToolbarDeviceSelector()
-        setupDashboardEditMode()
-
-        refreshSettingsRows()
-        updateChartTitles()
+        setupTabs()
+        setupSettingsGear()
         updateStatus(false, "Starting")
 
         if (!hasAllPermissions()) {
@@ -616,7 +371,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun handleWidgetIntent(intent: Intent?) {
         if (intent?.getBooleanExtra("open_settings", false) == true) {
-            setPanel(Panel.Settings)
             if (intent.getBooleanExtra("scroll_to_map", false)) {
                 // Show the GPS tracking warning dialog
                 mainHandler.postDelayed({
@@ -686,35 +440,21 @@ class MainActivity : AppCompatActivity() {
         val dialog = VegaGpsWarningDialog(
             this,
             onConfirm = {
-                // User confirmed - enable GPS tracking
                 Prefs.setGpsTrackingEnabled(this, true)
-                switchGpsTracking.isChecked = true
-                mapCard.updateGpsTrackingState()
-                // Notify the foreground service to start GPS
                 RadiaCodeForegroundService.reloadDevices(this)
             },
-            onCancel = {
-                // User cancelled - keep GPS tracking disabled
-                switchGpsTracking.isChecked = false
-            }
+            onCancel = { }
         )
         dialog.show()
     }
 
     private fun bindViews() {
-        drawerLayout = findViewById(R.id.drawerLayout)
-        navView = findViewById(R.id.navView)
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        panelDashboard = findViewById(R.id.panelDashboard)
-        panelDevice = findViewById(R.id.panelDevice)
-        panelSettings = findViewById(R.id.panelSettings)
-        panelLogs = findViewById(R.id.panelLogs)
-        
-        // Dashboard container for reordering
-        dashboardContainer = panelDashboard as LinearLayout
-        metricsCardsRow = findViewById(R.id.metricsCardsRow)
+        tabLayout = findViewById(R.id.tabLayout)
+        viewPager = findViewById(R.id.viewPager)
+        btnSettingsGear = findViewById(R.id.btnSettingsGear)
 
         statusDot = findViewById(R.id.statusDot)
         statusLabel = findViewById(R.id.statusLabel)
@@ -722,876 +462,119 @@ class MainActivity : AppCompatActivity() {
         readingPulseDot = findViewById(R.id.readingPulseDot)
         spectrogramRecordingDot = findViewById(R.id.spectrogramRecordingDot)
 
-        // Device selector for multi-device dashboard
-        deviceSelector = findViewById(R.id.deviceSelector)
-        allDevicesOverlay = findViewById(R.id.allDevicesOverlay)
-
         // Geiger tick toggle (toolbar icon) - shows mode picker modal
         btnGeigerToggle = findViewById(R.id.btnGeigerToggle)
         updateGeigerIcon()
         btnGeigerToggle.setOnClickListener { showGeigerModeDialog() }
-
-        doseCard = findViewById(R.id.doseCard)
-        cpsCard = findViewById(R.id.cpsCard)
-
-        doseChartPanel = findViewById(R.id.doseChartPanel)
-        cpsChartPanel = findViewById(R.id.cpsChartPanel)
-
-        doseChartTitle = findViewById(R.id.doseChartTitle)
-        doseChart = findViewById(R.id.doseChart)
-        doseChartReset = findViewById(R.id.doseChartReset)
-        doseChartGoRealtime = findViewById(R.id.doseChartGoRealtime)
-        doseStats = findViewById(R.id.doseStats)
-
-        cpsChartTitle = findViewById(R.id.cpsChartTitle)
-        cpsChart = findViewById(R.id.cpsChart)
-        cpsChartReset = findViewById(R.id.cpsChartReset)
-        cpsChartGoRealtime = findViewById(R.id.cpsChartGoRealtime)
-        cpsStats = findViewById(R.id.cpsStats)
-        
-        // Map card
-        mapCard = findViewById(R.id.mapCard)
-
-        // Isotope detection panel
-        isotopePanel = findViewById(R.id.isotopePanel)
-        isotopeChartTitle = findViewById(R.id.isotopeChartTitle)
-        isotopeAccumulationModeToggle = findViewById(R.id.isotopeAccumulationModeToggle)
-        isotopeDisplayModeToggle = findViewById(R.id.isotopeDisplayModeToggle)
-        isotopeHideBackgroundToggle = findViewById(R.id.isotopeHideBackgroundToggle)
-        isotopeChartTypeBtn = findViewById(R.id.isotopeChartTypeBtn)
-        isotopeSettingsBtn = findViewById(R.id.isotopeSettingsBtn)
-        isotopeScanBtn = findViewById(R.id.isotopeScanBtn)
-        isotopeRealtimeSwitch = findViewById(R.id.isotopeRealtimeSwitch)
-        isotopeStatusLabel = findViewById(R.id.isotopeStatusLabel)
-        isotopeChartContainer = findViewById(R.id.isotopeChartContainer)
-        isotopeMultiLineChart = findViewById(R.id.isotopeMultiLineChart)
-        isotopeStackedChart = findViewById(R.id.isotopeStackedChart)
-        isotopeBarChart = findViewById(R.id.isotopeBarChart)
-        isotopeScanResultContainer = findViewById(R.id.isotopeScanResultContainer)
-        isotopeScanResultText = findViewById(R.id.isotopeScanResultText)
-        isotopeScanProgress = findViewById(R.id.isotopeScanProgress)
-        isotopeQuickView = findViewById(R.id.isotopeQuickView)
-        isotopeTopResult = findViewById(R.id.isotopeTopResult)
-
-        sessionInfo = findViewById(R.id.sessionInfo)
-        
-        // Intelligence card
-        intelligenceCard = findViewById(R.id.intelligenceCard)
-        intelligenceSummary = findViewById(R.id.intelligenceSummary)
-        intelligenceAlertBadge = findViewById(R.id.intelligenceAlertBadge)
-        doseTrendLabel = findViewById(R.id.doseTrendLabel)
-        predictedDoseLabel = findViewById(R.id.predictedDoseLabel)
-        anomalyCountLabel = findViewById(R.id.anomalyCountLabel)
-        intelligenceInfoButton = findViewById(R.id.intelligenceInfoButton)
-        stabilityIndicator = findViewById(R.id.stabilityIndicator)
-        dataQualityLabel = findViewById(R.id.dataQualityLabel)
-        predictionConfidenceLabel = findViewById(R.id.predictionConfidenceLabel)
-        anomalyDetailLabel = findViewById(R.id.anomalyDetailLabel)
-        intelligenceExpandedSection = findViewById(R.id.intelligenceExpandedSection)
-        intelligenceExpandButton = findViewById(R.id.intelligenceExpandButton)
-        intelligenceExpandText = findViewById(R.id.intelligenceExpandText)
-        intelligenceExpandArrow = findViewById(R.id.intelligenceExpandArrow)
-        statsRangeLabel = findViewById(R.id.statsRangeLabel)
-        statsStdDevLabel = findViewById(R.id.statsStdDevLabel)
-        statsCvLabel = findViewById(R.id.statsCvLabel)
-        statsBackgroundLabel = findViewById(R.id.statsBackgroundLabel)
-        statsVsBackgroundLabel = findViewById(R.id.statsVsBackgroundLabel)
-        statsZScoreLabel = findViewById(R.id.statsZScoreLabel)
-        
-        // Intelligence card interactions
-        intelligenceInfoButton.setOnClickListener { showIntelligenceHelpDialog() }
-        intelligenceExpandButton.setOnClickListener { toggleIntelligenceExpanded() }
-
-        connectionDot = findViewById(R.id.connectionDot)
-        connectionStatus = findViewById(R.id.connectionStatus)
-        preferredDeviceText = findViewById(R.id.preferredDeviceText)
-        autoConnectSwitch = findViewById(R.id.autoConnectSwitch)
-        findDevicesButton = findViewById(R.id.findDevicesButton)
-        reconnectButton = findViewById(R.id.reconnectButton)
-        stopServiceButton = findViewById(R.id.stopServiceButton)
-        deviceListContainer = findViewById(R.id.deviceListContainer)
-        noDevicesText = findViewById(R.id.noDevicesText)
-
-        rowWindow = findViewById(R.id.rowWindow)
-        rowSmoothing = findViewById(R.id.rowSmoothing)
-        rowSpikeMarkers = findViewById(R.id.rowSpikeMarkers)
-        rowSpikePercentages = findViewById(R.id.rowSpikePercentages)
-        rowUnits = findViewById(R.id.rowUnits)
-        rowPause = findViewById(R.id.rowPause)
-        rowSmartAlerts = findViewById(R.id.rowSmartAlerts)
-        rowVegaIntelligence = findViewById(R.id.rowVegaIntelligence)
-        rowTrendArrows = findViewById(R.id.rowTrendArrows)
-        rowIsotopeSettings = findViewById(R.id.rowIsotopeSettings)
-        rowDownloadCalibration = findViewById(R.id.rowDownloadCalibration)
-
-        valueWindow = findViewById(R.id.valueWindow)
-        valueSmoothing = findViewById(R.id.valueSmoothing)
-        valueSpikeMarkers = findViewById(R.id.valueSpikeMarkers)
-        valueSpikePercentages = findViewById(R.id.valueSpikePercentages)
-        valueUnits = findViewById(R.id.valueUnits)
-        valuePause = findViewById(R.id.valuePause)
-        valueSmartAlerts = findViewById(R.id.valueSmartAlerts)
-        valueVegaIntelligence = findViewById(R.id.valueVegaIntelligence)
-        valueTrendArrows = findViewById(R.id.valueTrendArrows)
-        valueIsotopeSettings = findViewById(R.id.valueIsotopeSettings)
-        valueNotificationStyle = findViewById(R.id.valueNotificationStyle)
-        
-        // Expandable section headers and content
-        sectionAppHeader = findViewById(R.id.sectionAppHeader)
-        sectionAppContent = findViewById(R.id.sectionAppContent)
-        sectionAppArrow = findViewById(R.id.sectionAppArrow)
-        sectionSoundsHeader = findViewById(R.id.sectionSoundsHeader)
-        sectionSoundsContent = findViewById(R.id.sectionSoundsContent)
-        sectionSoundsArrow = findViewById(R.id.sectionSoundsArrow)
-        sectionChartHeader = findViewById(R.id.sectionChartHeader)
-        sectionChartContent = findViewById(R.id.sectionChartContent)
-        sectionChartArrow = findViewById(R.id.sectionChartArrow)
-        sectionDisplayHeader = findViewById(R.id.sectionDisplayHeader)
-        sectionDisplayContent = findViewById(R.id.sectionDisplayContent)
-        sectionDisplayArrow = findViewById(R.id.sectionDisplayArrow)
-        sectionMapHeader = findViewById(R.id.sectionMapHeader)
-        sectionMapContent = findViewById(R.id.sectionMapContent)
-        sectionMapArrow = findViewById(R.id.sectionMapArrow)
-        sectionAlertsHeader = findViewById(R.id.sectionAlertsHeader)
-        sectionAlertsContent = findViewById(R.id.sectionAlertsContent)
-        sectionAlertsArrow = findViewById(R.id.sectionAlertsArrow)
-        sectionDetectionHeader = findViewById(R.id.sectionDetectionHeader)
-        sectionDetectionContent = findViewById(R.id.sectionDetectionContent)
-        sectionDetectionArrow = findViewById(R.id.sectionDetectionArrow)
-        sectionAdvancedHeader = findViewById(R.id.sectionAdvancedHeader)
-        sectionAdvancedContent = findViewById(R.id.sectionAdvancedContent)
-        sectionAdvancedArrow = findViewById(R.id.sectionAdvancedArrow)
-        
-        // Dashboard settings section
-        sectionDashboardHeader = findViewById(R.id.sectionDashboardHeader)
-        sectionDashboardContent = findViewById(R.id.sectionDashboardContent)
-        sectionDashboardArrow = findViewById(R.id.sectionDashboardArrow)
-        rowEditDashboard = findViewById(R.id.rowEditDashboard)
-        rowResetDashboard = findViewById(R.id.rowResetDashboard)
-        
-        // Application settings rows
-        rowNotificationSettings = findViewById(R.id.rowNotificationSettings)
-        rowPlayIntro = findViewById(R.id.rowPlayIntro)
-        
-        // Sound settings rows
-        rowSoundSettings = findViewById(R.id.rowSoundSettings)
-        valueSoundSettings = findViewById(R.id.valueSoundSettings)
-        
-        // Map settings rows
-        rowGpsTracking = findViewById(R.id.rowGpsTracking)
-        switchGpsTracking = findViewById(R.id.switchGpsTracking)
-        rowMapTheme = findViewById(R.id.rowMapTheme)
-        valueMapTheme = findViewById(R.id.valueMapTheme)
-        rowClearMapData = findViewById(R.id.rowClearMapData)
-        
-        // Dashboard edit mode
-        fabEditDashboard = findViewById(R.id.fabEditDashboard)
-        editModeToolbar = findViewById(R.id.editModeToolbar)
-        btnResetDashboard = findViewById(R.id.btnResetDashboard)
-        btnDoneEditing = findViewById(R.id.btnDoneEditing)
-
-        shareCsvButton = findViewById(R.id.shareCsvButton)
     }
 
-    private fun setupNavigation() {
-        val toggle = ActionBarDrawerToggle(
-            this,
-            drawerLayout,
-            toolbar,
-            R.string.navigation_drawer_open,
-            R.string.navigation_drawer_close,
-        )
-        drawerLayout.addDrawerListener(toggle)
-        toggle.syncState()
-
-        navView.setNavigationItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_dashboard -> setPanel(Panel.Dashboard)
-                R.id.nav_device -> setPanel(Panel.Device)
-                R.id.nav_spectral_analysis -> {
-                    startActivity(Intent(this, VegaSpectralAnalysisActivity::class.java))
-                }
-                R.id.nav_widget_crafter -> {
-                    startActivity(Intent(this, WidgetCrafterActivity::class.java))
-                }
-                R.id.nav_settings -> setPanel(Panel.Settings)
-                R.id.nav_logs -> setPanel(Panel.Logs)
-            }
-            item.isChecked = true
-            drawerLayout.closeDrawer(GravityCompat.START)
-            true
-        }
-
-        navView.setCheckedItem(R.id.nav_dashboard)
-        setPanel(Panel.Dashboard)
+    private fun setupTabs() {
+        val adapter = MainPagerAdapter(this)
+        viewPager.adapter = adapter
+        viewPager.offscreenPageLimit = 3 // keep all tabs alive
+        TabLayoutMediator(tabLayout, viewPager) { tab, position ->
+            tab.text = arrayOf("Dashboard", "Map", "Isotope ID", "Device")[position]
+        }.attach()
     }
 
-    private fun setupDevicePanel() {
-        autoConnectSwitch.isChecked = Prefs.isAutoConnectEnabled(this)
-        autoConnectSwitch.setOnCheckedChangeListener { _, isChecked ->
-            Prefs.setAutoConnectEnabled(this, isChecked)
-            if (isChecked) {
-                RadiaCodeForegroundService.start(this)
-            } else {
-                RadiaCodeForegroundService.stop(this)
-            }
-            lastReadingTimestampMs = 0L
-        }
-
-        findDevicesButton.setOnClickListener {
-            findDevicesLauncher.launch(android.content.Intent(this, FindDevicesActivity::class.java))
-        }
-
-        reconnectButton.setOnClickListener {
-            RadiaCodeForegroundService.reconnect(this)
-            lastReadingTimestampMs = 0L
-        }
-
-        stopServiceButton.setOnClickListener {
-            RadiaCodeForegroundService.stop(this)
-            lastReadingTimestampMs = 0L
-        }
-        
-        // Setup device list manager
-        setupDeviceListManager()
-        refreshDeviceList()
-    }
-
-    private fun setupSettingsPanel() {
-        // Setup expandable sections
-        setupExpandableSection(sectionAppHeader, sectionAppContent, sectionAppArrow, expanded = true)
-        setupExpandableSection(sectionDashboardHeader, sectionDashboardContent, sectionDashboardArrow, expanded = true)
-        setupExpandableSection(sectionChartHeader, sectionChartContent, sectionChartArrow, expanded = true)
-        setupExpandableSection(sectionDisplayHeader, sectionDisplayContent, sectionDisplayArrow, expanded = true)
-        setupExpandableSection(sectionMapHeader, sectionMapContent, sectionMapArrow, expanded = true)
-        setupExpandableSection(sectionAlertsHeader, sectionAlertsContent, sectionAlertsArrow, expanded = true)
-        setupExpandableSection(sectionDetectionHeader, sectionDetectionContent, sectionDetectionArrow, expanded = true)
-        setupExpandableSection(sectionSoundsHeader, sectionSoundsContent, sectionSoundsArrow, expanded = false)
-        setupExpandableSection(sectionAdvancedHeader, sectionAdvancedContent, sectionAdvancedArrow, expanded = false)
-        
-        // Application settings
-        rowNotificationSettings.setOnClickListener {
-            startActivity(Intent(this, NotificationSettingsActivity::class.java))
-        }
-        
-        // Sound settings
-        rowSoundSettings.setOnClickListener {
-            startActivity(Intent(this, SoundSettingsActivity::class.java))
-        }
-        
-        rowPlayIntro.setOnClickListener {
-            showVegaIntro()
-        }
-        
-        // Map settings - GPS Tracking toggle
-        switchGpsTracking.isChecked = Prefs.isGpsTrackingEnabled(this)
-        switchGpsTracking.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                // Show warning dialog before enabling GPS tracking
-                showGpsTrackingWarningDialog()
-            } else {
-                // Disable GPS tracking immediately
-                Prefs.setGpsTrackingEnabled(this, false)
-                mapCard.updateGpsTrackingState()
-                // Notify the foreground service to stop GPS
-                RadiaCodeForegroundService.reloadDevices(this)
-            }
-        }
-        
-        rowMapTheme.setOnClickListener {
-            showMapThemeDialog()
-        }
-        
-        rowClearMapData.setOnClickListener {
-            showClearMapDataDialog()
-        }
-        
-        // Dashboard settings
-        rowEditDashboard.setOnClickListener {
-            setPanel(Panel.Dashboard)
-            mainHandler.postDelayed({ enterDashboardEditMode() }, 300)
-        }
-        
-        rowResetDashboard.setOnClickListener {
-            showResetDashboardConfirmation()
-        }
-        
-        rowWindow.setOnClickListener {
-            val next = when (Prefs.getWindowSeconds(this, 60)) {
-                10 -> 60
-                60 -> 600
-                600 -> 3600
-                else -> 10
-            }
-            Prefs.setWindowSeconds(this, next)
-            refreshSettingsRows()
-            updateChartTitles()
-            lastReadingTimestampMs = 0L
-        }
-
-        rowSmoothing.setOnClickListener {
-            val next = when (Prefs.getSmoothSeconds(this, 0)) {
-                0 -> 5
-                5 -> 30
-                else -> 0
-            }
-            Prefs.setSmoothSeconds(this, next)
-            refreshSettingsRows()
-            lastReadingTimestampMs = 0L
-        }
-        
-        rowSpikeMarkers.setOnClickListener {
-            val next = !Prefs.isShowSpikeMarkersEnabled(this)
-            Prefs.setShowSpikeMarkersEnabled(this, next)
-            doseChart.setShowSpikeMarkers(next)
-            cpsChart.setShowSpikeMarkers(next)
-            refreshSettingsRows()
-        }
-
-        rowSpikePercentages.setOnClickListener {
-            val next = !Prefs.isShowSpikePercentagesEnabled(this)
-            Prefs.setShowSpikePercentagesEnabled(this, next)
-            doseChart.setShowSpikePercentages(next)
-            cpsChart.setShowSpikePercentages(next)
-            refreshSettingsRows()
-        }
-
-        rowUnits.setOnClickListener {
-            val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-            val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-            val next = when {
-                du == Prefs.DoseUnit.USV_H && cu == Prefs.CountUnit.CPS -> Prefs.DoseUnit.NSV_H to Prefs.CountUnit.CPS
-                du == Prefs.DoseUnit.NSV_H && cu == Prefs.CountUnit.CPS -> Prefs.DoseUnit.USV_H to Prefs.CountUnit.CPM
-                du == Prefs.DoseUnit.USV_H && cu == Prefs.CountUnit.CPM -> Prefs.DoseUnit.NSV_H to Prefs.CountUnit.CPM
-                else -> Prefs.DoseUnit.USV_H to Prefs.CountUnit.CPS
-            }
-            Prefs.setDoseUnit(this, next.first)
-            Prefs.setCountUnit(this, next.second)
-            refreshSettingsRows()
-            updateChartTitles()
-            lastReadingTimestampMs = 0L
-        }
-
-        rowPause.setOnClickListener {
-            val next = !Prefs.isPauseLiveEnabled(this)
-            Prefs.setPauseLiveEnabled(this, next)
-            if (next) {
-                pausedSnapshotDose = currentWindowSeriesDose()
-                pausedSnapshotCps = currentWindowSeriesCps()
-            } else {
-                pausedSnapshotDose = null
-                pausedSnapshotCps = null
-            }
-            refreshSettingsRows()
-            lastReadingTimestampMs = 0L
-        }
-        
-        rowTrendArrows.setOnClickListener {
-            val next = !Prefs.isShowTrendArrowsEnabled(this)
-            Prefs.setShowTrendArrowsEnabled(this, next)
-            refreshSettingsRows()
-            applyTrendArrowsSettings()
-        }
-
-        rowSmartAlerts.setOnClickListener {
-            startActivity(Intent(this, AlertConfigActivity::class.java))
-        }
-        
-        rowVegaIntelligence.setOnClickListener {
-            startActivity(Intent(this, VegaStatisticalSettingsActivity::class.java))
-        }
-        
-        rowIsotopeSettings.setOnClickListener {
-            startActivity(Intent(this, IsotopeSettingsActivity::class.java))
-        }
-        
-        rowDownloadCalibration.setOnClickListener {
-            downloadKevCalibration()
-        }
-    }
-    
-    private fun setupExpandableSection(header: View, content: View, arrow: android.widget.ImageView, expanded: Boolean) {
-        // Set initial state
-        content.visibility = if (expanded) View.VISIBLE else View.GONE
-        arrow.rotation = if (expanded) 180f else 0f
-        
-        header.setOnClickListener {
-            val isCurrentlyExpanded = content.visibility == View.VISIBLE
-            if (isCurrentlyExpanded) {
-                content.animate()
-                    .alpha(0f)
-                    .setDuration(150)
-                    .withEndAction { content.visibility = View.GONE }
-                    .start()
-                arrow.animate().rotation(0f).setDuration(150).start()
-            } else {
-                content.alpha = 0f
-                content.visibility = View.VISIBLE
-                content.animate()
-                    .alpha(1f)
-                    .setDuration(150)
-                    .start()
-                arrow.animate().rotation(180f).setDuration(150).start()
-            }
+    private fun setupSettingsGear() {
+        btnSettingsGear.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
 
-    private fun setupLogsPanel() {
-        shareCsvButton.setOnClickListener { shareCsv() }
+    // --- Fragment accessors ---
+    fun getDashboardFragment(): DashboardFragment? =
+        supportFragmentManager.findFragmentByTag("f0") as? DashboardFragment
+
+    fun getMapFragment(): MapFragment? =
+        supportFragmentManager.findFragmentByTag("f1") as? MapFragment
+
+    fun getIsotopeFragment(): IsotopeFragment? =
+        supportFragmentManager.findFragmentByTag("f2") as? IsotopeFragment
+
+    fun getDeviceFragment(): DeviceFragment? =
+        supportFragmentManager.findFragmentByTag("f3") as? DeviceFragment
+
+    // --- Public state accessors for fragments ---
+    fun getIsotopeDetector(): IsotopeDetector? = isotopeDetector
+    fun getCurrentIsotopeHistory(): IsotopePredictionHistory = isotopePredictionHistories.getOrPut(selectedDeviceIdCache ?: "global") { IsotopePredictionHistory() }
+    fun getLastSpectrumData(): SpectrumData? = lastSpectrumData
+    fun getIsotopeRealtimeActive(): Boolean = isIsotopeRealtimeActive
+
+    fun setIsotopeRealtimeActive(active: Boolean) {
+        isIsotopeRealtimeActive = active
     }
 
-    private fun setupMetricCards() {
-        val cyanColor = ContextCompat.getColor(this, R.color.pro_cyan)
-        val magentaColor = ContextCompat.getColor(this, R.color.pro_magenta)
-
-        doseCard.setLabel("DELTA DOSE RATE")
-        doseCard.setAccentColor(cyanColor)
-        doseCard.setValueText("—")
-        doseCard.setTrend(0f)
-
-        cpsCard.setLabel("DELTA COUNT RATE")
-        cpsCard.setAccentColor(magentaColor)
-        cpsCard.setValueText("—")
-        cpsCard.setTrend(0f)
-        
-        // Apply trend arrows setting
-        applyTrendArrowsSettings()
-    }
-    
-    private fun applyTrendArrowsSettings() {
-        val showTrend = Prefs.isShowTrendArrowsEnabled(this)
-        doseCard.setShowTrendArrows(showTrend)
-        cpsCard.setShowTrendArrows(showTrend)
+    fun clearAccumulatedSpectra() {
+        accumulatedSpectra.clear()
+        spectrumAccumulationStart.clear()
     }
 
-    private fun setupCharts() {
-        val cyanColor = ContextCompat.getColor(this, R.color.pro_cyan)
-        val magentaColor = ContextCompat.getColor(this, R.color.pro_magenta)
-
-        doseChart.setAccentColor(cyanColor)
-        cpsChart.setAccentColor(magentaColor)
-
-        // Enable rolling average line on charts
-        doseChart.setRollingAverageWindow(10)
-        cpsChart.setRollingAverageWindow(10)
-        
-        // Apply spike markers setting
-        val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
-        doseChart.setShowSpikeMarkers(showSpikes)
-        cpsChart.setShowSpikeMarkers(showSpikes)
-
-        // Apply spike percentages setting
-        val showSpikePercent = Prefs.isShowSpikePercentagesEnabled(this)
-        doseChart.setShowSpikePercentages(showSpikePercent)
-        cpsChart.setShowSpikePercentages(showSpikePercent)
-
-        // Chart panel click handlers (opens detailed analysis view)
-        doseChartPanel.setOnClickListener { openDetailedChart("dose") }
-        cpsChartPanel.setOnClickListener { openDetailedChart("cps") }
-        
-        // Setup zoom change listeners to show/hide reset buttons
-        doseChart.setOnZoomChangeListener(object : ProChartView.OnZoomChangeListener {
-            override fun onZoomChanged(zoomLevel: Float) {
-                doseChartReset.visibility = if (zoomLevel > 1.01f) View.VISIBLE else View.GONE
-            }
-        })
-        
-        cpsChart.setOnZoomChangeListener(object : ProChartView.OnZoomChangeListener {
-            override fun onZoomChanged(zoomLevel: Float) {
-                cpsChartReset.visibility = if (zoomLevel > 1.01f) View.VISIBLE else View.GONE
-            }
-        })
-        
-        // Reset button click handlers
-        doseChartReset.setOnClickListener { doseChart.resetZoom() }
-        cpsChartReset.setOnClickListener { cpsChart.resetZoom() }
-        
-        // Go-to-realtime button click handlers
-        doseChartGoRealtime.setOnClickListener { doseChart.goToRealTime() }
-        cpsChartGoRealtime.setOnClickListener { cpsChart.goToRealTime() }
-        
-        // Setup real-time state listeners to show/hide go-to-realtime buttons
-        doseChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
-            override fun onRealTimeStateChanged(isFollowingRealTime: Boolean) {
-                doseChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
-            }
-        })
-        
-        cpsChart.setOnRealTimeStateListener(object : ProChartView.OnRealTimeStateListener {
-            override fun onRealTimeStateChanged(isFollowingRealTime: Boolean) {
-                cpsChartGoRealtime.visibility = if (isFollowingRealTime) View.GONE else View.VISIBLE
-            }
-        })
-    }
-    
-    private fun setupMapCard() {
-        // Set up callback for when user clicks "enable GPS" in the disabled overlay
-        mapCard.onEnableGpsRequested = {
-            // Navigate to settings and show the GPS warning dialog
-            setPanel(Panel.Settings)
-            mainHandler.postDelayed({
-                // Scroll to map settings section (optional enhancement)
-                showGpsTrackingWarningDialog()
-            }, 300)
+    fun onDeviceDiscovered(address: String) {
+        val existingDevice = Prefs.getDeviceByMac(this, address)
+        if (existingDevice == null) {
+            val newDevice = DeviceConfig(
+                macAddress = address,
+                enabled = true
+            )
+            Prefs.addDevice(this, newDevice)
+        } else if (!existingDevice.enabled) {
+            Prefs.updateDevice(this, existingDevice.copy(enabled = true))
         }
-        
-        // Only load and track if GPS tracking is enabled
-        if (Prefs.isGpsTrackingEnabled(this)) {
-            // Load existing data points
-            mapCard.loadDataPoints()
-            
-            // Start location tracking if permission is granted
-            if (hasAllPermissions()) {
-                mapCard.startLocationTracking()
-            }
-        }
+        Prefs.setPreferredAddress(this, address)
+        Prefs.setAutoConnectEnabled(this, true)
+        RadiaCodeForegroundService.reloadDevices(this)
+        doseHistory.clear()
+        cpsHistory.clear()
+        lastReadingTimestampMs = 0L
+        pausedSnapshotDose = null
+        pausedSnapshotCps = null
+        sessionStartMs = System.currentTimeMillis()
+        sampleCount = 0
+        updateStatus(true, "Connecting")
     }
 
-    private fun setupIsotopePanel() {
-        // Initialize the isotope detector with enabled isotopes
-        val enabledIsotopes = Prefs.getEnabledIsotopes(this)
-        isotopeDetector = IsotopeDetector(enabledIsotopes)
-        
-        // Show/hide panel based on connection state (will be updated dynamically)
-        isotopePanel.visibility = View.VISIBLE
-        
-        // Apply saved settings
-        val realtimeEnabled = Prefs.isIsotopeRealtimeEnabled(this)
-        isotopeRealtimeSwitch.isChecked = realtimeEnabled
-        isIsotopeRealtimeActive = realtimeEnabled
-        
-        val displayMode = Prefs.getIsotopeDisplayMode(this)
-        updateIsotopeDisplayModeToggle(displayMode)
-        
-        val accumulationMode = Prefs.getIsotopeAccumulationMode(this)
-        updateIsotopeAccumulationModeToggle(accumulationMode)
-        
-        val hideBackground = Prefs.isIsotopeHideBackground(this)
-        updateIsotopeHideBackgroundToggle(hideBackground)
-        
-        val chartMode = Prefs.getIsotopeChartMode(this)
-        updateIsotopeChartMode(chartMode)
-        
-        // Setup click listeners
-        isotopeScanBtn.setOnClickListener { performIsotopeScan() }
-        
-        isotopeRealtimeSwitch.setOnCheckedChangeListener { _, isChecked ->
-            Prefs.setIsotopeRealtimeEnabled(this, isChecked)
-            isIsotopeRealtimeActive = isChecked
-            // Clear accumulated spectra when starting/stopping real-time mode
-            accumulatedSpectra.clear()
-            spectrumAccumulationStart.clear()
-            updateIsotopePanelState()
-        }
-        
-        isotopeDisplayModeToggle.setOnClickListener {
-            val current = Prefs.getIsotopeDisplayMode(this)
-            val next = when (current) {
-                Prefs.IsotopeDisplayMode.PROBABILITY -> Prefs.IsotopeDisplayMode.FRACTION
-                Prefs.IsotopeDisplayMode.FRACTION -> Prefs.IsotopeDisplayMode.PROBABILITY
-            }
-            Prefs.setIsotopeDisplayMode(this, next)
-            updateIsotopeDisplayModeToggle(next)
-            refreshIsotopeCharts()
-        }
-        
-        isotopeAccumulationModeToggle.setOnClickListener {
-            val current = Prefs.getIsotopeAccumulationMode(this)
-            val next = when (current) {
-                Prefs.IsotopeAccumulationMode.FULL_DURATION -> Prefs.IsotopeAccumulationMode.INTERVAL
-                Prefs.IsotopeAccumulationMode.INTERVAL -> Prefs.IsotopeAccumulationMode.FULL_DURATION
-            }
-            Prefs.setIsotopeAccumulationMode(this, next)
-            updateIsotopeAccumulationModeToggle(next)
-            // Clear accumulated spectra when changing mode
-            accumulatedSpectra.clear()
-            spectrumAccumulationStart.clear()
-        }
-        
-        isotopeHideBackgroundToggle.setOnClickListener {
-            val current = Prefs.isIsotopeHideBackground(this)
-            val next = !current
-            Prefs.setIsotopeHideBackground(this, next)
-            updateIsotopeHideBackgroundToggle(next)
-            refreshIsotopeCharts()
-        }
-        
-        isotopeChartTypeBtn.setOnClickListener { showIsotopeChartTypeDialog() }
-        
-        isotopeSettingsBtn.setOnClickListener {
-            startActivity(Intent(this, IsotopeSettingsActivity::class.java))
-        }
-        
-        updateIsotopePanelState()
-    }
-    
-    private fun updateIsotopeDisplayModeToggle(mode: Prefs.IsotopeDisplayMode) {
-        isotopeDisplayModeToggle.text = when (mode) {
-            Prefs.IsotopeDisplayMode.PROBABILITY -> "PROB"
-            Prefs.IsotopeDisplayMode.FRACTION -> "FRAC"
-        }
-    }
-    
-    private fun updateIsotopeAccumulationModeToggle(mode: Prefs.IsotopeAccumulationMode) {
-        isotopeAccumulationModeToggle.text = when (mode) {
-            Prefs.IsotopeAccumulationMode.FULL_DURATION -> "FULL"
-            Prefs.IsotopeAccumulationMode.INTERVAL -> "INT"
-        }
-        isotopeAccumulationModeToggle.setTextColor(
-            ContextCompat.getColor(this, when (mode) {
-                Prefs.IsotopeAccumulationMode.FULL_DURATION -> R.color.pro_magenta
-                Prefs.IsotopeAccumulationMode.INTERVAL -> R.color.pro_cyan
-            })
-        )
-    }
-    
-    private fun updateIsotopeHideBackgroundToggle(hide: Boolean) {
-        isotopeHideBackgroundToggle.text = if (hide) "BKG" else "BKG"
-        isotopeHideBackgroundToggle.setTextColor(
-            ContextCompat.getColor(this, if (hide) R.color.pro_text_muted else R.color.pro_green)
-        )
-        // Show strikethrough when hidden
-        isotopeHideBackgroundToggle.paintFlags = if (hide) {
-            isotopeHideBackgroundToggle.paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
-        } else {
-            isotopeHideBackgroundToggle.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
-        }
-    }
-    
-    private fun updateIsotopeChartMode(mode: Prefs.IsotopeChartMode) {
-        isotopeMultiLineChart.visibility = View.GONE
-        isotopeStackedChart.visibility = View.GONE
-        isotopeBarChart.visibility = View.GONE
-        isotopeScanResultContainer.visibility = View.GONE
-        
-        when (mode) {
-            Prefs.IsotopeChartMode.MULTI_LINE -> isotopeMultiLineChart.visibility = View.VISIBLE
-            Prefs.IsotopeChartMode.STACKED_AREA -> isotopeStackedChart.visibility = View.VISIBLE
-            Prefs.IsotopeChartMode.ANIMATED_BAR -> isotopeBarChart.visibility = View.VISIBLE
-        }
-    }
-    
-    private fun updateIsotopePanelState() {
-        val history = getCurrentIsotopeHistory()
-        if (isIsotopeRealtimeActive) {
-            isotopeStatusLabel.text = "Streaming"
-            isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_green))
-            val mode = Prefs.getIsotopeChartMode(this)
-            updateIsotopeChartMode(mode)
-        } else {
-            if (history.isEmpty) {
-                isotopeStatusLabel.text = "Idle"
-                isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_text_muted))
-                isotopeScanResultContainer.visibility = View.VISIBLE
-                isotopeScanResultText.text = "Press SCAN to identify isotopes"
-                isotopeMultiLineChart.visibility = View.GONE
-                isotopeStackedChart.visibility = View.GONE
-                isotopeBarChart.visibility = View.GONE
-            }
-        }
-    }
-    
-    private fun showIsotopeChartTypeDialog() {
-        val options = arrayOf("Multi-Line Chart", "Stacked Area Chart", "Animated Bars")
-        val current = Prefs.getIsotopeChartMode(this).ordinal
-        
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setTitle("Chart Type")
-            .setSingleChoiceItems(options, current) { dialog, which ->
-                val mode = Prefs.IsotopeChartMode.values()[which]
-                Prefs.setIsotopeChartMode(this, mode)
-                updateIsotopeChartMode(mode)
-                refreshIsotopeCharts()
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    private fun showMapThemeDialog() {
-        val themes = Prefs.MapTheme.values()
-        val themeNames = themes.map { it.displayName }.toTypedArray()
-        val current = themes.indexOf(Prefs.getMapTheme(this))
-        
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setTitle("Map Theme")
-            .setSingleChoiceItems(themeNames, current) { dialog, which ->
-                val selected = themes[which]
-                Prefs.setMapTheme(this, selected)
-                refreshSettingsRows()
-                mapCard.setMapTheme(selected)
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    private fun showClearMapDataDialog() {
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setTitle("Clear Map Data")
-            .setMessage("This will permanently delete all hexagon readings from the radiation map. This action cannot be undone.\n\nContinue?")
-            .setPositiveButton("Clear Data") { _, _ ->
-                Prefs.clearMapDataPoints(this)
-                mapCard.clearMapData()
-                android.widget.Toast.makeText(this, "Map data cleared", android.widget.Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    private fun performIsotopeScan() {
-        // Show scanning state immediately
-        isotopeScanResultContainer.visibility = View.VISIBLE
-        isotopeMultiLineChart.visibility = View.GONE
-        isotopeStackedChart.visibility = View.GONE
-        isotopeBarChart.visibility = View.GONE
-        isotopeScanResultText.text = "Reading spectrum…"
-        isotopeScanProgress.visibility = View.VISIBLE
-        isotopeStatusLabel.text = "Scanning…"
-        isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_amber))
-        
-        // Request fresh spectrum data from service
-        RadiaCodeForegroundService.requestSpectrum(this)
-        
-        // Wait a bit for response (the spectrum receiver will update lastSpectrumData)
-        // If we get data via broadcast, onSpectrumDataReceived will be called
-        // Fall back to existing data after timeout
-        mainHandler.postDelayed({
-            val spectrum = lastSpectrumData
-            if (spectrum == null) {
-                isotopeScanResultText.text = "No spectrum data available.\nConnect to a device first."
-                isotopeScanProgress.visibility = View.GONE
-                isotopeStatusLabel.text = "Error"
-                isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_red))
-                return@postDelayed
-            }
-            
-            // Analyze the spectrum
-            val detector = isotopeDetector ?: return@postDelayed
-            val result = detector.analyze(spectrum)
-            
-            isotopeScanProgress.visibility = View.GONE
-            isotopeStatusLabel.text = "Complete"
-            isotopeStatusLabel.setTextColor(ContextCompat.getColor(this, R.color.pro_green))
-            
-            // Display results
-            displayScanResults(result)
-        }, 1500) // Give time for BLE read to complete
-    }
-    
-    private fun displayScanResults(result: IsotopeDetector.AnalysisResult) {
-        val topFive = result.topFive
-        if (topFive.isEmpty()) {
-            isotopeScanResultText.text = "No isotopes detected"
-            return
-        }
-        
-        val displayMode = Prefs.getIsotopeDisplayMode(this)
-        val sb = StringBuilder()
-        
-        for ((i, pred) in topFive.withIndex()) {
-            val value = if (displayMode == Prefs.IsotopeDisplayMode.PROBABILITY) {
-                "${(pred.probability * 100).toInt()}%"
-            } else {
-                "%.1f%%".format(pred.fraction * 100)
-            }
-            val icon = when (i) {
-                0 -> "🥇"
-                1 -> "🥈"
-                2 -> "🥉"
-                else -> "  "
-            }
-            sb.append("$icon ${pred.name}: $value\n")
-        }
-        
-        isotopeScanResultText.text = sb.toString().trim()
-        isotopeScanResultContainer.visibility = View.VISIBLE
-        
-        // Update top result quick view
-        val top = topFive.firstOrNull()
-        if (top != null) {
-            val topValue = if (displayMode == Prefs.IsotopeDisplayMode.PROBABILITY) {
-                "${(top.probability * 100).toInt()}%"
-            } else {
-                "%.1f%%".format(top.fraction * 100)
-            }
-            isotopeTopResult.text = "${top.name}: $topValue"
-        }
-    }
-    
-    private fun refreshIsotopeCharts() {
-        val isotopeHistory = getCurrentIsotopeHistory()
-        if (isotopeHistory.isEmpty) return
-        
-        val hideBackground = Prefs.isIsotopeHideBackground(this)
-        val displayMode = Prefs.getIsotopeDisplayMode(this)
-        val showProbability = displayMode == Prefs.IsotopeDisplayMode.PROBABILITY
-        
-        // Get top isotopes, excluding "Unknown" if hide background is enabled
-        val topPredictions = isotopeHistory.getCurrentTop(if (hideBackground) 6 else 5)
-            .filter { if (hideBackground) it.isotopeId != "Unknown" else true }
-            .take(5)
-        val topIds = topPredictions.map { it.isotopeId }
-        
-        // Filter history entries to exclude Unknown when hide background is enabled
-        val history = if (hideBackground) {
-            isotopeHistory.getAll().map { result ->
-                val filteredPredictions = result.predictions.filter { it.isotopeId != "Unknown" }
-                val filteredTopFive = result.topFive.filter { it.isotopeId != "Unknown" }
-                IsotopeDetector.AnalysisResult(
-                    predictions = filteredPredictions,
-                    topFive = filteredTopFive,
-                    timestampMs = result.timestampMs,
-                    totalCounts = result.totalCounts,
-                    durationSeconds = result.durationSeconds
-                )
-            }
-        } else {
-            isotopeHistory.getAll()
-        }
-        
-        isotopeMultiLineChart.setData(history, topIds, showProbability)
-        isotopeStackedChart.setData(history, topIds)
-        isotopeBarChart.setData(history, showProbability)
-        
-        // Update top result (respect hide background here too)
-        val top = topPredictions.firstOrNull()
-        if (top != null) {
-            val value = if (showProbability) {
-                "${(top.probability * 100).toInt()}%"
-            } else {
-                "%.1f%%".format(top.fraction * 100)
-            }
-            isotopeTopResult.text = "${top.name}: $value"
-        }
-    }
-    
+    fun getDoseHistory(): SampleHistory = doseHistory
+    fun getCpsHistory(): SampleHistory = cpsHistory
+    fun getSelectedDeviceId(): String? = selectedDeviceIdCache
+    fun getDeviceConnectionStates(): Map<String, DeviceConnectionState> = deviceConnectionStates
+
     /**
-     * Get or create the isotope prediction history for a device.
+     * Called by DashboardFragment when time window chips change.
+     * Reloads chart history for the new window.
      */
+    fun onTimeWindowChanged() {
+        uiDirty = true
+        getDashboardFragment()?.refreshCharts()
+    }
+
+    /**
+     * Build export data points from current dose/cps history.
+     * Used by MapFragment for data export.
+     */
+    fun buildExportDataPoints(): List<DataExportManager.ExportDataPoint> {
+        val doseSeries = doseHistory.lastN(doseHistory.size())
+        val cpsSeries = cpsHistory.lastN(cpsHistory.size())
+        val points = mutableListOf<DataExportManager.ExportDataPoint>()
+        for (i in doseSeries.timestampsMs.indices) {
+            points.add(
+                DataExportManager.ExportDataPoint(
+                    timestampMs = doseSeries.timestampsMs[i],
+                    uSvPerHour = doseSeries.values[i],
+                    cps = if (i < cpsSeries.values.size) cpsSeries.values[i] else 0f,
+                    deviceId = selectedDeviceIdCache
+                )
+            )
+        }
+        return points
+    }
+
     private fun getIsotopeHistory(deviceId: String?): IsotopePredictionHistory {
         val key = deviceId ?: "global"
         return isotopePredictionHistories.getOrPut(key) { IsotopePredictionHistory(300) }
     }
-    
-    /**
-     * Get the current selected device's isotope history.
-     */
-    private fun getCurrentIsotopeHistory(): IsotopePredictionHistory {
-        val selectedId = Prefs.getSelectedDeviceId(this)
-        return getIsotopeHistory(selectedId)
-    }
-    
-    /**
-     * Called when new DIFFERENTIAL spectrum data is received (real-time mode).
-     * This will be called frequently when real-time mode is active.
-     * Since differential spectrum has few counts per read, we accumulate
-     * over a time window to get meaningful data for isotope identification.
-     * 
-     * Accumulation modes:
-     * - FULL_DURATION: Never reset, accumulate ALL counts since streaming started
-     * - INTERVAL: Use the chart time window setting for accumulation window
-     */
+
     private fun onRealtimeSpectrumReceived(spectrum: SpectrumData, deviceId: String? = null) {
         if (!isIsotopeRealtimeActive) return
         
@@ -1653,189 +636,20 @@ class MainActivity : AppCompatActivity() {
         // Only refresh charts if this is the currently selected device
         val selectedId = Prefs.getSelectedDeviceId(this)
         if (deviceId == selectedId || (selectedId == null && deviceId != null)) {
-            refreshIsotopeCharts()
+            getIsotopeFragment()?.refreshCharts()
         }
     }
 
     /**
      * Show the chart settings dialog (time window + units).
      */
-    private fun showChartSettingsDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_chart_settings, null)
-        
-        // Time Window chips
-        val timeWindowChips = dialogView.findViewById<ChipGroup>(R.id.dialogTimeWindowChips)
-        val currentWindow = Prefs.getWindowSeconds(this, 60)
-        when (currentWindow) {
-            30 -> dialogView.findViewById<Chip>(R.id.dialogChip30s).isChecked = true
-            60 -> dialogView.findViewById<Chip>(R.id.dialogChip1m).isChecked = true
-            300 -> dialogView.findViewById<Chip>(R.id.dialogChip5m).isChecked = true
-            900 -> dialogView.findViewById<Chip>(R.id.dialogChip15m).isChecked = true
-            3600 -> dialogView.findViewById<Chip>(R.id.dialogChip1h).isChecked = true
-            else -> dialogView.findViewById<Chip>(R.id.dialogChip1m).isChecked = true
-        }
-        
-        // Dose Unit chips
-        val doseUnitChips = dialogView.findViewById<ChipGroup>(R.id.dialogDoseUnitChips)
-        val currentDoseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        when (currentDoseUnit) {
-            Prefs.DoseUnit.USV_H -> dialogView.findViewById<Chip>(R.id.dialogChipUsvH).isChecked = true
-            Prefs.DoseUnit.NSV_H -> dialogView.findViewById<Chip>(R.id.dialogChipNsvH).isChecked = true
-        }
-        
-        // Count Unit chips
-        val countUnitChips = dialogView.findViewById<ChipGroup>(R.id.dialogCountUnitChips)
-        val currentCountUnit = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-        when (currentCountUnit) {
-            Prefs.CountUnit.CPS -> dialogView.findViewById<Chip>(R.id.dialogChipCps).isChecked = true
-            Prefs.CountUnit.CPM -> dialogView.findViewById<Chip>(R.id.dialogChipCpm).isChecked = true
-        }
-        
-        // Build and show dialog
-        val dialog = androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setTitle("Chart Settings")
-            .setView(dialogView)
-            .setPositiveButton("Done", null)
-            .create()
-        
-        // Set up listeners
-        val chipToSeconds = mapOf(
-            R.id.dialogChip30s to 30,
-            R.id.dialogChip1m to 60,
-            R.id.dialogChip5m to 300,
-            R.id.dialogChip15m to 900,
-            R.id.dialogChip1h to 3600
-        )
-        
-        timeWindowChips.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
-            val chipId = checkedIds.first()
-            val seconds = chipToSeconds[chipId] ?: 60
-            Prefs.setWindowSeconds(this, seconds)
-            refreshSettingsRows()
-            updateChartTitles()
-            lastReadingTimestampMs = 0L
-            doseChart.resetZoom()
-            cpsChart.resetZoom()
-        }
-        
-        doseUnitChips.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
-            val chipId = checkedIds.first()
-            val unit = when (chipId) {
-                R.id.dialogChipNsvH -> Prefs.DoseUnit.NSV_H
-                else -> Prefs.DoseUnit.USV_H
-            }
-            Prefs.setDoseUnit(this, unit)
-            refreshSettingsRows()
-            updateChartTitles()
-            lastReadingTimestampMs = 0L
-        }
-        
-        countUnitChips.setOnCheckedStateChangeListener { _, checkedIds ->
-            if (checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
-            val chipId = checkedIds.first()
-            val unit = when (chipId) {
-                R.id.dialogChipCpm -> Prefs.CountUnit.CPM
-                else -> Prefs.CountUnit.CPS
-            }
-            Prefs.setCountUnit(this, unit)
-            refreshSettingsRows()
-            updateChartTitles()
-            lastReadingTimestampMs = 0L
-        }
-        
-        dialog.show()
-    }
-
-    /**
-     * Setup the toolbar status indicator to show device selector popup when clicked.
-     */
-    private fun setupToolbarDeviceSelector() {
-        statusContainer.setOnClickListener {
-            val devices = Prefs.getDevices(this)
-            if (devices.size <= 1) return@setOnClickListener
-            
-            showDeviceSelectorDialog(devices)
-        }
-    }
-    
-    private fun showDeviceSelectorDialog(devices: List<DeviceConfig>) {
-        val selectedId = Prefs.getSelectedDeviceId(this)
-        val items = mutableListOf("All Devices")
-        items.addAll(devices.map { it.displayName })
-        
-        val currentSelection = if (selectedId == null) 0 else {
-            val idx = devices.indexOfFirst { it.id == selectedId }
-            if (idx >= 0) idx + 1 else 0
-        }
-        
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setTitle("Select Device")
-            .setSingleChoiceItems(items.toTypedArray(), currentSelection) { dialog, which ->
-                val newSelectedId = if (which == 0) null else devices.getOrNull(which - 1)?.id
-                Prefs.setSelectedDeviceId(this, newSelectedId)
-                
-                // Clear and reload data for selected device
-                doseHistory.clear()
-                cpsHistory.clear()
-                sampleCount = 0
-                lastReadingTimestampMs = 0L
-                sessionStartMs = System.currentTimeMillis()
-                
-                if (newSelectedId != null) {
-                    val history = Prefs.getDeviceChartHistory(this, newSelectedId)
-                    for (reading in history) {
-                        doseHistory.add(reading.timestampMs, reading.uSvPerHour)
-                        cpsHistory.add(reading.timestampMs, reading.cps)
-                        sampleCount++
-                    }
-                }
-                
-                // Refresh isotope charts for the new device
-                refreshIsotopeCharts()
-                updateIsotopePanelState()
-                
-                dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    // Device list manager for Device panel
-    private var deviceListManager: DeviceListManager? = null
-    
-    private fun setupDeviceListManager() {
-        if (deviceListManager != null) return
-        
-        deviceListManager = DeviceListManager(
-            context = this,
-            container = deviceListContainer,
-            noDevicesView = noDevicesText,
-            onDevicesChanged = {
-                // Refresh UI when devices are changed
-                refreshDeviceList()
-            }
-        )
-    }
-    
-    private fun refreshDeviceList() {
-        val devices = Prefs.getDevices(this)
-        android.util.Log.d("RadiaCode", "refreshDeviceList: ${devices.size} devices")
-        deviceListManager?.refresh()
-    }
 
     override fun onResume() {
         super.onResume()
         Prefs.setAppInForeground(this, true)
         registerReadingReceiver()
         reloadChartHistoryForSelectedDeviceAsync()
-        // Reload map data to pick up points collected in background (off main thread)
-        reloadMapPointsAsync()
-        // Only keep high-accuracy location while UI is visible.
-        mapCard.startLocationTracking()
         startUiLoop()
-        refreshSettingsRows()
         
         // Geiger tick engine: start if enabled
         if (Prefs.isGeigerTickEnabled(this)) {
@@ -1977,7 +791,7 @@ class MainActivity : AppCompatActivity() {
             }
             .start()
     }
-    
+
     private fun reloadChartHistoryForSelectedDeviceAsync() {
         val token = ++chartLoadToken
         chartLoadFuture?.cancel(true)
@@ -2011,10 +825,6 @@ class MainActivity : AppCompatActivity() {
                 selectedDeviceIdCache = selectedDeviceId
                 isAllDevicesModeCache = isAllDevicesMode
 
-                if (currentPanel == Panel.Dashboard) {
-                    allDevicesOverlay.visibility = if (isAllDevicesMode) View.VISIBLE else View.GONE
-                }
-
                 doseHistory.clear()
                 cpsHistory.clear()
                 sampleCount = 0
@@ -2035,33 +845,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun reloadMapPointsAsync() {
-        mapLoadFuture?.cancel(true)
-        mapLoadFuture = ioExecutor.submit {
-            val points = Prefs.getMapDataPoints(this)
-            mainHandler.post {
-                mapCard.setDataPoints(points)
-            }
-        }
-    }
 
     override fun onPause() {
         super.onPause()
         unregisterReadingReceiver()
-        // Release interactive location when app is backgrounded.
-        mapCard.stopLocationTracking()
         stopUiLoop()
         Prefs.setAppInForeground(this, false)
-        // Geiger ticks continue in background via RadiaCodeForegroundService
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopUiLoop()
         chartLoadFuture?.cancel(true)
-        mapLoadFuture?.cancel(true)
         ioExecutor.shutdownNow()
-        // GeigerTickEngine lifecycle managed by RadiaCodeForegroundService
         geigerTickEngine = null
     }
 
@@ -2081,8 +877,6 @@ class MainActivity : AppCompatActivity() {
             PERMISSION_REQUEST_CODE -> {
                 if (hasAllPermissions()) {
                     startServiceIfConfigured()
-                    // Start location tracking for map
-                    mapCard.startLocationTracking()
                 } else {
                     updateStatus(false, "Permissions")
                 }
@@ -2097,11 +891,7 @@ class MainActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START)
-        } else {
-            super.onBackPressed()
-        }
+        super.onBackPressed()
     }
 
     private fun shareCsv() {
@@ -2122,16 +912,14 @@ class MainActivity : AppCompatActivity() {
     
     private var pendingCalibrationReceiver: BroadcastReceiver? = null
     private var isCalibrationDownloadInProgress: Boolean = false
-    
+
     private fun downloadKevCalibration() {
         if (isCalibrationDownloadInProgress) {
-            android.widget.Toast.makeText(this, "Calibration download already in progress…", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, "Calibration download already in progressâ€¦", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
 
         isCalibrationDownloadInProgress = true
-        rowDownloadCalibration.isEnabled = false
-        rowDownloadCalibration.alpha = 0.5f
 
         val selectedDeviceId = selectedDeviceIdCache
         
@@ -2151,8 +939,6 @@ class MainActivity : AppCompatActivity() {
                     pendingCalibrationReceiver = null
 
                     isCalibrationDownloadInProgress = false
-                    rowDownloadCalibration.isEnabled = true
-                    rowDownloadCalibration.alpha = 1.0f
                     
                     // Check for error
                     val success = intent.getBooleanExtra("success", true)
@@ -2189,8 +975,6 @@ class MainActivity : AppCompatActivity() {
                 try { unregisterReceiver(it) } catch (_: Exception) {}
                 pendingCalibrationReceiver = null
                 isCalibrationDownloadInProgress = false
-                rowDownloadCalibration.isEnabled = true
-                rowDownloadCalibration.alpha = 1.0f
                 android.widget.Toast.makeText(this, "Calibration request timed out. Is device connected?", android.widget.Toast.LENGTH_LONG).show()
             }
         }, 10_000)
@@ -2255,8 +1039,6 @@ class MainActivity : AppCompatActivity() {
         if (Prefs.isAutoConnectEnabled(this) && (hasEnabledDevices || !preferred.isNullOrBlank())) {
             RadiaCodeForegroundService.start(this)
         }
-        refreshSettingsRows()
-        updateChartTitles()
 
         ensureHistoryCapacity()
         
@@ -2277,62 +1059,12 @@ class MainActivity : AppCompatActivity() {
         startUiLoop()
     }
 
+
     private fun startUiLoop() {
         if (uiRunnable != null) return
 
-        // Initialize caches and populate device selector once.
+        // Initialize caches
         refreshDevicesAndSelection(force = true)
-        refreshDeviceMetadataIfNeeded(force = true)
-        
-        // Setup device selector callback
-        deviceSelector.setOnDeviceSelectedListener(object : com.radiacode.ble.ui.DeviceSelectorView.OnDeviceSelectedListener {
-            override fun onDeviceSelected(deviceId: String?) {
-                android.util.Log.d("RadiaCode", "Device selected: $deviceId")
-
-                selectedDeviceIdCache = deviceId
-                
-                // Clear history and reload for selected device
-                doseHistory.clear()
-                cpsHistory.clear()
-                sampleCount = 0
-                lastReadingTimestampMs = 0L
-                sessionStartMs = System.currentTimeMillis()
-                
-                // Update overlay visibility (only when on Dashboard panel)
-                if (currentPanel == Panel.Dashboard) {
-                    if (deviceId == null) {
-                        // All devices mode - show overlay
-                        allDevicesOverlay.visibility = View.VISIBLE
-                    } else {
-                        // Single device mode - hide overlay and load data
-                        allDevicesOverlay.visibility = View.GONE
-                    }
-                }
-
-                val devices = Prefs.getDevices(this@MainActivity)
-                isAllDevicesModeCache = (deviceId == null && devices.size > 1)
-
-                if (deviceId != null) {
-                    
-                    val history = Prefs.getDeviceChartHistory(this@MainActivity, deviceId)
-                    android.util.Log.d("RadiaCode", "Loaded ${history.size} readings for device $deviceId")
-                    for (reading in history) {
-                        doseHistory.add(reading.timestampMs, reading.uSvPerHour)
-                        cpsHistory.add(reading.timestampMs, reading.cps)
-                        sampleCount++
-                    }
-                }
-
-                uiDirty = true
-            }
-        })
-        
-        // Setup settings button callback
-        deviceSelector.setOnSettingsClickListener(object : com.radiacode.ble.ui.DeviceSelectorView.OnSettingsClickListener {
-            override fun onSettingsClick() {
-                showChartSettingsDialog()
-            }
-        })
         
         val r = object : Runnable {
             override fun run() {
@@ -2341,22 +1073,12 @@ class MainActivity : AppCompatActivity() {
                 val paused = Prefs.isPauseLiveEnabled(this@MainActivity)
                 val svc = Prefs.getServiceStatus(this@MainActivity)
 
-                // Low-frequency device refresh to keep selector/device panel accurate.
+                // Low-frequency device refresh
                 if (now - lastDeviceRefreshMs >= 10_000L) {
                     refreshDevicesAndSelection(force = false)
                 }
 
-                // Refresh metadata occasionally (RSSI/temp/battery) without polling everything.
-                if (now - lastMetadataRefreshMs >= 2_000L) {
-                    refreshDeviceMetadataIfNeeded(force = false)
-                }
-
-                // Keep overlay visibility correct (only when on Dashboard panel)
-                if (currentPanel == Panel.Dashboard) {
-                    allDevicesOverlay.visibility = if (isAllDevicesModeCache) View.VISIBLE else View.GONE
-                }
-
-                // Status text: lightweight and stable.
+                // Status text
                 val statusIndicatesConnected = svc?.message?.contains("connected", ignoreCase = true) == true
                 val hasRecent = lastShownReading != null && (now - (lastShownReading?.timestampMs ?: 0L)) < 10_000
                 val isConnected = hasRecent || statusIndicatesConnected
@@ -2369,19 +1091,13 @@ class MainActivity : AppCompatActivity() {
                     else -> "CONNECTING"
                 }
                 updateStatus(isConnected && !paused, statusText)
-                updateConnectionStatus(isConnected, svc?.message?.takeIf { it.isNotBlank() } ?: statusText)
+                getDeviceFragment()?.updateConnectionStatus()
 
                 // Only redraw expensive parts when new data arrived.
                 if (uiDirty) {
-                    if (paused && (pausedSnapshotDose == null || pausedSnapshotCps == null)) {
-                        pausedSnapshotDose = currentWindowSeriesDose()
-                        pausedSnapshotCps = currentWindowSeriesCps()
-                    }
-                    val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
-                    val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
-                    updateCharts(doseSeries, cpsSeries)
-                    updateSessionInfo()
-                    updateIntelligenceCard()
+                    getDashboardFragment()?.refreshCharts()
+                    getDashboardFragment()?.updateSessionInfo()
+                    getIsotopeFragment()?.updateIntelligenceCard()
                     uiDirty = false
                 }
 
@@ -2397,55 +1113,10 @@ class MainActivity : AppCompatActivity() {
         val selectedId = Prefs.getSelectedDeviceId(this)
         selectedDeviceIdCache = selectedId
         isAllDevicesModeCache = (selectedId == null && devices.size > 1)
-
-        val signature = devices.joinToString("|") { "${it.id}:${it.enabled}:${it.displayName}" }
-        if (force || signature != lastDeviceListSignature) {
-            val statesMap = buildDeviceStatesMap(devices)
-            deviceSelector.setDevices(devices, statesMap)
-            lastDeviceListSignature = signature
-        } else {
-            // Still update state dots from tracked connection states.
-            updateDeviceSelectorStates()
-        }
-
-        // Device panel name: keep this cheap and stable.
-        val enabledCount = devices.count { it.enabled }
-        val preferred = Prefs.getPreferredAddress(this)
-        preferredDeviceText.text = when {
-            enabledCount > 1 -> "$enabledCount devices"
-            enabledCount == 1 -> devices.first { it.enabled }.displayName
-            !preferred.isNullOrBlank() -> preferred
-            else -> "Not set"
-        }
-
         lastDeviceRefreshMs = System.currentTimeMillis()
     }
 
-    private fun refreshDeviceMetadataIfNeeded(force: Boolean) {
-        val devices = Prefs.getDevices(this)
-        val selectedId = selectedDeviceIdCache
-        val effectiveDeviceId = when {
-            selectedId != null -> selectedId
-            devices.size == 1 -> devices.first().id
-            else -> null
-        }
-
-        val meta = if (effectiveDeviceId != null) {
-            Prefs.getDeviceMetadata(this, effectiveDeviceId)
-        } else {
-            null
-        }
-
-        if (force || meta != null) {
-            deviceSelector.updateDeviceMetadata(
-                signalStrength = meta?.signalStrength,
-                temperature = meta?.temperature,
-                batteryLevel = meta?.batteryLevel
-            )
-        }
-
-        lastMetadataRefreshMs = System.currentTimeMillis()
-    }
+    // refreshDeviceMetadataIfNeeded removed - metadata handled in DeviceFragment
 
     private fun stopUiLoop() {
         uiRunnable?.let { mainHandler.removeCallbacks(it) }
@@ -2465,641 +1136,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateConnectionStatus(connected: Boolean, message: String) {
-        mainHandler.post {
-            connectionStatus.text = message
-            val color = if (connected) {
-                ContextCompat.getColor(this, R.color.pro_status_live)
-            } else {
-                ContextCompat.getColor(this, R.color.pro_text_muted)
-            }
-            (connectionDot.background as? GradientDrawable)?.setColor(color)
-        }
-    }
-
-    private fun showEmptyMetrics() {
-        mainHandler.post {
-            doseCard.setValueText("—")
-            doseCard.setTrend(0f)
-            doseCard.setSparkline(emptyList())
-
-            cpsCard.setValueText("—")
-            cpsCard.setTrend(0f)
-            cpsCard.setSparkline(emptyList())
-
-            doseStats.setStats(StatRowView.Stats(0f, 0f, 0f, 0f, "—"))
-            cpsStats.setStats(StatRowView.Stats(0f, 0f, 0f, 0f, "—"))
-        }
-    }
-
-    private fun updateMetricCards(last: Prefs.LastReading) {
-        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-
-        val dose = when (du) {
-            Prefs.DoseUnit.USV_H -> last.uSvPerHour
-            Prefs.DoseUnit.NSV_H -> last.uSvPerHour * 1000.0f
-        }
-        val cpsOrCpm = when (cu) {
-            Prefs.CountUnit.CPS -> last.cps
-            Prefs.CountUnit.CPM -> last.cps * 60.0f
-        }
-
-        val doseUnit = when (du) {
-            Prefs.DoseUnit.USV_H -> "μSv/h"
-            Prefs.DoseUnit.NSV_H -> "nSv/h"
-        }
-        val cpsUnit = when (cu) {
-            Prefs.CountUnit.CPS -> "cps"
-            Prefs.CountUnit.CPM -> "cpm"
-        }
-
-        val doseTrend = if (previousDose > 0f) ((dose - previousDose) / previousDose) * 100f else 0f
-        val cpsTrend = if (previousCps > 0f) ((cpsOrCpm - previousCps) / previousCps) * 100f else 0f
-        previousDose = dose
-        previousCps = cpsOrCpm
-
-        mainHandler.post {
-            doseCard.setLabel("DELTA DOSE RATE · $doseUnit")
-            doseCard.setValue(dose, doseUnit)
-            doseCard.setTrend(doseTrend)
-
-            cpsCard.setLabel("DELTA COUNT RATE · $cpsUnit")
-            cpsCard.setValue(cpsOrCpm, cpsUnit)
-            cpsCard.setTrend(cpsTrend)
-        }
-    }
-
-    private fun updateCharts(dose: SampleHistory.Series?, cps: SampleHistory.Series?) {
-        val smoothSeconds = Prefs.getSmoothSeconds(this, 0)
-        val poll = Prefs.getPollIntervalMs(this, 1000L)
-        val smoothSamples = if (smoothSeconds <= 0) 0 else max(1, ((smoothSeconds * 1000L) / max(1L, poll)).toInt())
-
-        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-
-        val doseV = dose?.values.orEmpty().let { applySmoothing(it, smoothSamples) }.let { convertDose(it, du) }
-        val cpsV = cps?.values.orEmpty().let { applySmoothing(it, smoothSamples) }.let { convertCount(it, cu) }
-
-        val doseT = dose?.timestampsMs.orEmpty()
-        val cpsT = cps?.timestampsMs.orEmpty()
-
-        val doseDec = decimate(doseT, doseV)
-        val cpsDec = decimate(cpsT, cpsV)
-
-        // Build chart markers directly from current series + configured alerts.
-        // This makes the visualization reliable even if notifications are blocked or events weren't persisted.
-        fun buildMarkersForMetric(
-            metric: String,
-            timestamps: List<Long>,
-            values: List<Float>,
-            displayDoseUnit: Prefs.DoseUnit,
-            displayCountUnit: Prefs.CountUnit,
-        ): List<ProChartView.AlertMarker> {
-            if (timestamps.size < 2 || timestamps.size != values.size) return emptyList()
-
-            val enabledAlerts = Prefs.getSmartAlerts(this)
-                .filter { it.enabled }
-                .filter { it.metric == metric }
-                .filter { it.condition == "above" || it.condition == "below" }
-
-            if (enabledAlerts.isEmpty()) return emptyList()
-
-            val out = ArrayList<ProChartView.AlertMarker>()
-
-            for (alert in enabledAlerts) {
-                val colorHex = "#${alert.getColorEnum().hexColor}"
-                val icon = alert.getSeverityEnum().icon
-
-                val thresholdDisplayed = when (metric) {
-                    "dose" -> {
-                        // Alerts store dose thresholds as usv_h; convert to chart display units.
-                        val base = alert.threshold
-                        if (displayDoseUnit == Prefs.DoseUnit.NSV_H) (base * 1000.0) else base
-                    }
-                    "count" -> {
-                        // Alerts store count thresholds as cps; convert to chart display units.
-                        val base = alert.threshold
-                        if (displayCountUnit == Prefs.CountUnit.CPM) (base * 60.0) else base
-                    }
-                    else -> alert.threshold
-                }
-
-                val requiredDurationMs = (alert.durationSeconds.coerceAtLeast(0) * 1000L)
-
-                var inSegment = false
-                var segStartIdx = 0
-
-                fun conditionTrue(v: Float): Boolean {
-                    return if (alert.condition == "above") v.toDouble() >= thresholdDisplayed else v.toDouble() <= thresholdDisplayed
-                }
-
-                for (i in values.indices) {
-                    val ok = conditionTrue(values[i])
-                    if (ok && !inSegment) {
-                        inSegment = true
-                        segStartIdx = i
-                    } else if (!ok && inSegment) {
-                        val segEndIdx = (i - 1).coerceAtLeast(segStartIdx)
-                        val startTs = timestamps[segStartIdx]
-                        val endTs = timestamps[segEndIdx]
-                        // Active region (thick translucent bar): start -> end
-                        out.add(
-                            ProChartView.AlertMarker(
-                                triggerTimestampMs = endTs,
-                                durationWindowStartMs = startTs,
-                                cooldownEndMs = endTs,
-                                color = colorHex,
-                                icon = icon,
-                                name = alert.name
-                            )
-                        )
-
-                        // Fired marker (dashed line + icon) once duration satisfied.
-                        if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
-                            val fireTs = startTs + requiredDurationMs
-                            out.add(
-                                ProChartView.AlertMarker(
-                                    triggerTimestampMs = fireTs,
-                                    durationWindowStartMs = startTs,
-                                    // Use segment end as a fade window to visually separate "trigger" moment.
-                                    cooldownEndMs = endTs,
-                                    color = colorHex,
-                                    icon = icon,
-                                    name = alert.name
-                                )
-                            )
-                        } else if (requiredDurationMs == 0L) {
-                            // Instant trigger: show dashed marker at the segment start.
-                            out.add(
-                                ProChartView.AlertMarker(
-                                    triggerTimestampMs = startTs,
-                                    durationWindowStartMs = startTs,
-                                    cooldownEndMs = endTs,
-                                    color = colorHex,
-                                    icon = icon,
-                                    name = alert.name
-                                )
-                            )
-                        }
-
-                        inSegment = false
-                    }
-                }
-
-                if (inSegment) {
-                    val startTs = timestamps[segStartIdx]
-                    val endTs = timestamps.last()
-                    out.add(
-                        ProChartView.AlertMarker(
-                            triggerTimestampMs = endTs,
-                            durationWindowStartMs = startTs,
-                            cooldownEndMs = endTs,
-                            color = colorHex,
-                            icon = icon,
-                            name = alert.name
-                        )
-                    )
-                    if (requiredDurationMs > 0 && (endTs - startTs) >= requiredDurationMs) {
-                        val fireTs = startTs + requiredDurationMs
-                        out.add(
-                            ProChartView.AlertMarker(
-                                triggerTimestampMs = fireTs,
-                                durationWindowStartMs = startTs,
-                                cooldownEndMs = endTs,
-                                color = colorHex,
-                                icon = icon,
-                                name = alert.name
-                            )
-                        )
-                    } else if (requiredDurationMs == 0L) {
-                        out.add(
-                            ProChartView.AlertMarker(
-                                triggerTimestampMs = startTs,
-                                durationWindowStartMs = startTs,
-                                cooldownEndMs = endTs,
-                                color = colorHex,
-                                icon = icon,
-                                name = alert.name
-                            )
-                        )
-                    }
-                }
-            }
-
-            return out
-        }
-
-        mainHandler.post {
-            doseChart.setSeries(doseDec.first, doseDec.second)
-            cpsChart.setSeries(cpsDec.first, cpsDec.second)
-
-            val doseMarkers = buildMarkersForMetric(
-                metric = "dose",
-                timestamps = doseT,
-                values = doseV,
-                displayDoseUnit = du,
-                displayCountUnit = cu,
-            )
-            val countMarkers = buildMarkersForMetric(
-                metric = "count",
-                timestamps = cpsT,
-                values = cpsV,
-                displayDoseUnit = du,
-                displayCountUnit = cu,
-            )
-            doseChart.setAlertMarkers(doseMarkers)
-            cpsChart.setAlertMarkers(countMarkers)
-
-            val sparkDose = doseDec.second.takeLast(20)
-            val sparkCps = cpsDec.second.takeLast(20)
-            doseCard.setSparkline(sparkDose)
-            cpsCard.setSparkline(sparkCps)
-        }
-
-        updateStats(doseDec.second, cpsDec.second, du, cu)
-    }
-
-    private fun updateStats(doseValues: List<Float>, cpsValues: List<Float>, du: Prefs.DoseUnit, cu: Prefs.CountUnit) {
-        mainHandler.post {
-            val doseUnit = when (du) {
-                Prefs.DoseUnit.USV_H -> "μSv/h"
-                Prefs.DoseUnit.NSV_H -> "nSv/h"
-            }
-            val cpsUnit = when (cu) {
-                Prefs.CountUnit.CPS -> "cps"
-                Prefs.CountUnit.CPM -> "cpm"
-            }
-
-            if (doseValues.isEmpty()) {
-                doseStats.setStats(StatRowView.Stats(0f, 0f, 0f, 0f, doseUnit))
-            } else {
-                var minV = Float.POSITIVE_INFINITY
-                var maxV = Float.NEGATIVE_INFINITY
-                var sum = 0.0f
-                for (v in doseValues) {
-                    minV = min(minV, v)
-                    maxV = max(maxV, v)
-                    sum += v
-                }
-                val avg = sum / max(1, doseValues.size)
-                val delta = maxV - minV
-                doseStats.setStats(StatRowView.Stats(minV, avg, maxV, delta, doseUnit))
-            }
-
-            if (cpsValues.isEmpty()) {
-                cpsStats.setStats(StatRowView.Stats(0f, 0f, 0f, 0f, cpsUnit))
-            } else {
-                var minV = Float.POSITIVE_INFINITY
-                var maxV = Float.NEGATIVE_INFINITY
-                var sum = 0.0f
-                for (v in cpsValues) {
-                    minV = min(minV, v)
-                    maxV = max(maxV, v)
-                    sum += v
-                }
-                val avg = sum / max(1, cpsValues.size)
-                val delta = maxV - minV
-                cpsStats.setStats(StatRowView.Stats(minV, avg, maxV, delta, cpsUnit))
-            }
-        }
-    }
-
-    private fun updateSessionInfo() {
-        val elapsed = (System.currentTimeMillis() - sessionStartMs) / 1000L
-        val timeStr = when {
-            elapsed < 60 -> "${elapsed}s"
-            elapsed < 3600 -> "${elapsed / 60}m ${elapsed % 60}s"
-            else -> "${elapsed / 3600}h ${(elapsed % 3600) / 60}m"
-        }
-        mainHandler.post {
-            sessionInfo.text = "SESSION: $timeStr • $sampleCount samples"
-        }
-    }
-    
-    private fun updateIntelligenceCard() {
-        if (sampleCount < 10) {
-            // Not enough data yet
-            mainHandler.post {
-                intelligenceCard.visibility = View.GONE
-            }
-            return
-        }
-        
-        // Get intelligence report (use selected device if applicable)
-        val currentDeviceId = Prefs.getSelectedDeviceId(this)
-        val report = IntelligenceEngine.analyzeReadings(this, currentDeviceId)
-        
-        mainHandler.post {
-            if (!report.hasEnoughData) {
-                intelligenceCard.visibility = View.GONE
-                return@post
-            }
-            
-            intelligenceCard.visibility = View.VISIBLE
-            intelligenceSummary.text = report.summary
-            
-            // Update stability indicator
-            val (stabilityText, stabilityColor) = when (report.stability) {
-                StabilityLevel.STABLE -> "● STABLE" to getColor(R.color.pro_green)
-                StabilityLevel.VARIABLE -> "◐ VARIABLE" to getColor(R.color.pro_amber)
-                StabilityLevel.ERRATIC -> "○ ERRATIC" to getColor(R.color.pro_red)
-            }
-            stabilityIndicator.text = stabilityText
-            stabilityIndicator.setTextColor(stabilityColor)
-            
-            // Update data quality label
-            val qualityText = when (report.dataQuality) {
-                DataQuality.EXCELLENT -> "Excellent (${report.sampleCount})"
-                DataQuality.GOOD -> "Good (${report.sampleCount})"
-                DataQuality.FAIR -> "Fair (${report.sampleCount})"
-                DataQuality.LIMITED -> "Limited (${report.sampleCount})"
-                DataQuality.INSUFFICIENT -> "Collecting..."
-            }
-            dataQualityLabel.text = qualityText
-            
-            // Update alert badge
-            val alertCount = report.alerts.size
-            if (alertCount > 0) {
-                intelligenceAlertBadge.visibility = View.VISIBLE
-                intelligenceAlertBadge.text = alertCount.toString()
-                // Color by severity
-                val hasHighAlert = report.alerts.any { it.severity == AlertSeverity.HIGH }
-                val badgeColor = if (hasHighAlert) getColor(R.color.pro_red) else getColor(R.color.pro_amber)
-                intelligenceAlertBadge.background.setTint(badgeColor)
-            } else {
-                intelligenceAlertBadge.visibility = View.GONE
-            }
-            
-            // Update trend label using trend description
-            val trendDesc = report.doseTrendDescription
-            if (trendDesc != null) {
-                val trendDirection = when (trendDesc.direction) {
-                    TrendDirection.INCREASING -> "↑ Rising"
-                    TrendDirection.DECREASING -> "↓ Falling"
-                    TrendDirection.STABLE -> "→ Stable"
-                }
-                val trendColor = when (trendDesc.direction) {
-                    TrendDirection.INCREASING -> getColor(R.color.pro_amber)
-                    TrendDirection.DECREASING -> getColor(R.color.pro_cyan)
-                    TrendDirection.STABLE -> getColor(R.color.pro_green)
-                }
-                doseTrendLabel.text = trendDirection
-                doseTrendLabel.setTextColor(trendColor)
-            }
-            
-            // Update prediction with confidence
-            val dosePrediction = report.predictions.firstOrNull { it.type == PredictionType.NEXT_DOSE }
-            if (dosePrediction != null) {
-                val doseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-                val predictedStr = when (doseUnit) {
-                    Prefs.DoseUnit.USV_H -> String.format("%.3f μSv/h", dosePrediction.predictedValue)
-                    Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", dosePrediction.predictedValue * 1000)
-                }
-                predictedDoseLabel.text = predictedStr
-                
-                // Confidence indicator
-                val confText = String.format("%.0f%% conf", dosePrediction.confidence)
-                val confColor = when (dosePrediction.confidenceLevel) {
-                    ConfidenceLevel.HIGH -> getColor(R.color.pro_green)
-                    ConfidenceLevel.MEDIUM -> getColor(R.color.pro_amber)
-                    ConfidenceLevel.LOW -> getColor(R.color.pro_text_muted)
-                }
-                predictionConfidenceLabel.text = confText
-                predictionConfidenceLabel.setTextColor(confColor)
-            }
-            
-            // Update anomaly count with active/recent distinction
-            val activeCount = report.activeAnomalyCount
-            val recentCount = report.recentAnomalyCount
-            
-            if (activeCount > 0) {
-                anomalyCountLabel.text = activeCount.toString()
-                anomalyCountLabel.setTextColor(getColor(R.color.pro_red))
-                anomalyDetailLabel.text = "$activeCount active"
-                anomalyDetailLabel.setTextColor(getColor(R.color.pro_red))
-            } else if (recentCount > 0) {
-                anomalyCountLabel.text = recentCount.toString()
-                anomalyCountLabel.setTextColor(getColor(R.color.pro_amber))
-                anomalyDetailLabel.text = "$recentCount recent"
-                anomalyDetailLabel.setTextColor(getColor(R.color.pro_text_muted))
-            } else {
-                anomalyCountLabel.text = "0"
-                anomalyCountLabel.setTextColor(getColor(R.color.pro_green))
-                anomalyDetailLabel.text = "none"
-                anomalyDetailLabel.setTextColor(getColor(R.color.pro_text_muted))
-            }
-            
-            // Update expanded stats section (if expanded)
-            if (intelligenceExpanded) {
-                updateIntelligenceExpandedStats(report)
-            }
-        }
-    }
-    
-    private fun updateIntelligenceExpandedStats(report: IntelligenceReport) {
-        val doseStats = report.doseStatistics ?: return
-        val doseUnit = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        
-        // Range (min - max)
-        val rangeStr = when (doseUnit) {
-            Prefs.DoseUnit.USV_H -> String.format("%.3f - %.3f", doseStats.min, doseStats.max)
-            Prefs.DoseUnit.NSV_H -> String.format("%.0f - %.0f", doseStats.min * 1000, doseStats.max * 1000)
-        }
-        statsRangeLabel.text = rangeStr
-        
-        // Std Dev
-        val stdDevStr = when (doseUnit) {
-            Prefs.DoseUnit.USV_H -> String.format("±%.4f", doseStats.stdDev)
-            Prefs.DoseUnit.NSV_H -> String.format("±%.1f", doseStats.stdDev * 1000)
-        }
-        statsStdDevLabel.text = stdDevStr
-        
-        // CV%
-        statsCvLabel.text = String.format("%.1f%%", doseStats.coefficientOfVariation)
-        val cvColor = when {
-            doseStats.coefficientOfVariation < 15 -> getColor(R.color.pro_green)
-            doseStats.coefficientOfVariation < 35 -> getColor(R.color.pro_amber)
-            else -> getColor(R.color.pro_red)
-        }
-        statsCvLabel.setTextColor(cvColor)
-        
-        // Estimated background
-        val bgStr = when (doseUnit) {
-            Prefs.DoseUnit.USV_H -> String.format("%.3f μSv/h", report.estimatedBackground)
-            Prefs.DoseUnit.NSV_H -> String.format("%.0f nSv/h", report.estimatedBackground * 1000)
-        }
-        statsBackgroundLabel.text = bgStr
-        
-        // Current vs background
-        val vsStr = String.format("%.0f%%", report.currentVsBackground)
-        statsVsBackgroundLabel.text = vsStr
-        val vsColor = when {
-            report.currentVsBackground > 150 -> getColor(R.color.pro_red)
-            report.currentVsBackground > 120 -> getColor(R.color.pro_amber)
-            else -> getColor(R.color.pro_green)
-        }
-        statsVsBackgroundLabel.setTextColor(vsColor)
-        
-        // Current Z-score
-        val zStr = String.format("%.2f σ", report.currentZScore)
-        statsZScoreLabel.text = zStr
-        val zColor = when {
-            kotlin.math.abs(report.currentZScore) > 3 -> getColor(R.color.pro_red)
-            kotlin.math.abs(report.currentZScore) > 2 -> getColor(R.color.pro_amber)
-            else -> getColor(R.color.pro_green)
-        }
-        statsZScoreLabel.setTextColor(zColor)
-    }
-    
-    private fun toggleIntelligenceExpanded() {
-        intelligenceExpanded = !intelligenceExpanded
-        
-        if (intelligenceExpanded) {
-            intelligenceExpandedSection.visibility = View.VISIBLE
-            intelligenceExpandText.text = "Hide Details"
-            intelligenceExpandArrow.rotation = 180f
-            
-            // Update stats now
-            val currentDeviceId = Prefs.getSelectedDeviceId(this)
-            val report = IntelligenceEngine.analyzeReadings(this, currentDeviceId)
-            updateIntelligenceExpandedStats(report)
-        } else {
-            intelligenceExpandedSection.visibility = View.GONE
-            intelligenceExpandText.text = "Show Details"
-            intelligenceExpandArrow.rotation = 0f
-        }
-    }
-    
-    private fun showIntelligenceHelpDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_intelligence_help, null)
-        
-        androidx.appcompat.app.AlertDialog.Builder(this, R.style.DarkDialogTheme)
-            .setView(dialogView)
-            .setPositiveButton("Got it", null)
-            .show()
-    }
-
-    private fun updateChartTitles() {
-        val windowSeconds = Prefs.getWindowSeconds(this, 60)
-        val label = when (windowSeconds) {
-            10 -> "10s"
-            30 -> "30s"
-            60 -> "1m"
-            300 -> "5m"
-            600 -> "10m"
-            900 -> "15m"
-            3600 -> "1h"
-            else -> "${windowSeconds}s"
-        }
-        
-        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-        val doseUnit = doseUnitLabel(du)
-        val countUnit = countUnitLabel(cu)
-        
-        doseChartTitle.text = "REAL TIME DOSE RATE ($doseUnit) — Last $label"
-        cpsChartTitle.text = "REAL TIME COUNT RATE ($countUnit) — Last $label"
-    }
-
-    private fun refreshSettingsRows() {
-        val windowSeconds = Prefs.getWindowSeconds(this, 60)
-        valueWindow.text = when (windowSeconds) {
-            10 -> "10s"
-            60 -> "1m"
-            600 -> "10m"
-            3600 -> "1h"
-            else -> "${windowSeconds}s"
-        }
-
-        val smoothSeconds = Prefs.getSmoothSeconds(this, 0)
-        valueSmoothing.text = when (smoothSeconds) {
-            0 -> "Off"
-            else -> "${smoothSeconds}s"
-        }
-
-        val du = Prefs.getDoseUnit(this, Prefs.DoseUnit.USV_H)
-        val cu = Prefs.getCountUnit(this, Prefs.CountUnit.CPS)
-        valueUnits.text = "${doseUnitLabel(du)} • ${countUnitLabel(cu)}"
-        
-        val showSpikes = Prefs.isShowSpikeMarkersEnabled(this)
-        valueSpikeMarkers.text = if (showSpikes) "On" else "Off"
-        valueSpikeMarkers.setTextColor(ContextCompat.getColor(this, 
-            if (showSpikes) R.color.pro_green else R.color.pro_text_muted))
-
-        val showSpikePercent = Prefs.isShowSpikePercentagesEnabled(this)
-        valueSpikePercentages.text = if (showSpikePercent) "On" else "Off"
-        valueSpikePercentages.setTextColor(ContextCompat.getColor(this, 
-            if (showSpikePercent) R.color.pro_green else R.color.pro_text_muted))
-
-        valuePause.text = if (Prefs.isPauseLiveEnabled(this)) "On" else "Off"
-        
-        val showTrendArrows = Prefs.isShowTrendArrowsEnabled(this)
-        valueTrendArrows.text = if (showTrendArrows) "On" else "Off"
-        valueTrendArrows.setTextColor(ContextCompat.getColor(this, 
-            if (showTrendArrows) R.color.pro_green else R.color.pro_text_muted))
-
-        val alerts = Prefs.getSmartAlerts(this)
-        val enabledCount = alerts.count { it.enabled }
-        valueSmartAlerts.text = if (enabledCount == 0) "None" else "$enabledCount active"
-        valueSmartAlerts.setTextColor(ContextCompat.getColor(this,
-            if (enabledCount > 0) R.color.pro_amber else R.color.pro_text_muted))
-        
-        // VEGA Intelligence
-        val vegaSummary = Prefs.getStatisticalIntelligenceSummary(this)
-        valueVegaIntelligence.text = vegaSummary
-        val vegaEnabled = vegaSummary != "All off"
-        valueVegaIntelligence.setTextColor(ContextCompat.getColor(this,
-            if (vegaEnabled) R.color.pro_cyan else R.color.pro_text_muted))
-        
-        // Notification style
-        val notifStyle = Prefs.getNotificationStyle(this)
-        valueNotificationStyle.text = when (notifStyle) {
-            Prefs.NotificationStyle.NONE -> "None"
-            Prefs.NotificationStyle.OFF -> "Minimal"
-            Prefs.NotificationStyle.STATUS_ONLY -> "Status"
-            Prefs.NotificationStyle.READINGS -> "Readings"
-            Prefs.NotificationStyle.DETAILED -> "Detailed"
-        }
-        
-        // Map theme
-        valueMapTheme.text = Prefs.getMapTheme(this).displayName
-        
-        // Isotope settings
-        val enabledIsotopes = Prefs.getEnabledIsotopes(this)
-        val totalIsotopes = IsotopeLibrary.ALL_ISOTOPES.size
-        valueIsotopeSettings.text = "${enabledIsotopes.size}/$totalIsotopes enabled"
-        
-        // Sound settings
-        valueSoundSettings.text = Prefs.getSoundSettingsSummary(this)
-    }
-
-    private enum class Panel { Dashboard, Device, Settings, Logs }
-
-    private fun setPanel(panel: Panel) {
-        currentPanel = panel
-        panelDashboard.visibility = if (panel == Panel.Dashboard) View.VISIBLE else View.GONE
-        panelDevice.visibility = if (panel == Panel.Device) View.VISIBLE else View.GONE
-        panelSettings.visibility = if (panel == Panel.Settings) View.VISIBLE else View.GONE
-        panelLogs.visibility = if (panel == Panel.Logs) View.VISIBLE else View.GONE
-        
-        // Only show edit dashboard FAB on dashboard panel
-        if (panel == Panel.Dashboard) {
-            if (!isDashboardEditMode) {
-                fabEditDashboard.visibility = View.VISIBLE
-            }
-        } else {
-            fabEditDashboard.visibility = View.GONE
-            editModeToolbar.visibility = View.GONE
-            // Exit edit mode if switching away from dashboard
-            if (isDashboardEditMode) {
-                isDashboardEditMode = false
-            }
-        }
-    }
 
     private fun doseUnitLabel(du: Prefs.DoseUnit): String = when (du) {
-        Prefs.DoseUnit.USV_H -> "μSv/h"
+        Prefs.DoseUnit.USV_H -> "Î¼Sv/h"
         Prefs.DoseUnit.NSV_H -> "nSv/h"
     }
 
@@ -3129,7 +1168,7 @@ class MainActivity : AppCompatActivity() {
         return cpsHistory.lastN(n)
     }
 
-    private fun applySmoothing(values: List<Float>, windowSamples: Int): List<Float> {
+    fun applySmoothing(values: List<Float>, windowSamples: Int): List<Float> {
         if (windowSamples <= 1 || values.size < 3) return values
         val out = ArrayList<Float>(values.size)
         var sum = 0.0f
@@ -3145,17 +1184,17 @@ class MainActivity : AppCompatActivity() {
         return out
     }
 
-    private fun convertDose(values: List<Float>, unit: Prefs.DoseUnit): List<Float> {
+    fun convertDose(values: List<Float>, unit: Prefs.DoseUnit): List<Float> {
         if (unit == Prefs.DoseUnit.USV_H) return values
         return values.map { it * 1000.0f }
     }
 
-    private fun convertCount(values: List<Float>, unit: Prefs.CountUnit): List<Float> {
+    fun convertCount(values: List<Float>, unit: Prefs.CountUnit): List<Float> {
         if (unit == Prefs.CountUnit.CPS) return values
         return values.map { it * 60.0f }
     }
 
-    private fun decimate(timestamps: List<Long>, values: List<Float>): Pair<List<Long>, List<Float>> {
+    fun decimate(timestamps: List<Long>, values: List<Float>): Pair<List<Long>, List<Float>> {
         if (timestamps.isEmpty() || values.isEmpty() || timestamps.size != values.size) return emptyList<Long>() to emptyList()
         if (values.size <= MAX_CHART_POINTS) return timestamps to values
         val step = max(1, values.size / MAX_CHART_POINTS)
@@ -3176,7 +1215,7 @@ class MainActivity : AppCompatActivity() {
         return outT to outV
     }
 
-    private fun openDetailedChart(kind: String) {
+    fun openDetailedChart(kind: String) {
         val paused = Prefs.isPauseLiveEnabled(this)
         val doseSeries = if (paused) pausedSnapshotDose else currentWindowSeriesDose()
         val cpsSeries = if (paused) pausedSnapshotCps else currentWindowSeriesCps()
@@ -3270,108 +1309,6 @@ class MainActivity : AppCompatActivity() {
                 config = device,
                 connectionState = connectionState
             )
-        }
-    }
-    
-    /**
-     * Update the device selector's states without rebuilding the whole list.
-     */
-    private fun updateDeviceSelectorStates() {
-        val devices = Prefs.getDevices(this)
-        val statesMap = buildDeviceStatesMap(devices)
-        deviceSelector.updateStates(statesMap)
-    }
-    
-    // ==================== DASHBOARD EDIT MODE ====================
-    
-    private fun setupDashboardEditMode() {
-        // FAB to enter edit mode
-        fabEditDashboard.setOnClickListener {
-            enterDashboardEditMode()
-        }
-        
-        // Done button exits edit mode
-        btnDoneEditing.setOnClickListener {
-            exitDashboardEditMode()
-        }
-        
-        // Reset button in toolbar
-        btnResetDashboard.setOnClickListener {
-            showResetDashboardConfirmation()
-        }
-        
-        // Setup the reorder helper
-        dashboardReorderHelper = DashboardReorderHelper(dashboardContainer) { newOrder ->
-            Prefs.setDashboardOrder(this, newOrder)
-        }
-        
-        // Register sections for reordering
-        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_METRICS, metricsCardsRow)
-        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_INTELLIGENCE, intelligenceCard)
-        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_DOSE_CHART, doseChartPanel)
-        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_COUNT_CHART, cpsChartPanel)
-        dashboardReorderHelper?.registerSection(DashboardReorderHelper.SECTION_ISOTOPE, isotopePanel)
-        
-        // Apply saved order
-        val savedOrder = Prefs.getDashboardOrder(this)
-        dashboardReorderHelper?.applyOrder(savedOrder)
-    }
-    
-    private fun enterDashboardEditMode() {
-        isDashboardEditMode = true
-        
-        // Hide FAB, show toolbar
-        fabEditDashboard.visibility = View.GONE
-        editModeToolbar.visibility = View.VISIBLE
-        
-        // Enable edit mode on reorder helper
-        dashboardReorderHelper?.isEditMode = true
-        
-        // Show toast with instructions
-        android.widget.Toast.makeText(
-            this, 
-            "Long-press and drag panels to reorder them", 
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-    }
-    
-    private fun exitDashboardEditMode() {
-        isDashboardEditMode = false
-        
-        // Show FAB, hide toolbar
-        fabEditDashboard.visibility = View.VISIBLE
-        editModeToolbar.visibility = View.GONE
-        
-        // Disable edit mode on reorder helper
-        dashboardReorderHelper?.isEditMode = false
-    }
-    
-    private fun showResetDashboardConfirmation() {
-        AlertDialog.Builder(this)
-            .setTitle("Reset Dashboard Layout")
-            .setMessage("This will restore the default panel arrangement. Your data will not be affected.")
-            .setPositiveButton("Reset") { _, _ ->
-                resetDashboardLayout()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-    
-    private fun resetDashboardLayout() {
-        Prefs.resetDashboardLayout(this)
-        
-        // Reset reorder helper to default
-        dashboardReorderHelper?.resetToDefault()
-        
-        android.widget.Toast.makeText(
-            this,
-            "Dashboard layout reset to default",
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
-        
-        // Exit edit mode if active
-        if (isDashboardEditMode) {
-            exitDashboardEditMode()
         }
     }
 }

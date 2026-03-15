@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D0D0F">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="#1A1A1F"
+        app:title="Settings"
+        app:titleTextColor="#E0E0E0"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        app:navigationIconTint="#E0E0E0" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- Display Units -->
+            <LinearLayout
+                android:id="@+id/rowUnits"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Display Units" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Dose rate and count rate units" />
+            </LinearLayout>
+
+            <!-- Smart Alerts -->
+            <LinearLayout
+                android:id="@+id/rowAlerts"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Smart Alerts" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Threshold-based and anomaly alerts" />
+            </LinearLayout>
+
+            <!-- Notifications -->
+            <LinearLayout
+                android:id="@+id/rowNotifications"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Notifications" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Notification style and content" />
+            </LinearLayout>
+
+            <!-- Sound & Geiger -->
+            <LinearLayout
+                android:id="@+id/rowSound"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Sound &amp; Geiger" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Audio tick and alert sounds" />
+            </LinearLayout>
+
+            <!-- Isotope Detection -->
+            <LinearLayout
+                android:id="@+id/rowIsotope"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Isotope Detection" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ML model and scan settings" />
+            </LinearLayout>
+
+            <!-- VEGA Intelligence -->
+            <LinearLayout
+                android:id="@+id/rowIntelligence"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="VEGA Intelligence" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Statistical analysis and forecasting" />
+            </LinearLayout>
+
+            <!-- Spectrogram -->
+            <LinearLayout
+                android:id="@+id/rowSpectrogram"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Spectrogram" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Spectrum waterfall display" />
+            </LinearLayout>
+
+            <!-- Widgets -->
+            <LinearLayout
+                android:id="@+id/rowWidgets"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Widgets" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Home screen widget gallery" />
+            </LinearLayout>
+
+            <!-- Help Center -->
+            <LinearLayout
+                android:id="@+id/rowHelp"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <TextView
+                    style="@style/SettingsRowTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Help Center" />
+
+                <TextView
+                    style="@style/SettingsRowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Guides, FAQ, and support" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

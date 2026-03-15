@@ -59,6 +59,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings" />
+
+        <activity
             android:name=".ChartFocusActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape" />
