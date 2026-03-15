@@ -214,7 +214,6 @@
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="5dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
@@ -242,40 +241,6 @@
                     android:gravity="center"
                     android:text="View history"
                     android:textColor="@color/pro_text_muted"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- Clear: permanently deletes ALL hexagon data from the map -->
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnClearMapData"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="34dp"
-                    android:insetBottom="0dp"
-                    android:insetTop="0dp"
-                    android:minHeight="0dp"
-                    android:text="CLEAR MAP"
-                    android:textColor="@color/pro_red"
-                    android:textSize="10sp"
-                    app:cornerRadius="17dp"
-                    app:icon="@android:drawable/ic_menu_delete"
-                    app:iconSize="13dp"
-                    app:iconTint="@color/pro_red"
-                    app:strokeColor="@color/pro_red" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:gravity="center"
-                    android:text="Permanently wipes all dots"
-                    android:textColor="@color/pro_red"
                     android:textSize="9sp" />
             </LinearLayout>
 

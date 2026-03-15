@@ -74,6 +74,12 @@ class DetailedChartActivity : AppCompatActivity() {
     private lateinit var chipClearSelection: Chip
     private lateinit var chipResetZoom: Chip
     private lateinit var chipGoRealtime: Chip
+
+    // Time window chips
+    private lateinit var chipTime10s: Chip
+    private lateinit var chipTime1m: Chip
+    private lateinit var chipTime10m: Chip
+    private lateinit var chipTime1h: Chip
     
     private var kind: String = "dose"
     private var unit: String = "μSv/h"
@@ -168,6 +174,11 @@ class DetailedChartActivity : AppCompatActivity() {
         chipClearSelection = findViewById(R.id.chipClearSelection)
         chipResetZoom = findViewById(R.id.chipResetZoom)
         chipGoRealtime = findViewById(R.id.chipGoRealtime)
+
+        chipTime10s = findViewById(R.id.chipTime10s)
+        chipTime1m = findViewById(R.id.chipTime1m)
+        chipTime10m = findViewById(R.id.chipTime10m)
+        chipTime1h = findViewById(R.id.chipTime1h)
     }
     
     private fun setupToolbar() {
@@ -284,6 +295,9 @@ class DetailedChartActivity : AppCompatActivity() {
         detailChart.setRollingAverageWindow(10) // Rolling avg on by default
         chipResetZoom.alpha = 0.5f
         chipGoRealtime.alpha = 0.5f
+
+        // Time window chips
+        setupTimeWindowChips()
     }
     
     private fun loadDataFromIntent() {
@@ -299,6 +313,33 @@ class DetailedChartActivity : AppCompatActivity() {
             detailChart.setSeries(timestampsMs, values)
             updateStats(values)
         }
+    }
+
+    private fun setupTimeWindowChips() {
+        val timeChips = listOf(
+            chipTime10s to 10,
+            chipTime1m to 60,
+            chipTime10m to 600,
+            chipTime1h to 3600
+        )
+
+        val currentWindow = Prefs.getWindowSeconds(this, 60)
+        updateTimeChipHighlight(currentWindow)
+
+        for ((chip, seconds) in timeChips) {
+            chip.setOnClickListener {
+                Prefs.setWindowSeconds(this, seconds)
+                updateTimeChipHighlight(seconds)
+                refreshData()
+            }
+        }
+    }
+
+    private fun updateTimeChipHighlight(selectedSeconds: Int) {
+        chipTime10s.isChecked = selectedSeconds == 10
+        chipTime1m.isChecked = selectedSeconds == 60
+        chipTime10m.isChecked = selectedSeconds == 600
+        chipTime1h.isChecked = selectedSeconds == 3600
     }
     
     private fun startLiveUpdates() {

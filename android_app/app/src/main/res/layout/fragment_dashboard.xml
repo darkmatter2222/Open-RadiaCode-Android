@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Simplified Dashboard: Metric cards + 2 time-series charts + session info -->
+<!-- Unified Dashboard: Metric cards + shared time window + 2 charts + session info.
+     Layout adapts to orientation programmatically via DashboardFragment. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -32,199 +33,230 @@
             <com.radiacode.ble.ui.MetricCardView
                 android:id="@+id/doseCard"
                 android:layout_width="0dp"
-                android:layout_height="120dp"
+                android:layout_height="160dp"
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp" />
 
             <com.radiacode.ble.ui.MetricCardView
                 android:id="@+id/cpsCard"
                 android:layout_width="0dp"
-                android:layout_height="120dp"
+                android:layout_height="160dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
-        <!-- Dose Rate Chart -->
+        <!-- Shared Time Window Selector (affects all charts) -->
         <LinearLayout
-            android:id="@+id/doseChartPanel"
+            android:id="@+id/timeWindowRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@drawable/card_background"
-            android:orientation="vertical"
-            android:padding="12dp">
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:text="TIME WINDOW"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.1"
+                android:layout_marginEnd="12dp" />
 
-                <TextView
-                    android:id="@+id/doseChartTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="REAL TIME DOSE RATE"
-                    android:textColor="@color/pro_text_muted"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.1" />
+            <TextView
+                android:id="@+id/chipWindow10s"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:layout_marginEnd="6dp"
+                android:text="10s"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/chip_outline_background" />
 
-                <!-- Time window chips (inline quick toggle - Point 19) -->
-                <TextView
-                    android:id="@+id/chipWindow10s"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="2dp"
-                    android:layout_marginEnd="4dp"
-                    android:text="10s"
-                    android:textColor="@color/pro_text_muted"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/chip_outline_background" />
+            <TextView
+                android:id="@+id/chipWindow1m"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:layout_marginEnd="6dp"
+                android:text="1m"
+                android:textColor="@color/pro_cyan"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/chip_outline_background" />
 
-                <TextView
-                    android:id="@+id/chipWindow1m"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="2dp"
-                    android:layout_marginEnd="4dp"
-                    android:text="1m"
-                    android:textColor="@color/pro_cyan"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/chip_outline_background" />
+            <TextView
+                android:id="@+id/chipWindow10m"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:layout_marginEnd="6dp"
+                android:text="10m"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/chip_outline_background" />
 
-                <TextView
-                    android:id="@+id/chipWindow10m"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="2dp"
-                    android:layout_marginEnd="4dp"
-                    android:text="10m"
-                    android:textColor="@color/pro_text_muted"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/chip_outline_background" />
-
-                <TextView
-                    android:id="@+id/chipWindow1h"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingHorizontal="6dp"
-                    android:paddingVertical="2dp"
-                    android:layout_marginEnd="8dp"
-                    android:text="1h"
-                    android:textColor="@color/pro_text_muted"
-                    android:textSize="9sp"
-                    android:textStyle="bold"
-                    android:background="@drawable/chip_outline_background" />
-
-                <ImageButton
-                    android:id="@+id/doseChartGoRealtime"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_go_realtime"
-                    android:contentDescription="Go to real-time"
-                    android:visibility="gone"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"
-                    app:tint="@color/pro_cyan" />
-
-                <ImageButton
-                    android:id="@+id/doseChartReset"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_reset_zoom"
-                    android:contentDescription="Reset zoom"
-                    android:visibility="gone"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"
-                    app:tint="@color/pro_text_muted" />
-            </LinearLayout>
-
-            <com.radiacode.ble.ui.ProChartView
-                android:id="@+id/doseChart"
-                android:layout_width="match_parent"
-                android:layout_height="180dp"
-                android:layout_marginTop="8dp" />
-
-            <com.radiacode.ble.ui.StatRowView
-                android:id="@+id/doseStats"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp" />
+            <TextView
+                android:id="@+id/chipWindow1h"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="1h"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="@drawable/chip_outline_background" />
         </LinearLayout>
 
-        <!-- Count Rate Chart -->
+        <!-- Charts Container (orientation changed programmatically for landscape) -->
         <LinearLayout
-            android:id="@+id/cpsChartPanel"
+            android:id="@+id/chartsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/card_background"
-            android:orientation="vertical"
-            android:padding="12dp">
+            android:layout_marginTop="8dp"
+            android:orientation="vertical">
 
+            <!-- Dose Rate Chart -->
             <LinearLayout
+                android:id="@+id/doseChartPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:layout_marginTop="4dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="12dp">
 
-                <TextView
-                    android:id="@+id/cpsChartTitle"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="REAL TIME COUNT RATE"
-                    android:textColor="@color/pro_text_muted"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.1" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <ImageButton
-                    android:id="@+id/cpsChartGoRealtime"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_go_realtime"
-                    android:contentDescription="Go to real-time"
-                    android:visibility="gone"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"
-                    app:tint="@color/pro_cyan" />
+                    <TextView
+                        android:id="@+id/doseChartTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="REAL TIME DOSE RATE"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1" />
 
-                <ImageButton
-                    android:id="@+id/cpsChartReset"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_reset_zoom"
-                    android:contentDescription="Reset zoom"
-                    android:visibility="gone"
-                    android:scaleType="centerInside"
-                    android:padding="4dp"
-                    app:tint="@color/pro_text_muted" />
+                    <ImageButton
+                        android:id="@+id/doseChartGoRealtime"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_go_realtime"
+                        android:contentDescription="Go to real-time"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="4dp"
+                        app:tint="@color/pro_cyan" />
+
+                    <ImageButton
+                        android:id="@+id/doseChartReset"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_reset_zoom"
+                        android:contentDescription="Reset zoom"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="4dp"
+                        app:tint="@color/pro_text_muted" />
+                </LinearLayout>
+
+                <com.radiacode.ble.ui.ProChartView
+                    android:id="@+id/doseChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:layout_marginTop="8dp" />
+
+                <com.radiacode.ble.ui.StatRowView
+                    android:id="@+id/doseStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
-            <com.radiacode.ble.ui.ProChartView
-                android:id="@+id/cpsChart"
+            <!-- Count Rate Chart -->
+            <LinearLayout
+                android:id="@+id/cpsChartPanel"
                 android:layout_width="match_parent"
-                android:layout_height="180dp"
-                android:layout_marginTop="8dp" />
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="12dp">
 
-            <com.radiacode.ble.ui.StatRowView
-                android:id="@+id/cpsStats"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/cpsChartTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="REAL TIME COUNT RATE"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1" />
+
+                    <ImageButton
+                        android:id="@+id/cpsChartGoRealtime"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_go_realtime"
+                        android:contentDescription="Go to real-time"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="4dp"
+                        app:tint="@color/pro_cyan" />
+
+                    <ImageButton
+                        android:id="@+id/cpsChartReset"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_reset_zoom"
+                        android:contentDescription="Reset zoom"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="4dp"
+                        app:tint="@color/pro_text_muted" />
+                </LinearLayout>
+
+                <com.radiacode.ble.ui.ProChartView
+                    android:id="@+id/cpsChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="180dp"
+                    android:layout_marginTop="8dp" />
+
+                <com.radiacode.ble.ui.StatRowView
+                    android:id="@+id/cpsStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
         </LinearLayout>
 
         <!-- Session Info -->

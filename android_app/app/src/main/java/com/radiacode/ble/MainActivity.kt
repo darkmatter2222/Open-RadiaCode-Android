@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
+import android.content.res.Configuration
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -389,6 +390,14 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         handleWidgetIntent(intent)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Force ViewPager2 to recalculate page layouts after rotation
+        viewPager.post {
+            viewPager.requestLayout()
+        }
     }
     
     /**

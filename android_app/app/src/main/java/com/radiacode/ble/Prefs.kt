@@ -3010,4 +3010,40 @@ object Prefs {
             .putBoolean(KEY_STATISTICAL_HOTSPOT_PREDICTION_ENABLED, enabled)
             .apply()
     }
+
+    // ── Feature Info "Don't show again" ─────────────────────────────────
+
+    private const val KEY_PREFIX_FEATURE_INFO_DISMISSED = "feature_info_dismissed_"
+
+    /**
+     * Check if the user has previously dismissed the feature info dialog
+     * for [featureName] by checking "Don't show this again".
+     */
+    fun isFeatureInfoDismissed(context: Context, featureName: String): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean("$KEY_PREFIX_FEATURE_INFO_DISMISSED$featureName", false)
+    }
+
+    /**
+     * Store whether the user wants to suppress the feature info dialog
+     * for [featureName].
+     */
+    fun setFeatureInfoDismissed(context: Context, featureName: String, dismissed: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("$KEY_PREFIX_FEATURE_INFO_DISMISSED$featureName", dismissed)
+            .apply()
+    }
+
+    /**
+     * Reset all "Don't show again" feature info preferences.
+     */
+    fun resetAllFeatureInfoDismissals(context: Context) {
+        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        prefs.all.keys
+            .filter { it.startsWith(KEY_PREFIX_FEATURE_INFO_DISMISSED) }
+            .forEach { editor.remove(it) }
+        editor.apply()
+    }
 }

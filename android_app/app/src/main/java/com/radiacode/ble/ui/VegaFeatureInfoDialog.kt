@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -40,6 +41,7 @@ class VegaFeatureInfoDialog(
     private lateinit var textScrollView: ScrollView
     private lateinit var featureText: TextView
     private lateinit var closeButton: TextView
+    private lateinit var dontShowAgainCheckBox: CheckBox
     
     private val handler = Handler(Looper.getMainLooper())
     private var visualizer: Visualizer? = null
@@ -721,6 +723,22 @@ CONS
         }
         textScrollView.addView(featureText)
         contentLayout.addView(textScrollView)
+
+        // "Don't show this again" checkbox
+        dontShowAgainCheckBox = CheckBox(context).apply {
+            text = "Don't show this again"
+            textSize = 13f
+            setTextColor(Color.parseColor("#9E9EA8"))
+            buttonTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#00E5FF"))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (12 * density).toInt()
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+        }
+        contentLayout.addView(dontShowAgainCheckBox)
         
         // Close button
         closeButton = TextView(context).apply {
@@ -910,6 +928,9 @@ CONS
     }
     
     private fun dismissDialog() {
+        if (dontShowAgainCheckBox.isChecked) {
+            Prefs.setFeatureInfoDismissed(context, feature.name, true)
+        }
         cleanup()
         dismiss()
         onDismiss?.invoke()

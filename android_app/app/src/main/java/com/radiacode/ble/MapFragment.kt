@@ -35,7 +35,6 @@ class MapFragment : Fragment() {
     // Bottom bar controls
     private lateinit var btnExportData: MaterialButton
     private lateinit var btnSessions: MaterialButton
-    private lateinit var btnClearMapData: MaterialButton
     private lateinit var btnMapTheme: ImageButton
 
     // Route recording
@@ -69,7 +68,6 @@ class MapFragment : Fragment() {
         gpsAccuracyLabel = view.findViewById(R.id.gpsAccuracyLabel)
         btnExportData = view.findViewById(R.id.btnExportData)
         btnSessions = view.findViewById(R.id.btnSessions)
-        btnClearMapData = view.findViewById(R.id.btnClearMapData)
         btnMapTheme = view.findViewById(R.id.btnMapTheme)
         routeRecordingBar = view.findViewById(R.id.routeRecordingBar)
         routeRecordingLabel = view.findViewById(R.id.routeRecordingLabel)
@@ -158,11 +156,6 @@ class MapFragment : Fragment() {
         // Sessions button (Point 15)
         btnSessions.setOnClickListener {
             showSessionsExplanationOrLaunch()
-        }
-
-        // Clear map data
-        btnClearMapData.setOnClickListener {
-            showClearMapDataDialog()
         }
     }
 
@@ -271,25 +264,6 @@ class MapFragment : Fragment() {
                 Prefs.setMapTheme(ctx, selected)
                 mapCard.setMapTheme(selected)
                 dialog.dismiss()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    private fun showClearMapDataDialog() {
-        val ctx = requireContext()
-        AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
-            .setTitle("Clear All Map Data?")
-            .setMessage(
-                "This will PERMANENTLY DELETE all colored hexagon dots from the map — " +
-                "every location and radiation reading you have ever collected.\n\n" +
-                "This action CANNOT be undone.\n\n" +
-                "Tip: tap EXPORT first to save a CSV backup before clearing."
-            )
-            .setPositiveButton("Delete Everything") { _, _ ->
-                Prefs.clearMapDataPoints(ctx)
-                mapCard.clearMapData()
-                Toast.makeText(ctx, "All map data cleared", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()

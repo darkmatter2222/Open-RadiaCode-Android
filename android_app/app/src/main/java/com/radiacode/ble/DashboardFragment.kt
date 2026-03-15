@@ -1,6 +1,7 @@
 package com.radiacode.ble
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -48,6 +49,9 @@ class DashboardFragment : Fragment() {
     private lateinit var cpsStats: StatRowView
     private lateinit var cpsChartPanel: View
 
+    // Charts container (orientation adapted)
+    private lateinit var chartsContainer: LinearLayout
+
     // Time window chips
     private lateinit var chipWindow10s: TextView
     private lateinit var chipWindow1m: TextView
@@ -80,6 +84,79 @@ class DashboardFragment : Fragment() {
         setupMetricCards()
         setupCharts()
         setupTimeWindowChips()
+        adjustLayoutForOrientation(resources.configuration.orientation)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        adjustLayoutForOrientation(newConfig.orientation)
+    }
+
+    /**
+     * Adapt chart layout for current orientation.
+     * Portrait: charts stacked vertically full-width.
+     * Landscape: charts side-by-side, reduced heights.
+     */
+    private fun adjustLayoutForOrientation(orientation: Int) {
+        if (!isAdded || view == null) return
+        val density = resources.displayMetrics.density
+        val isLandscape = orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        chartsContainer.orientation = if (isLandscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+
+        val chartHeight = if (isLandscape) (140 * density).toInt() else (180 * density).toInt()
+        val statsHeight = if (isLandscape) (40 * density).toInt() else (52 * density).toInt()
+        val cardHeight = if (isLandscape) (130 * density).toInt() else (160 * density).toInt()
+
+        // Adjust metric card heights
+        val doseCardLp = doseCard.layoutParams as LinearLayout.LayoutParams
+        doseCardLp.height = cardHeight
+        doseCard.layoutParams = doseCardLp
+
+        val cpsCardLp = cpsCard.layoutParams as LinearLayout.LayoutParams
+        cpsCardLp.height = cardHeight
+        cpsCard.layoutParams = cpsCardLp
+
+        // Adjust chart panel layout params
+        if (isLandscape) {
+            doseChartPanel.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = (4 * density).toInt()
+                topMargin = (4 * density).toInt()
+            }
+            cpsChartPanel.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = (4 * density).toInt()
+                topMargin = (4 * density).toInt()
+            }
+        } else {
+            doseChartPanel.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (4 * density).toInt()
+            }
+            cpsChartPanel.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (8 * density).toInt()
+            }
+        }
+
+        // Adjust chart and stats heights
+        doseChart.layoutParams = (doseChart.layoutParams).apply {
+            height = chartHeight
+        }
+        cpsChart.layoutParams = (cpsChart.layoutParams).apply {
+            height = chartHeight
+        }
+        doseStats.layoutParams = (doseStats.layoutParams).apply {
+            height = statsHeight
+        }
+        cpsStats.layoutParams = (cpsStats.layoutParams).apply {
+            height = statsHeight
+        }
+
+        chartsContainer.requestLayout()
     }
 
     private fun bindViews(view: View) {
@@ -99,6 +176,8 @@ class DashboardFragment : Fragment() {
         cpsChartReset = view.findViewById(R.id.cpsChartReset)
         cpsChartGoRealtime = view.findViewById(R.id.cpsChartGoRealtime)
         cpsStats = view.findViewById(R.id.cpsStats)
+
+        chartsContainer = view.findViewById(R.id.chartsContainer)
 
         chipWindow10s = view.findViewById(R.id.chipWindow10s)
         chipWindow1m = view.findViewById(R.id.chipWindow1m)

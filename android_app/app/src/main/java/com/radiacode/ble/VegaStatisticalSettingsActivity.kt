@@ -540,10 +540,39 @@ class VegaStatisticalSettingsActivity : AppCompatActivity() {
         voiceInfoBtn.setOnClickListener { 
             showFeatureInfo(VegaFeatureInfoDialog.VegaFeature.VOICE) 
         }
+
+        // Long-press to force re-show previously dismissed info dialogs
+        zScoreInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ZSCORE) }
+        rocInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.ROC) }
+        cusumInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.CUSUM) }
+        forecastInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.FORECAST) }
+        predictiveInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.PREDICTIVE_CROSSING) }
+        poissonInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.POISSON) }
+        maCrossoverInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.MA_CROSSOVER) }
+        bayesianInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.BAYESIAN_CHANGEPOINT) }
+        autocorrInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.AUTOCORRELATION) }
+        locationAnomalyInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.LOCATION_ANOMALY) }
+        spatialGradientInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.SPATIAL_GRADIENT) }
+        hotspotPredictionInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.HOTSPOT_PREDICTION) }
+        voiceInfoBtn.setOnLongClickListener { forceShowFeatureInfo(VegaFeatureInfoDialog.VegaFeature.VOICE) }
     }
     
     private fun showFeatureInfo(feature: VegaFeatureInfoDialog.VegaFeature) {
+        if (Prefs.isFeatureInfoDismissed(this, feature.name)) {
+            android.widget.Toast.makeText(
+                this,
+                "${feature.title} -- previously dismissed. Long-press to view again.",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         VegaFeatureInfoDialog(this, feature).show()
+    }
+
+    private fun forceShowFeatureInfo(feature: VegaFeatureInfoDialog.VegaFeature): Boolean {
+        Prefs.setFeatureInfoDismissed(this, feature.name, false)
+        VegaFeatureInfoDialog(this, feature).show()
+        return true
     }
     
     private fun updateZScoreUI(sigma: Int) {
