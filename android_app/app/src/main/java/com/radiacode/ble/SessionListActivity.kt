@@ -55,8 +55,33 @@ class SessionListActivity : AppCompatActivity() {
         updateCompareButtonVisibility()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::adapter.isInitialized) {
+            loadSessions()
+            adapter.notifyDataSetChanged()
+        }
+    }
+
     private fun loadSessions() {
         sessions = SessionManager.getSessions(this).toMutableList()
+        // For any active session, refresh sample count from actual stored data
+        sessions.forEachIndexed { idx, s ->
+            if (s.isActive) {
+                val data = SessionManager.getSessionData(this, s.id)
+                if (data.isNotEmpty()) {
+                    sessions[idx] = s.copy(
+                        sampleCount = data.size,
+                        doseMin = data.minOf { it.uSvPerHour },
+                        doseMax = data.maxOf { it.uSvPerHour },
+                        doseMean = data.map { it.uSvPerHour }.average().toFloat(),
+                        cpsMin = data.minOf { it.cps },
+                        cpsMax = data.maxOf { it.cps },
+                        cpsMean = data.map { it.cps }.average().toFloat()
+                    )
+                }
+            }
+        }
         updateEmptyView()
     }
 
@@ -132,34 +157,49 @@ class SessionListActivity : AppCompatActivity() {
         SessionManager.stopSession(this)
         loadSessions()
         adapter.notifyDataSetChanged()
+        updateEmptyView()
         Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSessionDetails(session: SessionManager.Session) {
+        // Refresh stats from stored data for accuracy
+        val data = SessionManager.getSessionData(this, session.id)
+        val liveSession = if (data.isNotEmpty()) {
+            session.copy(
+                sampleCount = data.size,
+                doseMin = data.minOf { it.uSvPerHour },
+                doseMax = data.maxOf { it.uSvPerHour },
+                doseMean = data.map { it.uSvPerHour }.average().toFloat(),
+                cpsMin = data.minOf { it.cps },
+                cpsMax = data.maxOf { it.cps },
+                cpsMean = data.map { it.cps }.average().toFloat()
+            )
+        } else session
+
         val details = buildString {
-            appendLine("📋 ${session.name}")
+            appendLine(liveSession.name)
             appendLine()
-            appendLine("⏱️ Duration: ${session.durationFormatted}")
-            appendLine("📊 Samples: ${session.sampleCount}")
+            appendLine("Duration: ${liveSession.durationFormatted}")
+            appendLine("Samples: ${liveSession.sampleCount}")
             appendLine()
-            appendLine("☢️ Dose Rate:")
-            appendLine("   Min: ${String.format("%.4f", session.doseMin)} μSv/h")
-            appendLine("   Max: ${String.format("%.4f", session.doseMax)} μSv/h")
-            appendLine("   Avg: ${String.format("%.4f", session.doseMean)} μSv/h")
+            appendLine("Dose Rate:")
+            appendLine("   Min: ${String.format("%.4f", liveSession.doseMin)} uSv/h")
+            appendLine("   Max: ${String.format("%.4f", liveSession.doseMax)} uSv/h")
+            appendLine("   Avg: ${String.format("%.4f", liveSession.doseMean)} uSv/h")
             appendLine()
-            appendLine("📈 Count Rate:")
-            appendLine("   Min: ${String.format("%.1f", session.cpsMin)} cps")
-            appendLine("   Max: ${String.format("%.1f", session.cpsMax)} cps")
-            appendLine("   Avg: ${String.format("%.1f", session.cpsMean)} cps")
+            appendLine("Count Rate:")
+            appendLine("   Min: ${String.format("%.1f", liveSession.cpsMin)} cps")
+            appendLine("   Max: ${String.format("%.1f", liveSession.cpsMax)} cps")
+            appendLine("   Avg: ${String.format("%.1f", liveSession.cpsMean)} cps")
             
-            if (session.locationName != null) {
+            if (liveSession.locationName != null) {
                 appendLine()
-                appendLine("📍 Location: ${session.locationName}")
+                appendLine("Location: ${liveSession.locationName}")
             }
             
-            if (session.notes.isNotEmpty()) {
+            if (liveSession.notes.isNotEmpty()) {
                 appendLine()
-                appendLine("📝 Notes: ${session.notes}")
+                appendLine("Notes: ${liveSession.notes}")
             }
         }
 
@@ -276,22 +316,22 @@ class SessionListActivity : AppCompatActivity() {
         }
 
         val details = buildString {
-            appendLine("📊 Comparison")
+            appendLine("Comparison")
             appendLine()
             appendLine("Session 1: ${comparison.session1.name}")
             appendLine("Session 2: ${comparison.session2.name}")
             appendLine()
-            appendLine("☢️ Dose Rate (avg):")
-            appendLine("   ${String.format("%.4f", comparison.session1.doseMean)} → ${String.format("%.4f", comparison.session2.doseMean)} μSv/h")
-            val doseArrow = if (comparison.doseAvgDiff > 0) "↑" else "↓"
+            appendLine("Dose Rate (avg):")
+            appendLine("   ${String.format("%.4f", comparison.session1.doseMean)} -> ${String.format("%.4f", comparison.session2.doseMean)} uSv/h")
+            val doseArrow = if (comparison.doseAvgDiff > 0) "+" else "-"
             appendLine("   $doseArrow ${String.format("%.1f", kotlin.math.abs(comparison.doseAvgDiffPercent))}%")
             appendLine()
-            appendLine("📈 Count Rate (avg):")
-            appendLine("   ${String.format("%.1f", comparison.session1.cpsMean)} → ${String.format("%.1f", comparison.session2.cpsMean)} cps")
-            val cpsArrow = if (comparison.cpsAvgDiff > 0) "↑" else "↓"
+            appendLine("Count Rate (avg):")
+            appendLine("   ${String.format("%.1f", comparison.session1.cpsMean)} -> ${String.format("%.1f", comparison.session2.cpsMean)} cps")
+            val cpsArrow = if (comparison.cpsAvgDiff > 0) "+" else "-"
             appendLine("   $cpsArrow ${String.format("%.1f", kotlin.math.abs(comparison.cpsAvgDiffPercent))}%")
             appendLine()
-            appendLine("💡 ${comparison.summary}")
+            appendLine(comparison.summary)
         }
 
         AlertDialog.Builder(this)

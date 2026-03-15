@@ -95,6 +95,9 @@ class MainActivity : AppCompatActivity() {
     var sampleCount: Int = 0
         private set
 
+    // Guard: only auto-start one session per app lifecycle
+    private var sessionAutoStarted: Boolean = false
+
     // Cache selection state to avoid frequent Prefs reads on the UI thread.
     private var selectedDeviceIdCache: String? = null
     private var isAllDevicesModeCache: Boolean = false
@@ -191,9 +194,10 @@ class MainActivity : AppCompatActivity() {
                 cpsHistory.add(ts, cps)
                 sampleCount++
 
-                // --- Session recording: auto-start + feed data ---
-                if (!SessionManager.isRecording(this@MainActivity)) {
+                // --- Session recording: auto-start once, then feed data ---
+                if (!sessionAutoStarted && !SessionManager.isRecording(this@MainActivity)) {
                     SessionManager.startSession(this@MainActivity)
+                    sessionAutoStarted = true
                 }
                 val lat = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LATITUDE, Double.NaN)
                 val lng = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LONGITUDE, Double.NaN)
