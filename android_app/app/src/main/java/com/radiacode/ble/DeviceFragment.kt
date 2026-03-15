@@ -126,7 +126,15 @@ class DeviceFragment : Fragment() {
         if (!isAdded) return
         val ctx = requireContext()
         val devices = Prefs.getDevices(ctx)
-        deviceListManager?.refresh()
+        
+        // Update device card states from tracked connection states
+        val ma = activity as? MainActivity
+        if (ma != null) {
+            val statesMap = ma.buildDeviceStatesMap(devices)
+            deviceListManager?.setDeviceStates(statesMap)
+        } else {
+            deviceListManager?.refresh()
+        }
 
         val enabledCount = devices.count { it.enabled }
         val preferred = Prefs.getPreferredAddress(ctx)
@@ -168,6 +176,9 @@ class DeviceFragment : Fragment() {
             else -> "Disconnected"
         }
         updateConnectionStatus(anyConnected, message)
+        
+        // Also refresh device list cards with updated states
+        refreshDeviceList()
     }
 
     override fun onResume() {

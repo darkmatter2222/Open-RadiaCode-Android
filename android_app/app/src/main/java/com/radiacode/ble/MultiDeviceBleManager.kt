@@ -54,7 +54,8 @@ class MultiDeviceBleManager(
     private val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
     
     @Volatile
-    private var isRunning = false
+    var isRunning = false
+        private set
     
     /**
      * Start the manager and connect to all enabled devices.

@@ -119,6 +119,11 @@ class RadiaCodeForegroundService : Service() {
         }
         
         fun reloadDevices(context: Context) {
+            // Ensure the service is running as a foreground service first.
+            // Without this, if the service hasn't been started yet (e.g. after
+            // pm clear or fresh install), the RELOAD_DEVICES handler would run
+            // with isRunning=false and the device would never actually connect.
+            start(context)
             val intent = Intent(context, RadiaCodeForegroundService::class.java).setAction(ACTION_RELOAD_DEVICES)
             context.startService(intent)
         }
@@ -279,6 +284,20 @@ class RadiaCodeForegroundService : Service() {
                 return START_STICKY
             }
             ACTION_RELOAD_DEVICES -> {
+                // Ensure foreground notification is shown (required if this
+                // intent was the one that created the service)
+                val reloadDevices = Prefs.getEnabledDevices(this)
+                val reloadText = if (reloadDevices.isEmpty()) "No devices configured" else "${reloadDevices.size} device(s)"
+                updateForeground("Open RadiaCode", reloadText)
+                
+                // If the deviceManager was created in onCreate but never
+                // started (isRunning=false), start it now so addDevice()
+                // inside reloadDevices() will actually connect.
+                val dm = deviceManager
+                if (dm != null && !dm.isRunning) {
+                    dm.start()
+                }
+                
                 deviceManager?.reloadDevices()
                 updateNotificationFromState(force = true)
                 // Re-evaluate GPS tracking state

@@ -603,7 +603,7 @@ internal class RadiacodeBleClient(
     }
 
     @SuppressLint("MissingPermission")
-    private fun startNextChunkWrite(g: BluetoothGatt, w: BluetoothGattCharacteristic) {
+    private fun startNextChunkWrite(g: BluetoothGatt, w: BluetoothGattCharacteristic, retryCount: Int = 0) {
         val chunk: ByteArray = synchronized(this) {
             val chunks = pendingWriteChunks ?: return
             if (pendingWriteIndex >= chunks.size) {
@@ -625,7 +625,24 @@ internal class RadiacodeBleClient(
         }
 
         if (!ok) {
-            failActiveAndStartNext(IllegalStateException("writeCharacteristic failed"))
+            // Android BLE stack can transiently reject writes when called too
+            // quickly after a notification or another write completes. Retry up
+            // to 3 times with increasing delay before giving up.
+            if (retryCount < 3) {
+                val delayMs = (retryCount + 1) * 50L
+                Log.w(TAG, "writeCharacteristic failed (retry ${retryCount + 1}/3 in ${delayMs}ms)")
+                timeoutScheduler.schedule({
+                    executor.execute {
+                        try {
+                            startNextChunkWrite(g, w, retryCount + 1)
+                        } catch (t: Throwable) {
+                            failActiveAndStartNext(t)
+                        }
+                    }
+                }, delayMs, TimeUnit.MILLISECONDS)
+            } else {
+                failActiveAndStartNext(IllegalStateException("writeCharacteristic failed after $retryCount retries"))
+            }
         }
     }
 

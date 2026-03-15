@@ -1326,7 +1326,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Build a states map for the device selector from tracked connection states.
      */
-    private fun buildDeviceStatesMap(devices: List<DeviceConfig>): Map<String, DeviceState> {
+    fun buildDeviceStatesMap(devices: List<DeviceConfig>): Map<String, DeviceState> {
         return devices.associate { device ->
             val connectionState = deviceConnectionStates[device.id] ?: DeviceConnectionState.DISCONNECTED
             device.id to DeviceState(
