@@ -6,7 +6,6 @@ import android.content.Context
 import android.graphics.*
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -44,12 +43,14 @@ class VegaFeatureInfoDialog(
     private lateinit var dontShowAgainCheckBox: CheckBox
     
     private val handler = Handler(Looper.getMainLooper())
-    private var visualizer: Visualizer? = null
     private var mediaPlayer: MediaPlayer? = null
     private var scrollAnimator: ValueAnimator? = null
     private var waveformAnimator: ValueAnimator? = null
     private var audioDurationMs: Long = 0
     private var userInterruptedScroll = false
+    private var pcmShorts: ShortArray? = null
+    private var pcmTrackingRunnable: Runnable? = null
+    private val pcmSampleRate = 24000
     
     companion object {
         // Static scroll rate: ~150 WPM speaking = ~45 pixels per second
@@ -797,6 +798,9 @@ CONS
                 return
             }
             
+            // Load PCM data for waveform visualization
+            pcmShorts = loadPcmFromResource(resId)
+            
             mediaPlayer = MediaPlayer.create(context, resId)?.apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -810,7 +814,12 @@ CONS
                 setOnPreparedListener {
                     audioDurationMs = duration.toLong()
                     start()
-                    setupVisualizer()
+                    if (pcmShorts != null) {
+                        startPcmTracking()
+                    } else {
+                        waveformView.setUsingRealAudio(false)
+                        startSimulatedWaveform()
+                    }
                     startScrollAnimation(audioDurationMs)
                 }
             }
@@ -829,43 +838,86 @@ CONS
         }
     }
     
-    private fun setupVisualizer() {
-        try {
-            val audioSessionId = mediaPlayer?.audioSessionId ?: return
-            
-            visualizer = Visualizer(audioSessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1]
-                setDataCaptureListener(
-                    object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(
-                            vis: Visualizer?,
-                            waveform: ByteArray?,
-                            samplingRate: Int
-                        ) {
-                            waveform?.let { waveformView.updateWaveform(it) }
-                        }
-                        
-                        override fun onFftDataCapture(
-                            vis: Visualizer?,
-                            fft: ByteArray?,
-                            samplingRate: Int
-                        ) {
-                            fft?.let { waveformView.updateFft(it) }
-                        }
-                    },
-                    Visualizer.getMaxCaptureRate(),
-                    true,
-                    true
-                )
-                enabled = true
+    /**
+     * Load raw PCM samples from a WAV resource.
+     * Expects standard 44-byte WAV header, mono 16-bit little-endian PCM.
+     */
+    private fun loadPcmFromResource(resId: Int): ShortArray? {
+        return try {
+            context.resources.openRawResource(resId).use { input ->
+                val allBytes = input.readBytes()
+                if (allBytes.size < 46) return null
+                val dataOffset = 44
+                val dataLen = allBytes.size - dataOffset
+                val shorts = ShortArray(dataLen / 2)
+                for (i in shorts.indices) {
+                    val lo = allBytes[dataOffset + i * 2].toInt() and 0xFF
+                    val hi = allBytes[dataOffset + i * 2 + 1].toInt()
+                    shorts[i] = ((hi shl 8) or lo).toShort()
+                }
+                shorts
             }
-            
-            waveformView.setUsingRealAudio(true)
         } catch (e: Exception) {
             e.printStackTrace()
-            waveformView.setUsingRealAudio(false)
-            startSimulatedWaveform()
+            null
         }
+    }
+    
+    /**
+     * Drive the waveform visualizer directly from PCM data
+     * synced to MediaPlayer playback position. Runs at ~30 FPS.
+     * No RECORD_AUDIO permission required.
+     */
+    private fun startPcmTracking() {
+        waveformView.setUsingRealAudio(true)
+        pcmTrackingRunnable = object : Runnable {
+            override fun run() {
+                val mp = mediaPlayer ?: return
+                val pcm = pcmShorts ?: return
+                val isPlaying = try { mp.isPlaying } catch (_: Exception) { false }
+                if (!isPlaying) return
+                
+                val posMs = try { mp.currentPosition } catch (_: Exception) { return }
+                val samplePos = (posMs.toLong() * pcmSampleRate / 1000).toInt()
+                    .coerceIn(0, pcm.size - 1)
+                
+                // ~33ms window = ~800 samples at 24kHz
+                val windowSize = pcmSampleRate / 30
+                val windowStart = samplePos.coerceIn(0, (pcm.size - windowSize).coerceAtLeast(0))
+                
+                // Build 256-sample waveform display
+                val displaySize = 256
+                val waveform = ByteArray(displaySize)
+                val step = maxOf(1, windowSize / displaySize)
+                for (i in 0 until displaySize) {
+                    val idx = (windowStart + i * step).coerceIn(0, pcm.size - 1)
+                    // Convert signed short (-32768..32767) to unsigned byte (0..255)
+                    waveform[i] = ((pcm[idx].toInt() / 256) + 128).coerceIn(0, 255).toByte()
+                }
+                waveformView.updateWaveform(waveform)
+                
+                // Build frequency band magnitudes (32 bands, real+imag pairs)
+                val numBands = 32
+                val fft = ByteArray(numBands * 2)
+                val samplesPerBand = maxOf(1, windowSize / numBands)
+                for (b in 0 until numBands) {
+                    val bStart = windowStart + b * samplesPerBand
+                    var sum = 0L
+                    for (j in 0 until samplesPerBand) {
+                        val idx = (bStart + j).coerceIn(0, pcm.size - 1)
+                        sum += kotlin.math.abs(pcm[idx].toInt())
+                    }
+                    val avg = (sum / samplesPerBand).toInt()
+                    val normalized = (avg * 127 / 32768).coerceIn(0, 127)
+                    fft[b * 2] = normalized.toByte()
+                    fft[b * 2 + 1] = 0
+                }
+                waveformView.updateFft(fft)
+                
+                handler.postDelayed(this, 33)
+            }
+        }
+        handler.post(pcmTrackingRunnable!!)
     }
     
     private fun startScrollAnimation(durationMs: Long) {
@@ -934,12 +986,8 @@ CONS
     private fun cleanup() {
         scrollAnimator?.cancel()
         waveformAnimator?.cancel()
-        
-        try {
-            visualizer?.enabled = false
-            visualizer?.release()
-        } catch (e: Exception) { }
-        visualizer = null
+        pcmTrackingRunnable = null
+        pcmShorts = null
         
         try {
             mediaPlayer?.stop()

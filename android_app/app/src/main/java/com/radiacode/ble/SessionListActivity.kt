@@ -1,6 +1,8 @@
 package com.radiacode.ble
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
@@ -30,6 +32,17 @@ class SessionListActivity : AppCompatActivity() {
     private val selectedForComparison = mutableSetOf<String>()
 
     private val dateFormat = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.US)
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private val refreshIntervalMs = 3000L
+    private val refreshRunnable = object : Runnable {
+        override fun run() {
+            if (sessions.any { it.isActive }) {
+                loadSessions()
+                adapter.notifyDataSetChanged()
+            }
+            refreshHandler.postDelayed(this, refreshIntervalMs)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +74,24 @@ class SessionListActivity : AppCompatActivity() {
             loadSessions()
             adapter.notifyDataSetChanged()
         }
+        refreshHandler.removeCallbacks(refreshRunnable)
+        refreshHandler.postDelayed(refreshRunnable, refreshIntervalMs)
     }
+
+    override fun onPause() {
+        super.onPause()
+        refreshHandler.removeCallbacks(refreshRunnable)
+    }
+
+    /** Convert dose value from uSv/h to the user's preferred unit. */
+    private fun formatDose(value: Float, pattern: String = "%.3f"): String {
+        val isNano = Prefs.isDoseNanoMode(this)
+        val displayValue = if (isNano) value * 1000f else value
+        return String.format(pattern, displayValue)
+    }
+
+    private fun doseUnitLabel(): String =
+        if (Prefs.isDoseNanoMode(this)) "nSv/h" else "uSv/h"
 
     private fun loadSessions() {
         sessions = SessionManager.getSessions(this).toMutableList()
@@ -176,16 +206,17 @@ class SessionListActivity : AppCompatActivity() {
             )
         } else session
 
+        val unit = doseUnitLabel()
         val details = buildString {
             appendLine(liveSession.name)
             appendLine()
             appendLine("Duration: ${liveSession.durationFormatted}")
             appendLine("Samples: ${liveSession.sampleCount}")
             appendLine()
-            appendLine("Dose Rate:")
-            appendLine("   Min: ${String.format("%.4f", liveSession.doseMin)} uSv/h")
-            appendLine("   Max: ${String.format("%.4f", liveSession.doseMax)} uSv/h")
-            appendLine("   Avg: ${String.format("%.4f", liveSession.doseMean)} uSv/h")
+            appendLine("Dose Rate ($unit):")
+            appendLine("   Min: ${formatDose(liveSession.doseMin)} $unit")
+            appendLine("   Max: ${formatDose(liveSession.doseMax)} $unit")
+            appendLine("   Avg: ${formatDose(liveSession.doseMean)} $unit")
             appendLine()
             appendLine("Count Rate:")
             appendLine("   Min: ${String.format("%.1f", liveSession.cpsMin)} cps")
@@ -315,6 +346,7 @@ class SessionListActivity : AppCompatActivity() {
             return
         }
 
+        val cUnit = doseUnitLabel()
         val details = buildString {
             appendLine("Comparison")
             appendLine()
@@ -322,7 +354,7 @@ class SessionListActivity : AppCompatActivity() {
             appendLine("Session 2: ${comparison.session2.name}")
             appendLine()
             appendLine("Dose Rate (avg):")
-            appendLine("   ${String.format("%.4f", comparison.session1.doseMean)} -> ${String.format("%.4f", comparison.session2.doseMean)} uSv/h")
+            appendLine("   ${formatDose(comparison.session1.doseMean)} -> ${formatDose(comparison.session2.doseMean)} $cUnit")
             val doseArrow = if (comparison.doseAvgDiff > 0) "+" else "-"
             appendLine("   $doseArrow ${String.format("%.1f", kotlin.math.abs(comparison.doseAvgDiffPercent))}%")
             appendLine()
@@ -374,7 +406,7 @@ class SessionListActivity : AppCompatActivity() {
             
             holder.nameText.text = session.name
             holder.dateText.text = formatDate(session.startTimeMs)
-            holder.statsText.text = "${session.durationFormatted} • ${session.sampleCount} samples • avg ${String.format("%.3f", session.doseMean)} μSv/h"
+            holder.statsText.text = "${session.durationFormatted} \u2022 ${session.sampleCount} samples \u2022 avg ${formatDose(session.doseMean)} ${doseUnitLabel()}"
             
             if (session.isActive) {
                 holder.statusBadge.text = "● RECORDING"
