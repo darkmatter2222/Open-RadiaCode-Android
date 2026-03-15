@@ -394,9 +394,17 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Force ViewPager2 to recalculate page layouts after rotation
+        // Force ViewPager2 to recalculate page layouts and re-snap to
+        // the current page.  Without setCurrentItem the scroll offset
+        // becomes stale after the width change and the pager lands
+        // between two pages.
+        val currentItem = viewPager.currentItem
         viewPager.post {
             viewPager.requestLayout()
+            // Post again after layout so the new page width is known
+            viewPager.post {
+                viewPager.setCurrentItem(currentItem, false)
+            }
         }
     }
     
