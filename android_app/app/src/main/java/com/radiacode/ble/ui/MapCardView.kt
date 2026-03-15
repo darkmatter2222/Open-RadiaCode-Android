@@ -54,7 +54,8 @@ class MapCardView @JvmOverloads constructor(
     private lateinit var metricSelector: Spinner
     private lateinit var centerButton: ImageButton
     private lateinit var scaleBarView: ScaleBarView
-    
+    private lateinit var liveDoseRateLabel: TextView
+
     // Disabled state overlay
     private lateinit var mapContent: View
     private lateinit var disabledOverlay: View
@@ -208,7 +209,6 @@ class MapCardView @JvmOverloads constructor(
             setupMap()
             setupMetricSelector()
             setupCenterButton()
-            setupHeaderClick()
             showMapContent()
         } else {
             showDisabledOverlay()
@@ -223,7 +223,8 @@ class MapCardView @JvmOverloads constructor(
         mapView = findViewById(R.id.mapView)
         metricSelector = findViewById(R.id.metricSelector)
         centerButton = findViewById(R.id.centerButton)
-        
+        liveDoseRateLabel = findViewById(R.id.liveDoseRateLabel)
+
         // Create and add scale bar programmatically
         val scaleBarContainer = findViewById<FrameLayout>(R.id.scaleBarContainer)
         scaleBarView = ScaleBarView(context)
@@ -267,7 +268,6 @@ class MapCardView @JvmOverloads constructor(
             setupMap()
             setupMetricSelector()
             setupCenterButton()
-            setupHeaderClick()
             showMapContent()
             // Start location tracking if we have permission
             startLocationTracking()
@@ -408,14 +408,14 @@ class MapCardView @JvmOverloads constructor(
     }
     
     /**
-     * Setup header click to launch fullscreen map.
+     * Update the live dose rate badge displayed on the map.
+     * Called from MapFragment.addReading() on every new sensor reading.
      */
-    private fun setupHeaderClick() {
-        findViewById<View>(R.id.headerRow).setOnClickListener {
-            FullscreenMapActivity.launch(context)
-        }
+    fun updateLiveDoseRate(uSvH: Float) {
+        if (!isAttachedToWindow) return
+        liveDoseRateLabel.text = String.format("%.3f", uSvH)
     }
-    
+
     private fun setupMetricSelector() {
         val adapter = ArrayAdapter(
             context,
@@ -515,6 +515,9 @@ class MapCardView @JvmOverloads constructor(
      * Add a new reading at the current location.
      */
     fun addReading(uSvPerHour: Float, cps: Float) {
+        // Always update the live badge regardless of GPS availability
+        updateLiveDoseRate(uSvPerHour)
+
         val location = currentLocation
         if (location == null) {
             android.util.Log.w("MapCardView", "addReading: No location available, skipping reading ($uSvPerHour μSv/h)")

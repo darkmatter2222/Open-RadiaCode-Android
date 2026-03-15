@@ -1,171 +1,164 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MapCardView layout: fills its container completely.
+  Controls are overlaid on top of the map tiles so the map always uses all available space.
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
-    
-    <!-- Main map content -->
+    android:layout_height="match_parent">
+
+    <!-- ── Main map content ── -->
     <LinearLayout
         android:id="@+id/mapContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@drawable/card_background"
-        android:padding="12dp">
-        
-        <!-- Header Row -->
-        <LinearLayout
-            android:id="@+id/headerRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp"
-            android:background="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true">
-            
-            <!-- Expand Icon -->
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="6dp"
-                android:src="@android:drawable/ic_menu_crop"
-                android:tint="@color/pro_cyan"
-                android:contentDescription="Expand to fullscreen" />
-            
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="LIVE MAP"
-                android:textColor="@color/pro_text_muted"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.1" />
-            
-            <!-- Metric Selector -->
-            <Spinner
-                android:id="@+id/metricSelector"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:minHeight="32dp"
-                android:spinnerMode="dropdown" />
-            
-            <!-- Center on Location Button -->
-            <ImageButton
-                android:id="@+id/centerButton"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_mylocation"
-                android:contentDescription="Center on current location"
-                android:scaleType="centerInside"
-                android:padding="4dp" />
-        </LinearLayout>
-        
-        <!-- Map View -->
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
         <org.osmdroid.views.MapView
             android:id="@+id/mapView"
             android:layout_width="match_parent"
-            android:layout_height="240dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:background="@color/pro_surface" />
-        
-        <!-- Scale Bar (we'll draw this programmatically in the MapCardView) -->
-        <FrameLayout
-            android:id="@+id/scaleBarContainer"
-            android:layout_width="match_parent"
-            android:layout_height="40dp"
-            android:layout_marginTop="8dp" />
-        
+
     </LinearLayout>
-    
-    <!-- Disabled Overlay (shown when GPS tracking is off) -->
+
+    <!-- ── Live dose rate badge (top-right, always visible) ── -->
+    <!--
+      Shows the most recent reading in large text. Tapping the metric selector (below)
+      switches between Dose Rate and Count Rate for the hexagon colours.
+    -->
+    <LinearLayout
+        android:id="@+id/doseRateBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        android:background="#D91A1A1F"
+        android:elevation="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="7dp">
+
+        <!-- Large numeric value -->
+        <TextView
+            android:id="@+id/liveDoseRateLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="---.---"
+            android:textColor="@color/pro_green"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <!-- Unit label -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:text="µSv/h"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="11sp" />
+
+    </LinearLayout>
+
+    <!-- ── Metric selector (Dose Rate / Count Rate) — top-left overlay ── -->
+    <Spinner
+        android:id="@+id/metricSelector"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="8dp"
+        android:background="#D91A1A1F"
+        android:elevation="6dp"
+        android:minHeight="32dp"
+        android:padding="4dp"
+        android:spinnerMode="dropdown" />
+
+    <!-- ── Color scale bar overlay (bottom-left, above bottom bar) ── -->
+    <FrameLayout
+        android:id="@+id/scaleBarContainer"
+        android:layout_width="180dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="14dp"
+        android:elevation="4dp" />
+
+    <!-- ── Center-on-location button (bottom-right, 52dp, prominent) ── -->
+    <ImageButton
+        android:id="@+id/centerButton"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="14dp"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/card_background"
+        android:contentDescription="Center map on my location"
+        android:elevation="6dp"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@android:drawable/ic_menu_mylocation"
+        app:tint="@color/pro_cyan" />
+
+    <!-- ── Disabled overlay (shown when GPS tracking is turned off) ── -->
     <LinearLayout
         android:id="@+id/disabledOverlay"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
+        android:background="@color/pro_surface"
+        android:gravity="center"
         android:orientation="vertical"
-        android:background="@drawable/card_background"
-        android:padding="12dp"
         android:visibility="gone">
-        
-        <!-- Header Row -->
-        <LinearLayout
-            android:layout_width="match_parent"
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp"
+            android:alpha="0.5"
+            android:contentDescription="GPS disabled"
+            android:src="@android:drawable/ic_menu_mylocation"
+            android:tint="@color/pro_text_muted" />
+
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
-            
-            <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="6dp"
-                android:src="@android:drawable/ic_menu_mapmode"
-                android:tint="@color/pro_text_muted"
-                android:contentDescription="Map disabled" />
-            
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="LIVE MAP"
-                android:textColor="@color/pro_text_muted"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.1" />
-        </LinearLayout>
-        
-        <!-- Disabled message area -->
+            android:layout_marginBottom="8dp"
+            android:text="GPS Tracking Disabled"
+            android:textColor="@color/pro_text_secondary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="Battery saver mode active"
+            android:textColor="@color/pro_text_muted"
+            android:textSize="13sp" />
+
         <LinearLayout
             android:id="@+id/disabledMessageContainer"
-            android:layout_width="match_parent"
-            android:layout_height="240dp"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:background="@color/pro_surface"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
             android:clickable="true"
             android:focusable="true">
-            
-            <ImageView
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginBottom="16dp"
-                android:src="@android:drawable/ic_menu_mylocation"
-                android:tint="@color/pro_text_muted"
-                android:alpha="0.5"
-                android:contentDescription="GPS disabled" />
-            
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="GPS Tracking Disabled"
-                android:textColor="@color/pro_text_secondary"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-            
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Battery saver mode active"
-                android:textColor="@color/pro_text_muted"
-                android:textSize="13sp"
-                android:layout_marginBottom="16dp" />
-            
+
             <TextView
                 android:id="@+id/enableGpsButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:padding="12dp"
                 android:text="Tap to enable GPS tracking"
                 android:textColor="@color/pro_cyan"
-                android:textSize="14sp"
-                android:padding="12dp"
-                android:background="?attr/selectableItemBackground" />
+                android:textSize="14sp" />
+
         </LinearLayout>
-        
+
     </LinearLayout>
-    
+
 </FrameLayout>

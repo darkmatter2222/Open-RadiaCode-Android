@@ -157,7 +157,7 @@ class MapFragment : Fragment() {
 
         // Sessions button (Point 15)
         btnSessions.setOnClickListener {
-            startActivity(Intent(requireContext(), SessionListActivity::class.java))
+            showSessionsExplanationOrLaunch()
         }
 
         // Clear map data
@@ -235,6 +235,29 @@ class MapFragment : Fragment() {
         startActivity(Intent.createChooser(intent, "Share export"))
     }
 
+    private fun showSessionsExplanationOrLaunch() {
+        val ctx = requireContext()
+        AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
+            .setTitle("Log Book / Session History")
+            .setMessage(
+                "A \"session\" is one timed collection run — from when you opened the app to when you " +
+                "closed it (or pressed stop).\n\n" +
+                "Each session stores all the radiation readings collected during that time, " +
+                "including GPS locations, timestamps, dose rates, and count rates.\n\n" +
+                "The Log Book lets you:\n" +
+                "\u2022 Review past sessions\n" +
+                "\u2022 Load a previous session back onto the map\n" +
+                "\u2022 Export a specific session to CSV\n" +
+                "\u2022 Delete old sessions\n\n" +
+                "The data visible on the map RIGHT NOW is your current session."
+            )
+            .setPositiveButton("Open Log Book") { _, _ ->
+                startActivity(Intent(ctx, SessionListActivity::class.java))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun showMapThemeDialog() {
         val ctx = requireContext()
         val themes = Prefs.MapTheme.values()
@@ -256,12 +279,17 @@ class MapFragment : Fragment() {
     private fun showClearMapDataDialog() {
         val ctx = requireContext()
         AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
-            .setTitle("Clear Map Data")
-            .setMessage("This will permanently delete all hexagon readings from the radiation map. This action cannot be undone.\n\nContinue?")
-            .setPositiveButton("Clear Data") { _, _ ->
+            .setTitle("Clear All Map Data?")
+            .setMessage(
+                "This will PERMANENTLY DELETE all colored hexagon dots from the map — " +
+                "every location and radiation reading you have ever collected.\n\n" +
+                "This action CANNOT be undone.\n\n" +
+                "Tip: tap EXPORT first to save a CSV backup before clearing."
+            )
+            .setPositiveButton("Delete Everything") { _, _ ->
                 Prefs.clearMapDataPoints(ctx)
                 mapCard.clearMapData()
-                Toast.makeText(ctx, "Map data cleared", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "All map data cleared", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
             .show()
