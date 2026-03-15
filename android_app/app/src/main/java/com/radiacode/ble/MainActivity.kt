@@ -372,6 +372,18 @@ class MainActivity : AppCompatActivity() {
         
         // Check for first-run intro
         checkAndShowIntro()
+
+        // Register activity ref for debug test receiver
+        if (BuildConfig.DEBUG) {
+            com.radiacode.ble.testing.TestReceiver.activityRef = this
+            val filter = android.content.IntentFilter(com.radiacode.ble.testing.TestReceiver.ACTION)
+            registerReceiver(
+                com.radiacode.ble.testing.TestReceiver(),
+                filter,
+                android.content.Context.RECEIVER_EXPORTED
+            )
+            android.util.Log.d("RadiaCode", "TestReceiver registered (debug build)")
+        }
     }
     
     /**
@@ -907,6 +919,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (BuildConfig.DEBUG) {
+            com.radiacode.ble.testing.TestReceiver.activityRef = null
+        }
         stopUiLoop()
         chartLoadFuture?.cancel(true)
         ioExecutor.shutdownNow()
