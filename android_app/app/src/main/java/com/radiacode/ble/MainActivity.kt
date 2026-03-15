@@ -120,6 +120,7 @@ class MainActivity : AppCompatActivity() {
     
     // Track device connection states from service broadcasts
     private val deviceConnectionStates = mutableMapOf<String, DeviceConnectionState>()
+    private var shownConnectionSnackbarForDevice: String? = null
 
     private val readingReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -251,6 +252,11 @@ class MainActivity : AppCompatActivity() {
                 DeviceConnectionState.DISCONNECTED
             }
             deviceConnectionStates[deviceId] = state
+            // Show connection Snackbar on first connect
+            if (state == DeviceConnectionState.CONNECTED && deviceId != shownConnectionSnackbarForDevice) {
+                shownConnectionSnackbarForDevice = deviceId
+                getDashboardFragment()?.showConnectedSnackbar(deviceId)
+            }
             // Forward to device fragment
             getDeviceFragment()?.updateConnectionStatus()
         }
@@ -472,8 +478,26 @@ class MainActivity : AppCompatActivity() {
         val adapter = MainPagerAdapter(this)
         viewPager.adapter = adapter
         viewPager.offscreenPageLimit = 3 // keep all tabs alive
+
+        // Disable ViewPager2 swiping on the Map tab to prevent
+        // horizontal swipe conflicts with the map's pan gesture.
+        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                viewPager.isUserInputEnabled = position != 1  // disable swipe on Map tab
+            }
+        })
+
+        val tabIcons = intArrayOf(
+            R.drawable.ic_tab_dashboard,
+            R.drawable.ic_tab_map,
+            R.drawable.ic_tab_isotope,
+            R.drawable.ic_tab_device
+        )
+        val tabLabels = arrayOf("Dashboard", "Map", "Isotope ID", "Device")
+
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
-            tab.text = arrayOf("Dashboard", "Map", "Isotope ID", "Device")[position]
+            tab.text = tabLabels[position]
+            tab.setIcon(tabIcons[position])
         }.attach()
     }
 

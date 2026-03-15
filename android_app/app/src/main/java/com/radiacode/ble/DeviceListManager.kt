@@ -19,7 +19,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 class DeviceListManager(
     private val context: Context,
     private val container: LinearLayout,
-    private val noDevicesView: TextView,
+    private val noDevicesView: View,
     private val onDevicesChanged: () -> Unit
 ) {
     private var deviceStates: Map<String, DeviceState> = emptyMap()

@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Device management panel -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/deviceSwipeRefresh"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/pro_background"
+    android:background="@color/pro_background">
+
+<ScrollView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:fillViewport="true">
 
     <LinearLayout
@@ -84,16 +90,43 @@
             android:layout_height="wrap_content"
             android:orientation="vertical" />
 
-        <TextView
-            android:id="@+id/noDevicesText"
+        <!-- Empty state for no devices - onboarding style -->
+        <LinearLayout
+            android:id="@+id/noDevicesContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:padding="24dp"
-            android:text="No devices configured.\nTap 'Add Device' to scan for RadiaCode devices."
-            android:textColor="@color/pro_text_muted"
-            android:textSize="13sp"
-            android:visibility="gone" />
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_tab_device"
+                app:tint="@color/pro_text_muted"
+                android:alpha="0.5" />
+
+            <TextView
+                android:id="@+id/noDevicesText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="No RadiaCode devices found.\nTap 'Add Device' below to scan via Bluetooth."
+                android:textColor="@color/pro_text_muted"
+                android:textSize="13sp"
+                android:lineSpacingExtra="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Pull down to refresh"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="11sp"
+                android:alpha="0.6" />
+        </LinearLayout>
 
         <!-- Legacy preferred device -->
         <TextView
@@ -144,3 +177,5 @@
 
     </LinearLayout>
 </ScrollView>
+
+</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

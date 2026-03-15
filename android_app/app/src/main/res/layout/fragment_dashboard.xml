@@ -32,14 +32,14 @@
             <com.radiacode.ble.ui.MetricCardView
                 android:id="@+id/doseCard"
                 android:layout_width="0dp"
-                android:layout_height="160dp"
+                android:layout_height="120dp"
                 android:layout_weight="1"
                 android:layout_marginEnd="6dp" />
 
             <com.radiacode.ble.ui.MetricCardView
                 android:id="@+id/cpsCard"
                 android:layout_width="0dp"
-                android:layout_height="160dp"
+                android:layout_height="120dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
@@ -241,7 +241,29 @@
                 android:layout_height="wrap_content"
                 android:text="SESSION: 0s - 0 samples"
                 android:textColor="@color/pro_text_muted"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Empty state overlay (shown when no data) -->
+        <LinearLayout
+            android:id="@+id/emptyStateContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/emptyStateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Waiting for readings...\nConnect a RadiaCode device to start."
+                android:textColor="@color/pro_text_muted"
+                android:textSize="14sp"
+                android:lineSpacingExtra="4dp" />
         </LinearLayout>
 
     </LinearLayout>

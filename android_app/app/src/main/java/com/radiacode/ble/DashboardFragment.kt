@@ -6,9 +6,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.google.android.material.snackbar.Snackbar
 import com.radiacode.ble.ui.MetricCardView
 import com.radiacode.ble.ui.ProChartView
 import com.radiacode.ble.ui.StatRowView
@@ -55,6 +57,11 @@ class DashboardFragment : Fragment() {
     // Session info
     private lateinit var sessionInfo: TextView
 
+    // Empty state
+    private var emptyStateContainer: LinearLayout? = null
+    private var emptyStateText: TextView? = null
+    private var hasReceivedFirstReading = false
+
     // Device selector
     private lateinit var deviceSelector: com.radiacode.ble.ui.DeviceSelectorView
 
@@ -100,6 +107,10 @@ class DashboardFragment : Fragment() {
 
         sessionInfo = view.findViewById(R.id.sessionInfo)
         deviceSelector = view.findViewById(R.id.deviceSelector)
+
+        // Empty state (optional - only in updated layouts)
+        emptyStateContainer = view.findViewById(R.id.emptyStateContainer)
+        emptyStateText = view.findViewById(R.id.emptyStateText)
     }
 
     private fun setupMetricCards() {
@@ -211,6 +222,7 @@ class DashboardFragment : Fragment() {
     }
 
     fun updateChartTitles() {
+        if (!isAdded || view == null) return
         val ctx = context ?: return
         val windowSec = Prefs.getWindowSeconds(ctx, 60)
         val windowLabel = when (windowSec) {
@@ -234,12 +246,26 @@ class DashboardFragment : Fragment() {
         if (!isAdded || view == null) return
         val ctx = context ?: return
 
+        // Hide empty state on first data
+        if (!hasReceivedFirstReading) {
+            hasReceivedFirstReading = true
+            emptyStateContainer?.visibility = View.GONE
+        }
+
         if (Prefs.isDoseNanoMode(ctx)) {
             doseCard.setValue(uSvH * 1000f, "nSv/h")
         } else {
             doseCard.setValue(uSvH, "\u00B5Sv/h")
         }
         doseCard.setTrend(trendDose)
+
+        // Color-code dose card based on radiation level
+        val doseColor = when {
+            uSvH >= 1.0f -> ContextCompat.getColor(ctx, R.color.pro_red)      // High
+            uSvH >= 0.3f -> ContextCompat.getColor(ctx, R.color.pro_amber)    // Elevated
+            else -> ContextCompat.getColor(ctx, R.color.pro_cyan)              // Normal
+        }
+        doseCard.setAccentColor(doseColor)
 
         if (Prefs.isCountCpmMode(ctx)) {
             cpsCard.setValue(cps * 60f, "CPM")
@@ -304,7 +330,19 @@ class DashboardFragment : Fragment() {
 
     fun updateSessionInfo(elapsed: String, samples: Int) {
         if (!isAdded || view == null) return
-        sessionInfo.text = "SESSION: $elapsed - $samples samples"
+        sessionInfo.text = "SESSION  $elapsed  |  $samples samples"
+    }
+
+    /**
+     * Show a brief Snackbar confirming device connection.
+     */
+    fun showConnectedSnackbar(deviceName: String) {
+        if (!isAdded || view == null) return
+        val v = view ?: return
+        Snackbar.make(v, "Connected to $deviceName", Snackbar.LENGTH_SHORT)
+            .setBackgroundTint(ContextCompat.getColor(requireContext(), R.color.pro_surface_elevated))
+            .setTextColor(ContextCompat.getColor(requireContext(), R.color.pro_green))
+            .show()
     }
 
     /**
@@ -429,5 +467,10 @@ class DashboardFragment : Fragment() {
         val s = secs % 60
         val timeStr = if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
         updateSessionInfo(timeStr, ma.sampleCount)
+
+        // Show empty state if no data yet
+        if (ma.sampleCount == 0 && !hasReceivedFirstReading) {
+            emptyStateContainer?.visibility = View.VISIBLE
+        }
     }
 }

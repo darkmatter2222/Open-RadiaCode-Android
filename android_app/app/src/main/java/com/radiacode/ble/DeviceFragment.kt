@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 
@@ -32,6 +33,8 @@ class DeviceFragment : Fragment() {
     // Device list
     private lateinit var deviceListContainer: LinearLayout
     private lateinit var noDevicesText: TextView
+    private var noDevicesContainer: LinearLayout? = null
+    private var deviceSwipeRefresh: SwipeRefreshLayout? = null
 
     private var deviceListManager: DeviceListManager? = null
 
@@ -71,6 +74,16 @@ class DeviceFragment : Fragment() {
         stopServiceButton = view.findViewById(R.id.stopServiceButton)
         deviceListContainer = view.findViewById(R.id.deviceListContainer)
         noDevicesText = view.findViewById(R.id.noDevicesText)
+        noDevicesContainer = view.findViewById(R.id.noDevicesContainer)
+        deviceSwipeRefresh = view.findViewById(R.id.deviceSwipeRefresh)
+        deviceSwipeRefresh?.setColorSchemeResources(R.color.pro_cyan)
+        deviceSwipeRefresh?.setProgressBackgroundColorSchemeResource(R.color.pro_surface)
+        deviceSwipeRefresh?.setOnRefreshListener {
+            refreshDeviceList()
+            updateConnectionStatus()
+            RadiaCodeForegroundService.reconnect(requireContext())
+            view.postDelayed({ deviceSwipeRefresh?.isRefreshing = false }, 1500)
+        }
     }
 
     private fun setupControls() {
@@ -104,7 +117,7 @@ class DeviceFragment : Fragment() {
         deviceListManager = DeviceListManager(
             context = requireContext(),
             container = deviceListContainer,
-            noDevicesView = noDevicesText,
+            noDevicesView = noDevicesContainer ?: noDevicesText,
             onDevicesChanged = { refreshDeviceList() }
         )
     }
@@ -144,6 +157,7 @@ class DeviceFragment : Fragment() {
      * No-arg overload: reads connection state from MainActivity.
      */
     fun updateConnectionStatus() {
+        if (!isAdded || view == null) return
         val ma = activity as? MainActivity ?: return
         val states = ma.getDeviceConnectionStates()
         val anyConnected = states.values.any { it == DeviceConnectionState.CONNECTED }

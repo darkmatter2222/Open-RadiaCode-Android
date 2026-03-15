@@ -283,6 +283,10 @@ class IsotopeFragment : Fragment() {
         val ctx = requireContext()
         val ma = mainActivity ?: return
 
+        // Disable button during scan for visual feedback
+        isotopeScanBtn.isEnabled = false
+        isotopeScanBtn.text = "Scanning..."
+
         // Show scanning state
         isotopeScanResultContainer.visibility = View.VISIBLE
         isotopeMultiLineChart.visibility = View.GONE
@@ -298,6 +302,11 @@ class IsotopeFragment : Fragment() {
         // Wait for spectrum data (fallback after timeout)
         view?.postDelayed({
             if (!isAdded) return@postDelayed
+
+            // Re-enable button
+            isotopeScanBtn.isEnabled = true
+            isotopeScanBtn.text = "SCAN"
+
             val spectrum = ma.getLastSpectrumData()
             if (spectrum == null) {
                 isotopeScanResultText.text = "No spectrum data available.\nConnect to a device first."

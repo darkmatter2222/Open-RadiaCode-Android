@@ -75,6 +75,9 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("androidx.viewpager2:viewpager2:1.0.0")
 
+    // SwipeRefreshLayout for pull-to-refresh gesture
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+
     // Preferences for proper settings screen
     implementation("androidx.preference:preference-ktx:1.2.1")
 

@@ -4,17 +4,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0D0D0F">
+    android:background="@color/pro_background">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:background="#1A1A1F"
+        android:background="@color/pro_surface"
         app:title="Settings"
-        app:titleTextColor="#E0E0E0"
+        app:titleTextColor="@color/pro_text_primary"
         app:navigationIcon="?attr/homeAsUpIndicator"
-        app:navigationIconTint="#E0E0E0" />
+        app:navigationIconTint="@color/pro_text_primary" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -33,17 +33,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Display Units" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Dose rate and count rate units" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Display Units" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Dose rate and count rate units" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Smart Alerts -->
@@ -53,17 +67,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Smart Alerts" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Threshold-based and anomaly alerts" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Smart Alerts" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Threshold-based and anomaly alerts" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Notifications -->
@@ -73,17 +101,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Notifications" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Notification style and content" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Notifications" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Notification style and content" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Sound & Geiger -->
@@ -93,17 +135,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Sound &amp; Geiger" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Audio tick and alert sounds" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Sound &amp; Geiger" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Audio tick and alert sounds" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Isotope Detection -->
@@ -113,17 +169,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Isotope Detection" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="ML model and scan settings" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Isotope Detection" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="ML model and scan settings" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- VEGA Intelligence -->
@@ -133,17 +203,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="VEGA Intelligence" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Statistical analysis and forecasting" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="VEGA Intelligence" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Statistical analysis and forecasting" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Spectrogram -->
@@ -153,17 +237,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Spectrogram" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Spectrum waterfall display" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Spectrogram" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Spectrum waterfall display" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Widgets -->
@@ -173,17 +271,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Widgets" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Home screen widget gallery" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Widgets" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Home screen widget gallery" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
             <!-- Help Center -->
@@ -193,17 +305,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <TextView
-                    style="@style/SettingsRowTitle"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Help Center" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <TextView
-                    style="@style/SettingsRowSub"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Guides, FAQ, and support" />
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Help Center" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Guides, FAQ, and support" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
         </LinearLayout>

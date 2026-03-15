@@ -104,7 +104,7 @@
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabLayout"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
+            android:layout_height="48dp"
             android:background="@color/pro_surface"
             app:tabMode="fixed"
             app:tabGravity="fill"
@@ -113,6 +113,8 @@
             app:tabIndicatorColor="@color/pro_cyan"
             app:tabIndicatorHeight="2dp"
             app:tabRippleColor="@android:color/transparent"
+            app:tabIconTint="@color/tab_icon_tint"
+            app:tabInlineLabel="true"
             app:tabTextAppearance="@style/TextAppearance.MaterialComponents.Caption" />
 
     </com.google.android.material.appbar.AppBarLayout>

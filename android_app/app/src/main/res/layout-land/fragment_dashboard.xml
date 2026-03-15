@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Landscape Dashboard: Metric cards on left, charts on right -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/pro_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:id="@+id/dashboardContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Device Selector (hidden if only 1 device) -->
+        <com.radiacode.ble.ui.DeviceSelectorView
+            android:id="@+id/deviceSelector"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
+        <!-- Top row: Metric cards side-by-side (compact in landscape) -->
+        <LinearLayout
+            android:id="@+id/metricsCardsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.radiacode.ble.ui.MetricCardView
+                android:id="@+id/doseCard"
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp" />
+
+            <com.radiacode.ble.ui.MetricCardView
+                android:id="@+id/cpsCard"
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Charts row: both charts side-by-side in landscape -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <!-- Dose Rate Chart -->
+            <LinearLayout
+                android:id="@+id/doseChartPanel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/doseChartTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="DOSE RATE"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/chipWindow10s"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="5dp"
+                        android:paddingVertical="2dp"
+                        android:layout_marginEnd="3dp"
+                        android:text="10s"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/chip_outline_background" />
+
+                    <TextView
+                        android:id="@+id/chipWindow1m"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="5dp"
+                        android:paddingVertical="2dp"
+                        android:layout_marginEnd="3dp"
+                        android:text="1m"
+                        android:textColor="@color/pro_cyan"
+                        android:textSize="8sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/chip_outline_background" />
+
+                    <TextView
+                        android:id="@+id/chipWindow10m"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="5dp"
+                        android:paddingVertical="2dp"
+                        android:layout_marginEnd="3dp"
+                        android:text="10m"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/chip_outline_background" />
+
+                    <TextView
+                        android:id="@+id/chipWindow1h"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="5dp"
+                        android:paddingVertical="2dp"
+                        android:layout_marginEnd="6dp"
+                        android:text="1h"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="8sp"
+                        android:textStyle="bold"
+                        android:background="@drawable/chip_outline_background" />
+
+                    <ImageButton
+                        android:id="@+id/doseChartGoRealtime"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_go_realtime"
+                        android:contentDescription="Go to real-time"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="3dp"
+                        app:tint="@color/pro_cyan" />
+
+                    <ImageButton
+                        android:id="@+id/doseChartReset"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_reset_zoom"
+                        android:contentDescription="Reset zoom"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="3dp"
+                        app:tint="@color/pro_text_muted" />
+                </LinearLayout>
+
+                <com.radiacode.ble.ui.ProChartView
+                    android:id="@+id/doseChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="6dp" />
+
+                <com.radiacode.ble.ui.StatRowView
+                    android:id="@+id/doseStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="6dp" />
+            </LinearLayout>
+
+            <!-- Count Rate Chart -->
+            <LinearLayout
+                android:id="@+id/cpsChartPanel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/cpsChartTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="COUNT RATE"
+                        android:textColor="@color/pro_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1" />
+
+                    <ImageButton
+                        android:id="@+id/cpsChartGoRealtime"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_go_realtime"
+                        android:contentDescription="Go to real-time"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="3dp"
+                        app:tint="@color/pro_cyan" />
+
+                    <ImageButton
+                        android:id="@+id/cpsChartReset"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@drawable/ic_reset_zoom"
+                        android:contentDescription="Reset zoom"
+                        android:visibility="gone"
+                        android:scaleType="centerInside"
+                        android:padding="3dp"
+                        app:tint="@color/pro_text_muted" />
+                </LinearLayout>
+
+                <com.radiacode.ble.ui.ProChartView
+                    android:id="@+id/cpsChart"
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:layout_marginTop="6dp" />
+
+                <com.radiacode.ble.ui.StatRowView
+                    android:id="@+id/cpsStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="6dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Session Info -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/sessionInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SESSION: 0s - 0 samples"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Empty state overlay (shown when no data) -->
+        <LinearLayout
+            android:id="@+id/emptyStateContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/emptyStateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="Waiting for readings...\nConnect a RadiaCode device to start."
+                android:textColor="@color/pro_text_muted"
+                android:textSize="14sp"
+                android:lineSpacingExtra="4dp" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
