@@ -1,14 +1,15 @@
 package com.radiacode.ble
 
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.*
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
-import com.radiacode.ble.ui.ContextualHelpPopup
 
 /**
  * In-App Help Center & FAQ
@@ -44,41 +45,52 @@ class HelpCenterActivity : AppCompatActivity() {
     )
 
     private val categories = listOf(
-        HelpCategory("getting_started", "Getting Started", "🚀", "Setup and first steps"),
-        HelpCategory("understanding", "Understanding Readings", "📊", "What the numbers mean"),
-        HelpCategory("features", "Features", "⚙️", "How to use app features"),
-        HelpCategory("troubleshooting", "Troubleshooting", "🔧", "Fixing common problems"),
-        HelpCategory("safety", "Safety Info", "🛡️", "Radiation safety guidance"),
-        HelpCategory("glossary", "Glossary", "📚", "Terms and definitions")
+        HelpCategory("getting_started", "Getting Started", "1", "Setup and first steps"),
+        HelpCategory("understanding", "Understanding Readings", "2", "What the numbers mean"),
+        HelpCategory("features", "Features", "3", "How to use app features"),
+        HelpCategory("troubleshooting", "Troubleshooting", "4", "Fixing common problems"),
+        HelpCategory("safety", "Safety Info", "5", "Radiation safety guidance"),
+        HelpCategory("glossary", "Glossary", "6", "Terms and definitions")
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_help_center)
+        try {
+            setContentView(R.layout.activity_help_center)
 
-        toolbar = findViewById(R.id.toolbar)
-        searchInput = findViewById(R.id.searchInput)
-        categoriesList = findViewById(R.id.categoriesList)
-        topicsList = findViewById(R.id.topicsList)
-        topicDetailContainer = findViewById(R.id.topicDetailContainer)
-        topicTitle = findViewById(R.id.topicTitle)
-        topicContent = findViewById(R.id.topicContent)
-        backToListButton = findViewById(R.id.backToListButton)
+            toolbar = findViewById(R.id.toolbar)
+            searchInput = findViewById(R.id.searchInput)
+            categoriesList = findViewById(R.id.categoriesList)
+            topicsList = findViewById(R.id.topicsList)
+            topicDetailContainer = findViewById(R.id.topicDetailContainer)
+            topicTitle = findViewById(R.id.topicTitle)
+            topicContent = findViewById(R.id.topicContent)
+            backToListButton = findViewById(R.id.backToListButton)
 
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = "Help Center"
-        toolbar.setNavigationOnClickListener { onBackPressed() }
+            setSupportActionBar(toolbar)
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.title = "Help Center"
+            toolbar.setNavigationOnClickListener { handleBack() }
 
-        loadTopics()
-        setupCategories()
-        setupSearch()
-        
-        backToListButton.setOnClickListener {
+            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    handleBack()
+                }
+            })
+
+            loadTopics()
+            setupCategories()
+            setupSearch()
+
+            backToListButton.setOnClickListener {
+                showCategories()
+            }
+
             showCategories()
+        } catch (e: Exception) {
+            Log.e("RadiaCode", "HelpCenterActivity.onCreate crashed", e)
+            finish()
         }
-
-        showCategories()
     }
 
     private fun loadTopics() {
@@ -500,7 +512,7 @@ Minimize exposure. Leave area unless you understand the source.
         topicContent.text = topic.content
     }
 
-    override fun onBackPressed() {
+    private fun handleBack() {
         when {
             topicDetailContainer.visibility == View.VISIBLE -> {
                 if (currentCategory != null) {
@@ -510,7 +522,7 @@ Minimize exposure. Leave area unless you understand the source.
                 }
             }
             topicsList.visibility == View.VISIBLE -> showCategories()
-            else -> super.onBackPressed()
+            else -> finish()
         }
     }
 

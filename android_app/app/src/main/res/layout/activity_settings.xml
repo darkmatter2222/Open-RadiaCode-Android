@@ -26,6 +26,19 @@
             android:orientation="vertical"
             android:padding="12dp">
 
+            <!-- ═══ General ═══ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="GENERAL"
+                android:textColor="@color/pro_cyan"
+                android:textSize="12sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp" />
+
             <!-- Display Units -->
             <LinearLayout
                 android:id="@+id/rowUnits"
@@ -50,40 +63,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Dose rate and count rate units" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_gravity="center_vertical"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/pro_text_muted" />
-            </LinearLayout>
-
-            <!-- Smart Alerts -->
-            <LinearLayout
-                android:id="@+id/rowAlerts"
-                style="@style/SettingsRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/SettingsRowTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Smart Alerts" />
-
-                    <TextView
-                        style="@style/SettingsRowSub"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Threshold-based and anomaly alerts" />
                 </LinearLayout>
 
                 <ImageView
@@ -128,6 +107,53 @@
                     app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
+            <!-- ═══ Dashboard ═══ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="DASHBOARD"
+                android:textColor="@color/pro_cyan"
+                android:textSize="12sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
+
+            <!-- Smart Alerts -->
+            <LinearLayout
+                android:id="@+id/rowAlerts"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Smart Alerts" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Threshold-based and anomaly alerts" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
+            </LinearLayout>
+
             <!-- Sound & Geiger -->
             <LinearLayout
                 android:id="@+id/rowSound"
@@ -152,40 +178,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="Audio tick and alert sounds" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_gravity="center_vertical"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/pro_text_muted" />
-            </LinearLayout>
-
-            <!-- Isotope Detection -->
-            <LinearLayout
-                android:id="@+id/rowIsotope"
-                style="@style/SettingsRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/SettingsRowTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Isotope Detection" />
-
-                    <TextView
-                        style="@style/SettingsRowSub"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="ML model and scan settings" />
                 </LinearLayout>
 
                 <ImageView
@@ -264,6 +256,66 @@
                     app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
+            <!-- ═══ Isotope ═══ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ISOTOPE"
+                android:textColor="@color/pro_cyan"
+                android:textSize="12sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
+
+            <!-- Isotope Detection -->
+            <LinearLayout
+                android:id="@+id/rowIsotope"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Isotope Detection" />
+
+                    <TextView
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="ML model and scan settings" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
+            </LinearLayout>
+
+            <!-- ═══ Home Screen ═══ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="HOME SCREEN"
+                android:textColor="@color/pro_cyan"
+                android:textSize="12sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
+
             <!-- Widgets -->
             <LinearLayout
                 android:id="@+id/rowWidgets"
@@ -297,6 +349,19 @@
                     android:src="@drawable/ic_chevron_right"
                     app:tint="@color/pro_text_muted" />
             </LinearLayout>
+
+            <!-- ═══ Support ═══ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="SUPPORT"
+                android:textColor="@color/pro_cyan"
+                android:textSize="12sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold"
+                android:paddingStart="4dp"
+                android:paddingTop="20dp"
+                android:paddingBottom="8dp" />
 
             <!-- Help Center -->
             <LinearLayout

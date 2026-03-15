@@ -7,7 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -334,6 +336,23 @@ class MapFragment : Fragment() {
 
     private fun showSessionsExplanationOrLaunch() {
         val ctx = requireContext()
+
+        // Skip dialog if user dismissed it before
+        if (Prefs.isFeatureInfoDismissed(ctx, "logbook_sessions")) {
+            startActivity(Intent(ctx, SessionListActivity::class.java))
+            return
+        }
+
+        val checkBox = CheckBox(ctx).apply {
+            text = "Don't show again"
+            setTextColor(ContextCompat.getColor(ctx, R.color.pro_text_secondary))
+        }
+        val container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(64, 16, 64, 0)
+            addView(checkBox)
+        }
+
         AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
             .setTitle("Log Book / Session History")
             .setMessage(
@@ -348,7 +367,11 @@ class MapFragment : Fragment() {
                 "\u2022 Delete old sessions\n\n" +
                 "The data visible on the map RIGHT NOW is your current session."
             )
+            .setView(container)
             .setPositiveButton("Open Log Book") { _, _ ->
+                if (checkBox.isChecked) {
+                    Prefs.setFeatureInfoDismissed(ctx, "logbook_sessions", true)
+                }
                 startActivity(Intent(ctx, SessionListActivity::class.java))
             }
             .setNegativeButton("Cancel", null)

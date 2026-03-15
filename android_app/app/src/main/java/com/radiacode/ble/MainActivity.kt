@@ -190,6 +190,21 @@ class MainActivity : AppCompatActivity() {
                 doseHistory.add(ts, uSvH)
                 cpsHistory.add(ts, cps)
                 sampleCount++
+
+                // --- Session recording: auto-start + feed data ---
+                if (!SessionManager.isRecording(this@MainActivity)) {
+                    SessionManager.startSession(this@MainActivity)
+                }
+                val lat = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LATITUDE, Double.NaN)
+                val lng = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LONGITUDE, Double.NaN)
+                SessionManager.addDataPoint(
+                    this@MainActivity,
+                    uSvH, cps,
+                    if (lat.isNaN()) null else lat,
+                    if (lng.isNaN()) null else lng,
+                    deviceId
+                )
+
                 uiDirty = true
                 
                 // Trigger immediate chart update (throttled to avoid overwhelming the UI)
@@ -919,6 +934,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Finalize any active recording session
+        if (SessionManager.isRecording(this)) {
+            SessionManager.stopSession(this)
+        }
         if (BuildConfig.DEBUG) {
             com.radiacode.ble.testing.TestReceiver.activityRef = null
         }

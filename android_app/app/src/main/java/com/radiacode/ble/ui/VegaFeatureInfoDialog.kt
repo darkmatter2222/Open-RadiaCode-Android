@@ -587,14 +587,9 @@ CONS
         
         setCanceledOnTouchOutside(false)
         
-        // Start playback if voice is enabled
-        if (Prefs.isVegaTtsEnabled(context)) {
-            playFeatureExplanation()
-        } else {
-            waveformView.setUsingRealAudio(false)
-            startSimulatedWaveform()
-            startScrollAnimation(30000)  // Default 30 second scroll
-        }
+        // Always play pre-baked audio -- these are local WAV files, not remote TTS.
+        // The global isVegaTtsEnabled pref controls the remote TTS API, not local files.
+        playFeatureExplanation()
     }
     
     private fun createLayout(): View {
