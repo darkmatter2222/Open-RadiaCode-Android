@@ -61,6 +61,9 @@ object Prefs {
     private const val KEY_MAP_GRID_ORIGIN_LAT = "map_grid_origin_lat"
     private const val KEY_MAP_GRID_ORIGIN_LNG = "map_grid_origin_lng"
     private const val KEY_MAP_THEME = "map_theme"
+    private const val KEY_MAP_SCALE_AUTO = "map_scale_auto"
+    private const val KEY_MAP_SCALE_MIN = "map_scale_min"
+    private const val KEY_MAP_SCALE_MAX = "map_scale_max"
     private const val KEY_GPS_TRACKING_ENABLED = "gps_tracking_enabled"
     private const val KEY_GPS_TIER = "gps_tier"
     private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
@@ -2057,7 +2060,57 @@ object Prefs {
             .putString(KEY_MAP_THEME, theme.name)
             .apply()
     }
-    
+
+    // ── Map Color Scale ──────────────────────────────────────────────
+
+    /**
+     * Whether the color scale uses auto-ranging (computed from data).
+     * When false, the user-specified min/max are used.
+     */
+    fun isMapScaleAuto(context: Context): Boolean {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_MAP_SCALE_AUTO, true)
+    }
+
+    fun setMapScaleAuto(context: Context, auto: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_MAP_SCALE_AUTO, auto)
+            .apply()
+    }
+
+    /**
+     * User-configured minimum value for the color scale (uSv/h or CPS
+     * depending on current metric).  Only used when auto-scale is off.
+     */
+    fun getMapScaleMin(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_MAP_SCALE_MIN, 0f)
+    }
+
+    fun setMapScaleMin(context: Context, min: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_MAP_SCALE_MIN, min)
+            .apply()
+    }
+
+    /**
+     * User-configured maximum value for the color scale.
+     * Only used when auto-scale is off.
+     */
+    fun getMapScaleMax(context: Context): Float {
+        return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getFloat(KEY_MAP_SCALE_MAX, 1f)
+    }
+
+    fun setMapScaleMax(context: Context, max: Float) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_MAP_SCALE_MAX, max)
+            .apply()
+    }
+
     // ========== Map Widget Configuration ==========
     
     private const val KEY_MAP_WIDGET_CONFIG_PREFIX = "map_widget_config_"

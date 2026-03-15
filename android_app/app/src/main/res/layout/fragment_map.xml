@@ -168,6 +168,99 @@
             android:textColor="@color/pro_text_muted"
             android:textSize="10sp" />
 
+        <!-- Color scale controls row -->
+        <LinearLayout
+            android:id="@+id/scaleControlRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:letterSpacing="0.08"
+                android:text="SCALE:"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/chipScaleAuto"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/chip_outline_background"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="AUTO"
+                android:textColor="@color/pro_green"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="Min:"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp" />
+
+            <EditText
+                android:id="@+id/editScaleMin"
+                android:layout_width="68dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/chip_outline_background"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:hint="0.000"
+                android:inputType="numberDecimal"
+                android:maxLines="1"
+                android:paddingHorizontal="4dp"
+                android:textColor="@color/pro_text_secondary"
+                android:textColorHint="@color/pro_text_muted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:text="Max:"
+                android:textColor="@color/pro_text_muted"
+                android:textSize="10sp" />
+
+            <EditText
+                android:id="@+id/editScaleMax"
+                android:layout_width="68dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/chip_outline_background"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:hint="1.000"
+                android:inputType="numberDecimal"
+                android:maxLines="1"
+                android:paddingHorizontal="4dp"
+                android:textColor="@color/pro_text_secondary"
+                android:textColorHint="@color/pro_text_muted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/btnApplyScale"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/chip_outline_background"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="SET"
+                android:textColor="@color/pro_cyan"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <!-- Action buttons row -->
         <LinearLayout
             android:layout_width="match_parent"

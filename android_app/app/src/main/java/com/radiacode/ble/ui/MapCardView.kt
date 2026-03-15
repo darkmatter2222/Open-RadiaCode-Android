@@ -93,6 +93,10 @@ class MapCardView @JvmOverloads constructor(
     // Data
     private var selectedMetric = MetricType.DOSE_RATE
     private val dataPoints = mutableListOf<Prefs.MapDataPoint>()
+
+    // Color scale override: when non-null the scale is pinned to these values
+    private var scaleOverrideMin: Float? = null
+    private var scaleOverrideMax: Float? = null
     
     // Hexagon grid data: maps hex cell ID -> list of readings
     private val hexagonData = mutableMapOf<String, MutableList<HexReading>>()
@@ -609,8 +613,16 @@ class MapCardView @JvmOverloads constructor(
     
     /**
      * Get global min/max values across all hexagons.
+     * Respects manual scale overrides when set.
      */
     private fun getGlobalMinMax(): Pair<Float, Float> {
+        // If manual overrides are set, use them directly
+        val oMin = scaleOverrideMin
+        val oMax = scaleOverrideMax
+        if (oMin != null && oMax != null) {
+            return Pair(oMin, if (oMax > oMin) oMax else oMin + 0.001f)
+        }
+
         if (hexagonData.isEmpty()) return Pair(0f, 1f)
         
         val allValues = hexagonData.values.flatten().map { reading ->
@@ -627,6 +639,21 @@ class MapCardView @JvmOverloads constructor(
         
         return Pair(minVal, if (maxVal > minVal) maxVal else minVal + 1f)
     }
+
+    /**
+     * Set a manual color scale range.  Pass null to revert to auto-scaling.
+     */
+    fun setScaleRange(min: Float?, max: Float?) {
+        scaleOverrideMin = min
+        scaleOverrideMax = max
+        updateScaleBar()
+        mapView.invalidate()
+    }
+
+    /**
+     * Return the current effective min/max (auto or manual).
+     */
+    fun getEffectiveMinMax(): Pair<Float, Float> = getGlobalMinMax()
     
     private fun interpolateColor(normalizedValue: Float): Int {
         // Green (low) -> Yellow (medium) -> Red (high)

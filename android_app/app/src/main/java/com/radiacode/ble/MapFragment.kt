@@ -5,6 +5,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -37,6 +39,12 @@ class MapFragment : Fragment() {
     private lateinit var btnSessions: MaterialButton
     private lateinit var btnMapTheme: ImageButton
 
+    // Color scale controls
+    private lateinit var chipScaleAuto: TextView
+    private lateinit var editScaleMin: EditText
+    private lateinit var editScaleMax: EditText
+    private lateinit var btnApplyScale: TextView
+
     // Route recording
     private lateinit var routeRecordingBar: View
     private lateinit var routeRecordingLabel: TextView
@@ -57,6 +65,7 @@ class MapFragment : Fragment() {
         setupGpsTierSelector()
         setupMapControls()
         setupBottomBar()
+        setupScaleControls()
         loadMap()
     }
 
@@ -69,6 +78,10 @@ class MapFragment : Fragment() {
         btnExportData = view.findViewById(R.id.btnExportData)
         btnSessions = view.findViewById(R.id.btnSessions)
         btnMapTheme = view.findViewById(R.id.btnMapTheme)
+        chipScaleAuto = view.findViewById(R.id.chipScaleAuto)
+        editScaleMin = view.findViewById(R.id.editScaleMin)
+        editScaleMax = view.findViewById(R.id.editScaleMax)
+        btnApplyScale = view.findViewById(R.id.btnApplyScale)
         routeRecordingBar = view.findViewById(R.id.routeRecordingBar)
         routeRecordingLabel = view.findViewById(R.id.routeRecordingLabel)
         routeRecordingTime = view.findViewById(R.id.routeRecordingTime)
@@ -158,6 +171,97 @@ class MapFragment : Fragment() {
             showSessionsExplanationOrLaunch()
         }
     }
+
+    // ── Color scale min/max controls ──────────────────────────────────
+
+    private fun setupScaleControls() {
+        val ctx = requireContext()
+        val isAuto = Prefs.isMapScaleAuto(ctx)
+        updateScaleAutoUi(isAuto)
+
+        // Load persisted manual values into the fields
+        if (!isAuto) {
+            editScaleMin.setText(formatScaleValue(Prefs.getMapScaleMin(ctx)))
+            editScaleMax.setText(formatScaleValue(Prefs.getMapScaleMax(ctx)))
+        }
+
+        chipScaleAuto.setOnClickListener {
+            val wasAuto = Prefs.isMapScaleAuto(ctx)
+            val nowAuto = !wasAuto
+            Prefs.setMapScaleAuto(ctx, nowAuto)
+            updateScaleAutoUi(nowAuto)
+            if (nowAuto) {
+                mapCard.setScaleRange(null, null)
+            } else {
+                applyManualScale()
+            }
+        }
+
+        btnApplyScale.setOnClickListener {
+            applyManualScale()
+        }
+
+        // Also apply when user presses Done on the keyboard
+        val applyOnDone = TextView.OnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                applyManualScale()
+                true
+            } else false
+        }
+        editScaleMin.setOnEditorActionListener(applyOnDone)
+        editScaleMax.setOnEditorActionListener(applyOnDone)
+    }
+
+    private fun applyManualScale() {
+        val ctx = requireContext()
+        val minStr = editScaleMin.text.toString().trim()
+        val maxStr = editScaleMax.text.toString().trim()
+        val min = minStr.toFloatOrNull()
+        val max = maxStr.toFloatOrNull()
+
+        if (min == null || max == null) {
+            Toast.makeText(ctx, "Enter valid numbers for min and max", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (min >= max) {
+            Toast.makeText(ctx, "Min must be less than max", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Prefs.setMapScaleAuto(ctx, false)
+        Prefs.setMapScaleMin(ctx, min)
+        Prefs.setMapScaleMax(ctx, max)
+        updateScaleAutoUi(false)
+        mapCard.setScaleRange(min, max)
+    }
+
+    private fun updateScaleAutoUi(isAuto: Boolean) {
+        val ctx = requireContext()
+        if (isAuto) {
+            chipScaleAuto.setTextColor(ContextCompat.getColor(ctx, R.color.pro_green))
+            editScaleMin.isEnabled = false
+            editScaleMax.isEnabled = false
+            btnApplyScale.isEnabled = false
+            editScaleMin.alpha = 0.4f
+            editScaleMax.alpha = 0.4f
+            btnApplyScale.alpha = 0.4f
+        } else {
+            chipScaleAuto.setTextColor(ContextCompat.getColor(ctx, R.color.pro_text_muted))
+            editScaleMin.isEnabled = true
+            editScaleMax.isEnabled = true
+            btnApplyScale.isEnabled = true
+            editScaleMin.alpha = 1.0f
+            editScaleMax.alpha = 1.0f
+            btnApplyScale.alpha = 1.0f
+        }
+    }
+
+    private fun formatScaleValue(value: Float): String {
+        return if (value < 10f) String.format("%.3f", value)
+        else String.format("%.1f", value)
+    }
+
+    // ── End scale controls ───────────────────────────────────────────
 
     private fun loadMap() {
         val ctx = requireContext()
@@ -294,6 +398,19 @@ class MapFragment : Fragment() {
         // Update chip state
         val tier = Prefs.getGpsTier(ctx)
         updateGpsTierHighlight(tier)
+
+        // Restore scale override from prefs
+        val isAuto = Prefs.isMapScaleAuto(ctx)
+        updateScaleAutoUi(isAuto)
+        if (!isAuto) {
+            val min = Prefs.getMapScaleMin(ctx)
+            val max = Prefs.getMapScaleMax(ctx)
+            editScaleMin.setText(formatScaleValue(min))
+            editScaleMax.setText(formatScaleValue(max))
+            mapCard.setScaleRange(min, max)
+        } else {
+            mapCard.setScaleRange(null, null)
+        }
     }
 
     override fun onPause() {
