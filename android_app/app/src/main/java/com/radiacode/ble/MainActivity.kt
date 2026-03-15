@@ -24,6 +24,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.tabs.TabLayout
@@ -394,18 +395,28 @@ class MainActivity : AppCompatActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        // Force ViewPager2 to recalculate page layouts and re-snap to
-        // the current page.  Without setCurrentItem the scroll offset
-        // becomes stale after the width change and the pager lands
-        // between two pages.
+        // ViewPager2 bug: when the container width changes (rotation) the
+        // internal RecyclerView's scroll offset becomes stale and the pager
+        // lands between two pages.  ViewPager2.setCurrentItem() is useless
+        // here because it short-circuits when currentItem hasn't changed.
+        //
+        // Fix: wait for the layout pass that applies the new dimensions,
+        // then tell the internal RecyclerView to snap directly to the
+        // correct adapter position.
         val currentItem = viewPager.currentItem
-        viewPager.post {
-            viewPager.requestLayout()
-            // Post again after layout so the new page width is known
-            viewPager.post {
-                viewPager.setCurrentItem(currentItem, false)
+        viewPager.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                v: View, left: Int, top: Int, right: Int, bottom: Int,
+                oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
+            ) {
+                viewPager.removeOnLayoutChangeListener(this)
+                // Post so we run after the layout pass is fully complete
+                viewPager.post {
+                    (viewPager.getChildAt(0) as? RecyclerView)
+                        ?.scrollToPosition(currentItem)
+                }
             }
-        }
+        })
     }
     
     /**
