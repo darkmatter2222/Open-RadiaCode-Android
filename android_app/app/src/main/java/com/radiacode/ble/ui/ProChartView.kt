@@ -1,5 +1,6 @@
 package com.radiacode.ble.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
@@ -7,6 +8,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.animation.LinearInterpolator
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.R
 import java.time.Instant
@@ -86,6 +88,11 @@ class ProChartView @JvmOverloads constructor(
         val name: String                     // Alert name for tooltip
     )
     private var alertMarkers: List<AlertMarker> = emptyList()
+
+    // Shimmer loading state
+    private var shimmerAnimator: ValueAnimator? = null
+    private var shimmerPhase = 0f
+    private var isShimmerActive = false
 
     // Zoom and Pan state
     private var zoomLevel: Float = 1f           // 1.0 = no zoom, 2.0 = 2x zoom
@@ -524,6 +531,35 @@ class ProChartView @JvmOverloads constructor(
         if (android.os.Build.VERSION.SDK_INT >= 19) {
             scaleGestureDetector.isQuickScaleEnabled = false
         }
+
+        // Start shimmer loading animation (will stop when data arrives)
+        startShimmer()
+    }
+
+    private fun startShimmer() {
+        if (isShimmerActive) return
+        isShimmerActive = true
+        shimmerAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1500L
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener {
+                shimmerPhase = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun stopShimmer() {
+        isShimmerActive = false
+        shimmerAnimator?.cancel()
+        shimmerAnimator = null
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        stopShimmer()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -815,6 +851,11 @@ class ProChartView @JvmOverloads constructor(
     fun setSeries(timestampsMs: List<Long>, samples: List<Float>) {
         this.timestampsMs = timestampsMs
         this.samples = samples
+
+        // Stop shimmer once we have real data
+        if (samples.size >= 2 && isShimmerActive) {
+            stopShimmer()
+        }
         
         // Preserve sticky marker by finding closest timestamp
         if (isStickyMode && stickyTimestampMs != null) {
@@ -1708,10 +1749,80 @@ class ProChartView @JvmOverloads constructor(
     }
 
     private fun drawEmptyState(canvas: Canvas) {
+        if (isShimmerActive) {
+            drawShimmer(canvas)
+        } else {
+            val centerX = (chartLeft + chartRight) / 2
+            val centerY = (chartTop + chartBottom) / 2
+            axisTextPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText("Waiting for data...", centerX, centerY, axisTextPaint)
+            axisTextPaint.textAlign = Paint.Align.LEFT
+        }
+    }
+
+    /**
+     * Draws a subtle shimmer/skeleton loading state with placeholder bars
+     * animated by a sweeping gradient, giving the impression of a loading chart.
+     */
+    private fun drawShimmer(canvas: Canvas) {
+        val chartWidth = chartRight - chartLeft
+        val chartHeight = chartBottom - chartTop
+        if (chartWidth <= 0f || chartHeight <= 0f) return
+
+        // Shimmer gradient sweep position
+        val shimmerWidth = chartWidth * 0.35f
+        val shimmerX = -shimmerWidth + (chartWidth + shimmerWidth * 2) * shimmerPhase
+
+        val shimmerGradient = LinearGradient(
+            chartLeft + shimmerX, 0f,
+            chartLeft + shimmerX + shimmerWidth, 0f,
+            intArrayOf(0xFF1A1A1A.toInt(), 0xFF2A2A2A.toInt(), 0xFF1A1A1A.toInt()),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+
+        val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            shader = shimmerGradient
+        }
+
+        // Draw placeholder bars resembling a bar chart skeleton
+        val barCount = 12
+        val barGap = density * 3f
+        val totalGap = barGap * (barCount + 1)
+        val barWidth = (chartWidth - totalGap) / barCount
+
+        // Predetermined heights (normalized 0..1) to look like a plausible chart
+        val heights = floatArrayOf(
+            0.25f, 0.40f, 0.35f, 0.55f, 0.70f, 0.60f,
+            0.80f, 0.65f, 0.50f, 0.45f, 0.30f, 0.38f
+        )
+
+        for (i in 0 until barCount) {
+            val left = chartLeft + barGap + i * (barWidth + barGap)
+            val h = heights[i % heights.size] * chartHeight * 0.7f
+            val top = chartBottom - h
+            val right = left + barWidth
+            canvas.drawRoundRect(left, top, right, chartBottom, density * 2f, density * 2f, barPaint)
+        }
+
+        // Draw a faint horizontal grid to reinforce the chart look
+        val shimmerGridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = density * 0.5f
+            color = 0xFF1E1E1E.toInt()
+        }
+        for (i in 1..3) {
+            val y = chartTop + chartHeight * (i.toFloat() / 4f)
+            canvas.drawLine(chartLeft, y, chartRight, y, shimmerGridPaint)
+        }
+
+        // Subtle "loading" text centered below the bars
         val centerX = (chartLeft + chartRight) / 2
-        val centerY = (chartTop + chartBottom) / 2
         axisTextPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText("Waiting for data…", centerX, centerY, axisTextPaint)
+        axisTextPaint.alpha = 100
+        canvas.drawText("Loading chart data...", centerX, chartBottom + density * 16f, axisTextPaint)
+        axisTextPaint.alpha = 255
         axisTextPaint.textAlign = Paint.Align.LEFT
     }
 

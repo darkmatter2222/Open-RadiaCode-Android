@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -96,7 +97,10 @@ class AlertConfigActivity : AppCompatActivity() {
 
         fab.setOnClickListener {
             if (alerts.size >= MAX_ALERTS) {
-                Toast.makeText(this, "Maximum $MAX_ALERTS alerts allowed", Toast.LENGTH_SHORT).show()
+                Snackbar.make(findViewById(android.R.id.content), "Maximum $MAX_ALERTS alerts allowed", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                    .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                    .show()
             } else {
                 showAlertDialog(null)
             }
@@ -388,7 +392,7 @@ class AlertConfigActivity : AppCompatActivity() {
         val alert = alerts[position]
         
         // Show confirmation dialog
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Delete Alert")
             .setMessage("Are you sure you want to delete \"${alert.name}\"?")
             .setPositiveButton("Delete") { _, _ ->
@@ -396,7 +400,10 @@ class AlertConfigActivity : AppCompatActivity() {
                 alerts.removeAt(position)
                 adapter.notifyItemRemoved(position)
                 updateEmptyState()
-                Toast.makeText(this, "Alert deleted", Toast.LENGTH_SHORT).show()
+                Snackbar.make(findViewById(android.R.id.content), "Alert deleted", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                    .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                    .show()
             }
             .setNegativeButton("Cancel", null)
             .show()

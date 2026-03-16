@@ -12,6 +12,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
+import android.widget.PopupMenu
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import android.view.HapticFeedbackConstants
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,6 +30,7 @@ class SessionListActivity : AppCompatActivity() {
     private lateinit var emptyView: View
     private lateinit var fab: FloatingActionButton
     private lateinit var compareButton: Button
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     
     private lateinit var adapter: SessionAdapter
     private var sessions = mutableListOf<SessionManager.Session>()
@@ -53,6 +58,20 @@ class SessionListActivity : AppCompatActivity() {
         emptyView = findViewById(R.id.emptyView)
         fab = findViewById(R.id.fabNewSession)
         compareButton = findViewById(R.id.compareButton)
+        swipeRefresh = findViewById(R.id.swipeRefresh)
+
+        swipeRefresh.setColorSchemeColors(
+            ContextCompat.getColor(this, R.color.pro_cyan)
+        )
+        swipeRefresh.setProgressBackgroundColorSchemeColor(
+            ContextCompat.getColor(this, R.color.pro_surface)
+        )
+        swipeRefresh.setOnRefreshListener {
+            loadSessions()
+            adapter.notifyDataSetChanged()
+            updateEmptyView()
+            swipeRefresh.isRefreshing = false
+        }
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -62,7 +81,10 @@ class SessionListActivity : AppCompatActivity() {
         loadSessions()
         setupRecyclerView()
         
-        fab.setOnClickListener { startNewSession() }
+        fab.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            startNewSession()
+        }
         compareButton.setOnClickListener { compareSessions() }
         
         updateCompareButtonVisibility()
@@ -119,12 +141,36 @@ class SessionListActivity : AppCompatActivity() {
         adapter = SessionAdapter(
             sessions = sessions,
             onItemClick = { session -> openSession(session) },
-            onItemLongClick = { session -> toggleSelection(session) },
+            onItemLongClick = { anchor, session -> showContextMenu(anchor, session) },
             isSelected = { session -> selectedForComparison.contains(session.id) },
             formatDate = { dateFormat.format(Date(it)) }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
+    }
+
+    private fun showContextMenu(anchor: View, session: SessionManager.Session) {
+        anchor.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        val popup = PopupMenu(this, anchor)
+        if (session.isActive) popup.menu.add("Stop Recording")
+        popup.menu.add("Rename")
+        popup.menu.add("Add Notes")
+        popup.menu.add("Export CSV")
+        val selectLabel = if (selectedForComparison.contains(session.id)) "Deselect" else "Select for Compare"
+        popup.menu.add(selectLabel)
+        popup.menu.add("Delete")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.title) {
+                "Stop Recording" -> stopSession(session)
+                "Rename" -> renameSession(session)
+                "Add Notes" -> editNotes(session)
+                "Export CSV" -> exportSession(session)
+                "Select for Compare", "Deselect" -> toggleSelection(session)
+                "Delete" -> confirmDelete(session)
+            }
+            true
+        }
+        popup.show()
     }
 
     private fun updateEmptyView() {
@@ -143,7 +189,7 @@ class SessionListActivity : AppCompatActivity() {
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Start New Session")
             .setMessage("Enter a name for this recording session")
             .setView(input)
@@ -155,7 +201,10 @@ class SessionListActivity : AppCompatActivity() {
                 recyclerView.scrollToPosition(0)
                 updateEmptyView()
                 
-                Toast.makeText(this, "Recording started", Toast.LENGTH_SHORT).show()
+                Snackbar.make(findViewById(android.R.id.content), "Recording started", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                    .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                    .show()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -167,7 +216,7 @@ class SessionListActivity : AppCompatActivity() {
             options.add(0, "Stop Recording")
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle(session.name)
             .setItems(options.toTypedArray()) { _, which ->
                 val action = options[which]
@@ -184,11 +233,15 @@ class SessionListActivity : AppCompatActivity() {
     }
 
     private fun stopSession(session: SessionManager.Session) {
+        findViewById<View>(android.R.id.content).performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         SessionManager.stopSession(this)
         loadSessions()
         adapter.notifyDataSetChanged()
         updateEmptyView()
-        Toast.makeText(this, "Recording stopped", Toast.LENGTH_SHORT).show()
+        Snackbar.make(findViewById(android.R.id.content), "Recording stopped", Snackbar.LENGTH_SHORT)
+            .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+            .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+            .show()
     }
 
     private fun showSessionDetails(session: SessionManager.Session) {
@@ -234,7 +287,7 @@ class SessionListActivity : AppCompatActivity() {
             }
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Session Details")
             .setMessage(details)
             .setPositiveButton("OK", null)
@@ -247,7 +300,7 @@ class SessionListActivity : AppCompatActivity() {
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Rename Session")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
@@ -269,7 +322,7 @@ class SessionListActivity : AppCompatActivity() {
             setPadding(48, 32, 48, 32)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Session Notes")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
@@ -285,7 +338,10 @@ class SessionListActivity : AppCompatActivity() {
     private fun exportSession(session: SessionManager.Session) {
         val data = SessionManager.getSessionData(this, session.id)
         if (data.isEmpty()) {
-            Toast.makeText(this, "No data in session", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "No data in session", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
             return
         }
 
@@ -305,7 +361,7 @@ class SessionListActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(session: SessionManager.Session) {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Delete Session?")
             .setMessage("This will permanently delete \"${session.name}\" and all its data.")
             .setPositiveButton("Delete") { _, _ ->
@@ -326,7 +382,10 @@ class SessionListActivity : AppCompatActivity() {
         } else if (selectedForComparison.size < 2) {
             selectedForComparison.add(session.id)
         } else {
-            Toast.makeText(this, "Select up to 2 sessions to compare", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "Select up to 2 sessions to compare", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
         }
         adapter.notifyDataSetChanged()
         updateCompareButtonVisibility()
@@ -342,7 +401,10 @@ class SessionListActivity : AppCompatActivity() {
 
         val comparison = SessionManager.compareSessions(this, ids[0], ids[1])
         if (comparison == null) {
-            Toast.makeText(this, "Cannot compare sessions", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "Cannot compare sessions", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
             return
         }
 
@@ -366,7 +428,7 @@ class SessionListActivity : AppCompatActivity() {
             appendLine(comparison.summary)
         }
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Session Comparison")
             .setMessage(details)
             .setPositiveButton("OK") { _, _ ->
@@ -383,7 +445,7 @@ class SessionListActivity : AppCompatActivity() {
     inner class SessionAdapter(
         private val sessions: List<SessionManager.Session>,
         private val onItemClick: (SessionManager.Session) -> Unit,
-        private val onItemLongClick: (SessionManager.Session) -> Unit,
+        private val onItemLongClick: (View, SessionManager.Session) -> Unit,
         private val isSelected: (SessionManager.Session) -> Boolean,
         private val formatDate: (Long) -> String
     ) : RecyclerView.Adapter<SessionAdapter.ViewHolder>() {
@@ -425,7 +487,7 @@ class SessionListActivity : AppCompatActivity() {
 
             holder.container.setOnClickListener { onItemClick(session) }
             holder.container.setOnLongClickListener { 
-                onItemLongClick(session)
+                onItemLongClick(it, session)
                 true
             }
         }

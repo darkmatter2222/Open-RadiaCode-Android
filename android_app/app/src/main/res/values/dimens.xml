@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <!-- Card and surface corners -->
+    <dimen name="card_corner_radius">12dp</dimen>
+    <dimen name="chip_corner_radius">16dp</dimen>
+    <dimen name="button_corner_radius">17dp</dimen>
+
+    <!-- Card padding -->
+    <dimen name="card_padding">12dp</dimen>
+    <dimen name="card_padding_large">16dp</dimen>
+
+    <!-- Toolbar -->
+    <dimen name="toolbar_compact_height">36dp</dimen>
+    <dimen name="tab_height">48dp</dimen>
+
+    <!-- Text sizes -->
+    <dimen name="text_caption">10sp</dimen>
+    <dimen name="text_body_small">11sp</dimen>
+    <dimen name="text_body">14sp</dimen>
+    <dimen name="text_title">18sp</dimen>
+    <dimen name="text_headline">24sp</dimen>
+
+    <!-- Icon sizes -->
+    <dimen name="icon_sm">16dp</dimen>
+    <dimen name="icon_md">20dp</dimen>
+    <dimen name="icon_lg">28dp</dimen>
+    <dimen name="icon_xl">36dp</dimen>
+
+    <!-- Status dots -->
+    <dimen name="status_dot_sm">6dp</dimen>
+    <dimen name="status_dot_md">8dp</dimen>
+
+    <!-- Map controls -->
+    <dimen name="map_button_size">36dp</dimen>
+    <dimen name="map_button_padding">8dp</dimen>
+    <dimen name="scale_input_width">68dp</dimen>
+    <dimen name="scale_input_height">28dp</dimen>
+
+    <!-- Bottom bar -->
+    <dimen name="bottom_button_height">34dp</dimen>
+    <dimen name="bottom_bar_elevation">4dp</dimen>
+
+    <!-- Session list -->
+    <dimen name="session_card_margin">12dp</dimen>
+    <dimen name="fab_margin">16dp</dimen>
+</resources>

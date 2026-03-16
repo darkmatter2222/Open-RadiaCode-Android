@@ -8,12 +8,12 @@ import android.os.Looper
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.chip.Chip
+import com.google.android.material.snackbar.Snackbar
 import com.radiacode.ble.ui.ProChartView
 import java.io.File
 import java.time.Instant
@@ -658,7 +658,10 @@ class DetailedChartActivity : AppCompatActivity() {
             // First point
             selectionStartIdx = index
             chipSelectRange.text = "Tap end…"
-            Toast.makeText(this, "Start point selected. Tap end point.", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "Start point selected. Tap end point.", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
         } else {
             // Second point - complete selection
             selectionEndIdx = index
@@ -786,7 +789,10 @@ class DetailedChartActivity : AppCompatActivity() {
     
     private fun exportData() {
         if (values.isEmpty()) {
-            Toast.makeText(this, "No data to export", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "No data to export", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
             return
         }
         
@@ -819,7 +825,10 @@ class DetailedChartActivity : AppCompatActivity() {
             startActivity(Intent.createChooser(shareIntent, "Export $kind data"))
             
         } catch (e: Exception) {
-            Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            Snackbar.make(findViewById(android.R.id.content), "Export failed: ${e.message}", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                .show()
         }
     }
     

@@ -1,9 +1,11 @@
 package com.radiacode.ble.ui
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.R
 import java.util.Locale
@@ -32,12 +34,19 @@ class MetricCardView @JvmOverloads constructor(
     // Data
     private var label: String = "VALUE"
     private var value: Float = 0f
+    private var displayValue: Float = 0f  // Animated value currently being rendered
     private var valueText: String? = null  // If set, displayed instead of formatted value
     private var unit: String = "unit"
     private var trend: Float = 0f // percentage change
     private var sparklineData: List<Float> = emptyList()
     private var accentColor: Int = ContextCompat.getColor(context, R.color.pro_cyan)
     private var showTrendArrows: Boolean = true  // Toggle for trend arrow visibility
+
+    // Smooth value animation
+    private var valueAnimator: ValueAnimator? = null
+    private companion object {
+        private const val ANIMATION_DURATION_MS = 300L
+    }
     
     // Statistics (calculated from sparkline data)
     private var mean: Float = 0f
@@ -99,16 +108,34 @@ class MetricCardView @JvmOverloads constructor(
         setLayerType(LAYER_TYPE_HARDWARE, null)
     }
 
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        valueAnimator?.cancel()
+        valueAnimator = null
+    }
+
     fun setLabel(label: String) {
         this.label = label.uppercase()
         invalidate()
     }
 
     fun setValue(value: Float, unit: String) {
+        val oldDisplayValue = this.displayValue
         this.value = value
         this.unit = unit
         this.valueText = null
-        invalidate()
+
+        // Animate from current displayed value to new value
+        valueAnimator?.cancel()
+        valueAnimator = ValueAnimator.ofFloat(oldDisplayValue, value).apply {
+            duration = ANIMATION_DURATION_MS
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animator ->
+                displayValue = animator.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
     }
 
     fun setValueText(text: String) {
@@ -187,8 +214,8 @@ class MetricCardView @JvmOverloads constructor(
         // Trend (top right)
         drawTrend(canvas, w - padding, padding + trendPaint.textSize)
 
-        // Value (center)
-        val displayText = valueText ?: formatValue(value)
+        // Value (center) - uses displayValue for smooth animation
+        val displayText = valueText ?: formatValue(displayValue)
         val valueY = padding + labelPaint.textSize + density * 8f + valuePaint.textSize
         canvas.drawText(displayText, padding, valueY, valuePaint)
 

@@ -452,6 +452,10 @@ Let us begin.
         }, 3000)
     }
     
+    override fun onBackPressed() {
+        dismissIntro()
+    }
+
     private fun dismissIntro() {
         cleanup()
         dismiss()
@@ -498,9 +502,7 @@ Let us begin.
         super.onStop()
     }
     
-    override fun onBackPressed() {
-        dismissIntro()
-    }
+    // Note: back press is handled via onBackPressedDispatcher in setupBackHandler()
 }
 
 /**

@@ -1,6 +1,7 @@
 package com.radiacode.ble
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -9,9 +10,9 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.CheckBox
 import android.widget.ImageButton
+import android.view.HapticFeedbackConstants
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -40,6 +41,7 @@ class MapFragment : Fragment() {
     private lateinit var btnExportData: MaterialButton
     private lateinit var btnSessions: MaterialButton
     private lateinit var btnMapTheme: ImageButton
+    private lateinit var btnFullscreen: ImageButton
 
     // Color scale controls
     private lateinit var chipScaleAuto: TextView
@@ -51,6 +53,9 @@ class MapFragment : Fragment() {
     private lateinit var routeRecordingBar: View
     private lateinit var routeRecordingLabel: TextView
     private lateinit var routeRecordingTime: TextView
+
+    // Bottom panel collapse
+    private var isPanelCollapsed = false
 
     private val mainActivity: MainActivity?
         get() = activity as? MainActivity
@@ -69,6 +74,26 @@ class MapFragment : Fragment() {
         setupBottomBar()
         setupScaleControls()
         loadMap()
+        adaptToOrientation(resources.configuration)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        adaptToOrientation(newConfig)
+    }
+
+    /** In landscape, collapse the bottom bar controls to maximize map space. */
+    private fun adaptToOrientation(config: Configuration) {
+        val isLandscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val view = view ?: return
+        // Hide GPS tier bar and bottom bar verbose rows in landscape
+        view.findViewById<View>(R.id.gpsTierBar)?.visibility =
+            if (isLandscape) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.scaleControlRow)?.visibility =
+            if (isLandscape) View.GONE else View.VISIBLE
+        // Collapse the bottom bar info text and description labels
+        val bottomBar = view.findViewById<LinearLayout>(R.id.mapBottomBar)
+        bottomBar?.visibility = if (isLandscape) View.GONE else View.VISIBLE
     }
 
     private fun bindViews(view: View) {
@@ -87,6 +112,7 @@ class MapFragment : Fragment() {
         routeRecordingBar = view.findViewById(R.id.routeRecordingBar)
         routeRecordingLabel = view.findViewById(R.id.routeRecordingLabel)
         routeRecordingTime = view.findViewById(R.id.routeRecordingTime)
+        btnFullscreen = view.findViewById(R.id.btnFullscreen)
     }
 
     private fun setupGpsTierSelector() {
@@ -154,6 +180,10 @@ class MapFragment : Fragment() {
         btnMapTheme.setOnClickListener {
             showMapThemeDialog()
         }
+        btnFullscreen.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            FullscreenMapActivity.launch(requireContext())
+        }
 
         // Map card doesn't need the "enable GPS" overlay anymore since GPS
         // is always in at least passive mode. But update state just in case.
@@ -171,6 +201,24 @@ class MapFragment : Fragment() {
         // Sessions button (Point 15)
         btnSessions.setOnClickListener {
             showSessionsExplanationOrLaunch()
+        }
+
+        // Collapse/expand handle
+        val btnCollapse = view?.findViewById<android.widget.ImageView>(R.id.btnCollapsePanel)
+        val collapsibleContent = view?.findViewById<View>(R.id.panelCollapsibleContent)
+        btnCollapse?.setOnClickListener {
+            isPanelCollapsed = !isPanelCollapsed
+            if (isPanelCollapsed) {
+                collapsibleContent?.animate()?.alpha(0f)?.setDuration(200)?.withEndAction {
+                    collapsibleContent.visibility = View.GONE
+                }?.start()
+                btnCollapse.animate().rotation(180f).setDuration(200).start()
+            } else {
+                collapsibleContent?.visibility = View.VISIBLE
+                collapsibleContent?.alpha = 0f
+                collapsibleContent?.animate()?.alpha(1f)?.setDuration(200)?.start()
+                btnCollapse.animate().rotation(0f).setDuration(200).start()
+            }
         }
     }
 
@@ -222,11 +270,17 @@ class MapFragment : Fragment() {
         val max = maxStr.toFloatOrNull()
 
         if (min == null || max == null) {
-            Toast.makeText(ctx, "Enter valid numbers for min and max", Toast.LENGTH_SHORT).show()
+            Snackbar.make(requireView(), "Enter valid numbers for min and max", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(requireContext(), R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(requireContext(), R.color.pro_cyan))
+                .show()
             return
         }
         if (min >= max) {
-            Toast.makeText(ctx, "Min must be less than max", Toast.LENGTH_SHORT).show()
+            Snackbar.make(requireView(), "Min must be less than max", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(requireContext(), R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(requireContext(), R.color.pro_cyan))
+                .show()
             return
         }
 
@@ -283,7 +337,10 @@ class MapFragment : Fragment() {
         try {
             val dataPoints = ma.buildExportDataPoints()
             if (dataPoints.isEmpty()) {
-                Toast.makeText(ctx, "No data to export", Toast.LENGTH_SHORT).show()
+                Snackbar.make(requireView(), "No data to export", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(ContextCompat.getColor(requireContext(), R.color.pro_surface))
+                    .setTextColor(ContextCompat.getColor(requireContext(), R.color.pro_cyan))
+                    .show()
                 return
             }
 
@@ -317,7 +374,10 @@ class MapFragment : Fragment() {
             snackbar.show()
 
         } catch (e: Exception) {
-            Toast.makeText(ctx, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            Snackbar.make(requireView(), "Export failed: ${e.message}", Snackbar.LENGTH_SHORT)
+                .setBackgroundTint(ContextCompat.getColor(requireContext(), R.color.pro_surface))
+                .setTextColor(ContextCompat.getColor(requireContext(), R.color.pro_cyan))
+                .show()
         }
     }
 

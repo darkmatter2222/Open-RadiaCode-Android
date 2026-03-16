@@ -10,13 +10,14 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 
 /**
  * Widget Crafter Studio - Central hub for managing all widgets
@@ -128,17 +129,23 @@ class WidgetCrafterActivity : AppCompatActivity() {
         }
         
         Prefs.duplicateWidgetConfig(this, widgetId, newId, config.deviceId)
-        Toast.makeText(this, "Widget configuration duplicated", Toast.LENGTH_SHORT).show()
+        Snackbar.make(findViewById(android.R.id.content), "Widget configuration duplicated", Snackbar.LENGTH_SHORT)
+            .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+            .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+            .show()
         loadWidgets()
     }
 
     private fun deleteWidget(widgetId: Int) {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Delete Widget Configuration")
             .setMessage("Are you sure you want to delete this widget configuration? The widget will revert to default settings.")
             .setPositiveButton("Delete") { _, _ ->
                 Prefs.deleteWidgetConfig(this, widgetId)
-                Toast.makeText(this, "Widget configuration deleted", Toast.LENGTH_SHORT).show()
+                Snackbar.make(findViewById(android.R.id.content), "Widget configuration deleted", Snackbar.LENGTH_SHORT)
+                    .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+                    .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+                    .show()
                 loadWidgets()
             }
             .setNegativeButton("Cancel", null)
@@ -146,7 +153,7 @@ class WidgetCrafterActivity : AppCompatActivity() {
     }
 
     private fun showAddWidgetInstructions() {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.DarkDialogTheme)
             .setTitle("Add Widget to Home Screen")
             .setMessage(
                 "To add a widget:\n\n" +

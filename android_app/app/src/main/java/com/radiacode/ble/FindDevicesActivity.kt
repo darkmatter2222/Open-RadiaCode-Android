@@ -13,12 +13,15 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.ArrayAdapter
-import android.widget.ListView
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 
@@ -33,7 +36,7 @@ class FindDevicesActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
     private lateinit var statusText: TextView
-    private lateinit var deviceList: ListView
+    private lateinit var deviceRecyclerView: RecyclerView
     private lateinit var rescanButton: MaterialButton
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -46,8 +49,7 @@ class FindDevicesActivity : AppCompatActivity() {
     )
 
     private val seenByAddress = LinkedHashMap<String, SeenDevice>()
-    private val deviceLines = ArrayList<String>()
-    private lateinit var deviceAdapter: ArrayAdapter<String>
+    private lateinit var deviceAdapter: DeviceScanAdapter
 
     private var isScanning: Boolean = false
     private var scanTimeoutRunnable: Runnable? = null
@@ -64,33 +66,76 @@ class FindDevicesActivity : AppCompatActivity() {
             }
         }
 
+    // ── RecyclerView Adapter ────────────────────────────────────────────
+
+    private inner class DeviceScanAdapter(
+        private val items: MutableList<SeenDevice> = mutableListOf(),
+        private val onDeviceClick: (SeenDevice) -> Unit,
+    ) : RecyclerView.Adapter<DeviceScanAdapter.DeviceViewHolder>() {
+
+        inner class DeviceViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val nameText: TextView = view.findViewById(R.id.deviceName)
+            val addressText: TextView = view.findViewById(R.id.deviceAddress)
+            val rssiText: TextView = view.findViewById(R.id.rssiText)
+            val signalBar: View = view.findViewById(R.id.signalBar)
+        }
+
+        fun submitList(newItems: List<SeenDevice>) {
+            items.clear()
+            items.addAll(newItems)
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.item_find_device, parent, false)
+            return DeviceViewHolder(view)
+        }
+
+        override fun onBindViewHolder(holder: DeviceViewHolder, position: Int) {
+            val device = items[position]
+            holder.nameText.text = device.name
+            holder.addressText.text = device.device.address
+            holder.rssiText.text = "${device.rssi}\ndBm"
+
+            // Color signal bar based on RSSI strength
+            val barColor = when {
+                device.rssi >= -60 -> ContextCompat.getColor(holder.itemView.context, R.color.pro_green)
+                device.rssi >= -80 -> ContextCompat.getColor(holder.itemView.context, R.color.pro_amber)
+                else -> ContextCompat.getColor(holder.itemView.context, R.color.pro_red)
+            }
+            holder.signalBar.setBackgroundColor(barColor)
+
+            holder.itemView.setOnClickListener { onDeviceClick(device) }
+        }
+
+        override fun getItemCount(): Int = items.size
+    }
+
+    // ── Lifecycle ───────────────────────────────────────────────────────
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_find_devices)
 
         toolbar = findViewById(R.id.toolbar)
         statusText = findViewById(R.id.statusText)
-        deviceList = findViewById(R.id.deviceList)
+        deviceRecyclerView = findViewById(R.id.deviceRecyclerView)
         rescanButton = findViewById(R.id.rescanButton)
 
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
 
-        deviceAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, deviceLines)
-        deviceList.adapter = deviceAdapter
-
-        deviceList.setOnItemClickListener { _, _, position, _ ->
-            val line = deviceLines.getOrNull(position) ?: return@setOnItemClickListener
-            val address = line.substringAfterLast("(").substringBefore(")").trim()
-            val seen = seenByAddress[address] ?: return@setOnItemClickListener
-
+        deviceAdapter = DeviceScanAdapter { selected ->
             setResult(
                 RESULT_OK,
-                Intent().putExtra(EXTRA_DEVICE_ADDRESS, seen.device.address)
+                Intent().putExtra(EXTRA_DEVICE_ADDRESS, selected.device.address),
             )
             finish()
         }
+        deviceRecyclerView.layoutManager = LinearLayoutManager(this)
+        deviceRecyclerView.adapter = deviceAdapter
 
         rescanButton.setOnClickListener { startScan() }
 
@@ -160,9 +205,7 @@ class FindDevicesActivity : AppCompatActivity() {
         }
 
         seenByAddress.clear()
-        deviceLines.clear()
-        deviceLines.add("Scanning…")
-        deviceAdapter.notifyDataSetChanged()
+        deviceAdapter.submitList(emptyList())
 
         statusText.text = "Scanning…"
 
@@ -209,11 +252,7 @@ class FindDevicesActivity : AppCompatActivity() {
             "Tap a device to connect"
         }
 
-        if (seenByAddress.isEmpty()) {
-            deviceLines.clear()
-            deviceLines.add("No devices found. Make sure RadiaCode is on and nearby.")
-            deviceAdapter.notifyDataSetChanged()
-        }
+        // adapter already shows current state; status text handles empty messaging
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -255,18 +294,12 @@ class FindDevicesActivity : AppCompatActivity() {
 
     private fun renderDeviceList() {
         mainHandler.post {
-            val items = seenByAddress.values
+            val sorted = seenByAddress.values
                 .sortedWith(
                     compareByDescending<SeenDevice> { it.name.startsWith("RadiaCode", ignoreCase = true) }
                         .thenByDescending { it.rssi }
                 )
-
-            deviceLines.clear()
-            items.forEach { d ->
-                val label = d.name
-                deviceLines.add("$label  RSSI ${d.rssi}  (${d.device.address})")
-            }
-            deviceAdapter.notifyDataSetChanged()
+            deviceAdapter.submitList(sorted)
         }
     }
 }

@@ -75,6 +75,9 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
 
+    // Splash screen (Android 12+ compatible)
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
     // Fragment + ViewPager2 for tab-based navigation
     implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("androidx.viewpager2:viewpager2:1.0.0")

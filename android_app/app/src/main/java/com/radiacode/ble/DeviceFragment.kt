@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
+import android.view.HapticFeedbackConstants
 
 /**
  * Device management tab: connection status, auto-connect, device list,
@@ -104,6 +105,7 @@ class DeviceFragment : Fragment() {
         }
 
         reconnectButton.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             RadiaCodeForegroundService.reconnect(ctx)
         }
 

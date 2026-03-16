@@ -31,41 +31,26 @@
 
         <TextView
             android:id="@+id/chipGpsPassive"
+            style="@style/RadiaCodeChip.Active"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="5dp"
-            android:background="@drawable/chip_outline_background"
-            android:paddingHorizontal="9dp"
-            android:paddingVertical="4dp"
-            android:text="PASSIVE"
-            android:textColor="@color/pro_green"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:text="PASSIVE" />
 
         <TextView
             android:id="@+id/chipGpsBalanced"
+            style="@style/RadiaCodeChip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="5dp"
-            android:background="@drawable/chip_outline_background"
-            android:paddingHorizontal="9dp"
-            android:paddingVertical="4dp"
-            android:text="BALANCED"
-            android:textColor="@color/pro_text_muted"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:text="BALANCED" />
 
         <TextView
             android:id="@+id/chipGpsHigh"
+            style="@style/RadiaCodeChip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/chip_outline_background"
-            android:paddingHorizontal="9dp"
-            android:paddingVertical="4dp"
-            android:text="HIGH"
-            android:textColor="@color/pro_text_muted"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:text="HIGH" />
 
         <!-- spacer -->
         <View
@@ -105,7 +90,19 @@
             android:id="@+id/mapCard"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
-
+        <!-- Fullscreen expand button (top-right corner of map) -->
+        <ImageButton
+            android:id="@+id/btnFullscreen"
+            android:layout_width="@dimen/map_button_size"
+            android:layout_height="@dimen/map_button_size"
+            android:layout_gravity="top|end"
+            android:layout_margin="@dimen/spacing_sm"
+            android:background="@drawable/chip_outline_background"
+            android:contentDescription="Fullscreen map"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_crop"
+            app:tint="@color/pro_text_secondary" />
     </FrameLayout>
 
     <!-- ── Route recording bar (hidden unless actively recording) ── -->
@@ -155,9 +152,26 @@
         android:background="#EE0D0D0F"
         android:elevation="4dp"
         android:orientation="vertical"
-        android:paddingTop="6dp"
+        android:paddingTop="0dp"
         android:paddingBottom="8dp"
         android:paddingHorizontal="12dp">
+
+        <!-- Collapse/expand handle -->
+        <ImageView
+            android:id="@+id/btnCollapsePanel"
+            android:layout_width="match_parent"
+            android:layout_height="24dp"
+            android:contentDescription="Toggle panel"
+            android:scaleType="center"
+            android:src="@android:drawable/arrow_down_float"
+            app:tint="@color/pro_text_muted" />
+
+        <!-- Collapsible content group -->
+        <LinearLayout
+            android:id="@+id/panelCollapsibleContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
         <!-- Info strip: explains what the map shows -->
         <TextView
@@ -189,16 +203,11 @@
 
             <TextView
                 android:id="@+id/chipScaleAuto"
+                style="@style/RadiaCodeChip.Active"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
-                android:background="@drawable/chip_outline_background"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
-                android:text="AUTO"
-                android:textColor="@color/pro_green"
-                android:textSize="10sp"
-                android:textStyle="bold" />
+                android:text="AUTO" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -250,16 +259,13 @@
 
             <TextView
                 android:id="@+id/btnApplyScale"
+                style="@style/RadiaCodeChip.Action"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/chip_outline_background"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
-                android:text="SET"
-                android:textColor="@color/pro_cyan"
-                android:textSize="10sp"
-                android:textStyle="bold" />
+                android:text="SET" />
         </LinearLayout>
+
+        </LinearLayout> <!-- end panelCollapsibleContent -->
 
         <!-- Action buttons row -->
         <LinearLayout

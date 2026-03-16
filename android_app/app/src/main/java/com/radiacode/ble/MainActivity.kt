@@ -24,11 +24,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
+import android.view.HapticFeedbackConstants
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.radiacode.ble.spectrogram.VegaSpectralAnalysisActivity
 import com.radiacode.ble.spectrogram.SpectrogramPrefs
 import com.radiacode.ble.ui.ProChartView
@@ -369,7 +374,13 @@ class MainActivity : AppCompatActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install splash screen (must be before super.onCreate)
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Edge-to-edge: let content draw behind system bars
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContentView(R.layout.activity_main_tabs)
 
         // Migrate single device to multi-device if needed
@@ -379,6 +390,13 @@ class MainActivity : AppCompatActivity() {
         setupTabs()
         setupSettingsGear()
         updateStatus(false, "Starting")
+
+        // Apply system bar insets so content doesn't hide behind navigation bar
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.viewPager)) { v, insets ->
+            val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, navBar.bottom)
+            insets
+        }
 
         if (!hasAllPermissions()) {
             ActivityCompat.requestPermissions(this, requiredPermissions, PERMISSION_REQUEST_CODE)
@@ -538,6 +556,15 @@ class MainActivity : AppCompatActivity() {
         viewPager.adapter = adapter
         viewPager.offscreenPageLimit = 3 // keep all tabs alive
 
+        // Subtle crossfade transition when switching tabs
+        viewPager.setPageTransformer { page, position ->
+            page.alpha = when {
+                position <= -1f || position >= 1f -> 0f      // off-screen
+                position == 0f -> 1f                          // fully visible
+                else -> 1f - kotlin.math.abs(position) * 0.5f // fading
+            }
+        }
+
         // Disable ViewPager2 swiping on the Map tab to prevent
         // horizontal swipe conflicts with the map's pan gesture.
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
@@ -558,6 +585,14 @@ class MainActivity : AppCompatActivity() {
             tab.text = tabLabels[position]
             tab.setIcon(tabIcons[position])
         }.attach()
+
+        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                tab.view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
     }
 
     private fun setupSettingsGear() {
@@ -979,10 +1014,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-    }
+    // Back navigation handled by system OnBackPressedDispatcher (no override needed)
 
     private fun shareCsv() {
         val file = File(filesDir, "readings.csv")

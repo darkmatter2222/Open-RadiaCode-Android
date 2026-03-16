@@ -15,11 +15,22 @@
         <item name="colorOnSurfaceVariant">@color/pro_text_secondary</item>
         <item name="colorOutline">@color/pro_border</item>
         
-        <!-- System bars -->
-        <item name="android:statusBarColor">@color/pro_background</item>
-        <item name="android:navigationBarColor">@color/pro_background</item>
+        <!-- System bars (transparent for edge-to-edge) -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
+
+        <!-- Smooth activity transitions -->
+        <item name="android:windowAnimationStyle">@style/RadiaCodeWindowAnimations</item>
+    </style>
+
+    <!-- Activity transition animations applied globally -->
+    <style name="RadiaCodeWindowAnimations" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/slide_in_right</item>
+        <item name="android:activityOpenExitAnimation">@anim/slide_out_left</item>
+        <item name="android:activityCloseEnterAnimation">@anim/slide_in_left</item>
+        <item name="android:activityCloseExitAnimation">@anim/slide_out_right</item>
     </style>
 
     <!-- Fullscreen immersive theme for map -->
@@ -110,6 +121,34 @@
         <item name="android:textColor">@color/pro_text_muted</item>
         <item name="android:textSize">12sp</item>
         <item name="android:layout_marginTop">2dp</item>
+    </style>
+
+    <!-- Consistent chip text style for inline selectors -->
+    <style name="RadiaCodeChip">
+        <item name="android:background">@drawable/chip_outline_background</item>
+        <item name="android:paddingHorizontal">10dp</item>
+        <item name="android:paddingVertical">4dp</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/pro_text_muted</item>
+        <item name="android:gravity">center</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="RadiaCodeChip.Active">
+        <item name="android:textColor">@color/pro_green</item>
+    </style>
+
+    <style name="RadiaCodeChip.Action">
+        <item name="android:textColor">@color/pro_cyan</item>
+    </style>
+
+    <!-- Splash screen theme (Android 12+ compatible) -->
+    <style name="Theme.RadiaCode.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/pro_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.RadiaCode</item>
     </style>
 
 </resources>

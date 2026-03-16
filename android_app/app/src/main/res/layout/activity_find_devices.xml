@@ -30,12 +30,15 @@
             android:text="Scanning…"
             android:textSize="14sp" />
 
-        <ListView
-            android:id="@+id/deviceList"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/deviceRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_marginTop="12dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:background="@color/pro_background"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/rescanButton"

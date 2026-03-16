@@ -14,7 +14,6 @@ import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.HexGrid
-import com.radiacode.ble.FullscreenMapActivity
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
 import com.radiacode.ble.location.LocationController

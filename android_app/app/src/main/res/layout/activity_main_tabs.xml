@@ -10,14 +10,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/pro_background"
+        android:fitsSystemWindows="true"
         app:elevation="0dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:minHeight="36dp"
+            android:layout_height="@dimen/toolbar_compact_height"
+            android:minHeight="@dimen/toolbar_compact_height"
             android:background="@color/pro_background"
+            app:layout_scrollFlags="scroll|enterAlways|snap"
             app:title="@string/app_name"
             app:titleTextAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
             app:titleTextColor="@color/pro_text_primary">
@@ -104,7 +106,7 @@
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabLayout"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="@dimen/tab_height"
             android:background="@color/pro_surface"
             app:tabMode="fixed"
             app:tabGravity="fill"
