@@ -643,44 +643,88 @@ waveformView = WaveformVisualizerView(context).apply {
 waveformContainer.addView(waveformView)
 ```
 
-#### 4. Real-Time Audio Visualization
+#### 4. PCM-Driven Audio Visualization (Preferred)
 
-Use Android's `Visualizer` API to sync waveform with actual audio:
+The `Visualizer` API requires `RECORD_AUDIO` permission and fails silently on API 34+. Use **PCM-driven waveform** instead, which reads audio data directly from WAV resources:
 
 ```kotlin
-private fun setupVisualizer() {
-    val audioSessionId = mediaPlayer?.audioSessionId ?: return
-    
-    visualizer = Visualizer(audioSessionId).apply {
-        captureSize = Visualizer.getCaptureSizeRange()[1]  // Max capture size
-        setDataCaptureListener(
-            object : Visualizer.OnDataCaptureListener {
-                override fun onWaveFormDataCapture(
-                    vis: Visualizer?, waveform: ByteArray?, samplingRate: Int
-                ) {
-                    waveform?.let { waveformView.updateWaveform(it) }
-                }
-                
-                override fun onFftDataCapture(
-                    vis: Visualizer?, fft: ByteArray?, samplingRate: Int
-                ) {
-                    fft?.let { waveformView.updateFft(it) }
-                }
-            },
-            Visualizer.getMaxCaptureRate(),
-            true,  // Capture waveform
-            true   // Capture FFT for frequency bars
-        )
-        enabled = true
-    }
+// 1. Load PCM samples from WAV resource (skip 44-byte header)
+private fun loadPcmFromResource(resId: Int): ShortArray? {
+    return try {
+        context.resources.openRawResource(resId).use { input ->
+            val allBytes = input.readBytes()
+            if (allBytes.size < 46) return null
+            val dataOffset = 44
+            val shorts = ShortArray((allBytes.size - dataOffset) / 2)
+            for (i in shorts.indices) {
+                val lo = allBytes[dataOffset + i * 2].toInt() and 0xFF
+                val hi = allBytes[dataOffset + i * 2 + 1].toInt()
+                shorts[i] = ((hi shl 8) or lo).toShort()
+            }
+            shorts
+        }
+    } catch (e: Exception) { null }
+}
+
+// 2. Track playback position at 30 FPS via Handler
+private fun startPcmTracking() {
     waveformView.setUsingRealAudio(true)
+    pcmTrackingRunnable = object : Runnable {
+        override fun run() {
+            val mp = mediaPlayer ?: return
+            val pcm = pcmShorts ?: return
+            if (!mp.isPlaying) return
+            
+            val posMs = mp.currentPosition
+            val samplePos = (posMs.toLong() * 24000 / 1000).toInt()
+                .coerceIn(0, pcm.size - 1)
+            val windowSize = 24000 / 30  // ~800 samples per frame
+            val windowStart = samplePos.coerceIn(0, (pcm.size - windowSize).coerceAtLeast(0))
+            
+            // Build 256-byte waveform display buffer
+            val displaySize = 256
+            val waveform = ByteArray(displaySize)
+            val step = maxOf(1, windowSize / displaySize)
+            for (i in 0 until displaySize) {
+                val idx = (windowStart + i * step).coerceIn(0, pcm.size - 1)
+                waveform[i] = ((pcm[idx].toInt() / 256) + 128).coerceIn(0, 255).toByte()
+            }
+            waveformView.updateWaveform(waveform)
+            
+            // Build 32-band frequency magnitudes for FFT
+            val numBands = 32
+            val fft = ByteArray(numBands * 2)
+            val samplesPerBand = maxOf(1, windowSize / numBands)
+            for (b in 0 until numBands) {
+                val bStart = windowStart + b * samplesPerBand
+                var sum = 0L
+                for (j in 0 until samplesPerBand) {
+                    val idx = (bStart + j).coerceIn(0, pcm.size - 1)
+                    sum += kotlin.math.abs(pcm[idx].toInt())
+                }
+                val avg = (sum / samplesPerBand).toInt()
+                fft[b * 2] = (avg * 127 / 32768).coerceIn(0, 127).toByte()
+                fft[b * 2 + 1] = 0
+            }
+            waveformView.updateFft(fft)
+            
+            handler.postDelayed(this, 33)  // 30 FPS
+        }
+    }
+    handler.post(pcmTrackingRunnable!!)
 }
 ```
 
-**Fallback:** If Visualizer fails (missing RECORD_AUDIO permission), use simulated waveform:
+**Why PCM over Visualizer:**
+- No permissions required (reads raw resource bytes)
+- Works on all API levels (no API 34 compatibility issues)
+- Perfectly synchronized with playback position
+- WAV files are mono, 24kHz, 16-bit PCM with 44-byte headers
+
+**Fallback:** If WAV resource is missing or fails to load, use simulated waveform:
 ```kotlin
 waveformView.setUsingRealAudio(false)
-// Generate random animation data
+// Generate random sine wave animation
 ```
 
 ### Button Styling
@@ -719,16 +763,207 @@ When creating a new modal dialog:
 - [ ] Add dim effect (`setDimAmount(0.7f)`)
 - [ ] Use `#1A1A1E` card background with `#2A2A2E` border
 - [ ] Include `WaveformVisualizerView` if Vega speaks
-- [ ] Setup `Visualizer` for real-time audio visualization
+- [ ] Use PCM-driven waveform tracking (not Visualizer API)
 - [ ] Pre-bake audio file if content is static
 - [ ] Right-align buttons (Cancel left, Primary right)
 - [ ] Use appropriate title color for modal type
-- [ ] Clean up MediaPlayer, Visualizer, and animations in `onStop()`
+- [ ] Clean up MediaPlayer and animations in `onStop()`
 - [ ] Prevent dismiss on outside touch (`setCanceledOnTouchOutside(false)`)
 
 ### Reference Implementations
 
 - **Full-screen intro:** `VegaIntroDialog.kt` (scrolling text, ambient audio, 140dp waveform)
+- **Feature info modal:** `VegaFeatureInfoDialog.kt` (PCM-driven waveform, scrolling text, pre-baked audio)
 - **Warning modal:** `VegaGpsWarningDialog.kt` (compact, blur, 80dp waveform)
+
+---
+
+## Dose Unit System
+
+The app supports two dose rate display units: microsieverts per hour (uSv/h) and nanosieverts per hour (nSv/h). **All display layers must respect the user's preference.**
+
+### Preference API
+
+```kotlin
+// Check current mode
+Prefs.isDoseNanoMode(context)        // true = nSv/h, false = uSv/h
+Prefs.getDoseUnit(context)           // DoseUnit.USV_H or DoseUnit.NSV_H
+
+// Conversion: stored values are ALWAYS raw uSv/h
+// Display: multiply by 1000 when nano mode is active
+val displayValue = if (Prefs.isDoseNanoMode(ctx)) rawUsvH * 1000f else rawUsvH
+val unitLabel = if (Prefs.isDoseNanoMode(ctx)) "nSv/h" else "\u00B5Sv/h"
+```
+
+### Where Unit Conversion Must Be Applied
+
+Every screen that shows dose rate values MUST check `isDoseNanoMode`:
+
+| Component | File | Status |
+|-----------|------|--------|
+| Dashboard MetricCardView | `DashboardFragment.kt` | Done |
+| Dashboard chart titles | `DashboardFragment.kt` | Done |
+| Dashboard stat rows | `DashboardFragment.kt` | Done |
+| Map live dose badge | `MapCardView.kt` | Done |
+| Map scale bar | `MapCardView.kt` (ScaleBarView) | Done |
+| Map hexagon details dialog | `MapCardView.kt` | Done |
+| Fullscreen map stats panel | `FullscreenMapActivity.kt` | Done |
+| Fullscreen map hex details | `FullscreenMapActivity.kt` | Done |
+| Session list / adapter | `SessionListActivity.kt` | Done |
+| Session details dialog | `SessionListActivity.kt` | Done |
+| Session comparison | `SessionListActivity.kt` | Done |
+| Widgets | `WidgetRenderer.kt` | Done |
+
+**Rule:** Data is always stored in raw uSv/h. Conversion happens at the display layer only, never in storage or broadcast.
+
+### Count Unit System
+
+Similar pattern exists for count rate:
+```kotlin
+Prefs.isCountCpmMode(context)  // true = CPM, false = CPS
+// CPM = CPS * 60
+```
+
+---
+
+## Session Management
+
+### Session Auto-Start
+
+Sessions auto-start when the first BLE reading arrives. The `sessionAutoStarted` flag in `MainActivity` prevents duplicate phantom sessions:
+
+```kotlin
+private var sessionAutoStarted = false
+
+// In readingReceiver (called on every BLE reading):
+if (!sessionAutoStarted && !SessionManager.hasActiveSession(ctx)) {
+    SessionManager.startSession(ctx, deviceId)
+    sessionAutoStarted = true
+}
+SessionManager.addDataPoint(ctx, uSvH, cps, lat, lng, deviceId)
+```
+
+**Key rules:**
+- Set `sessionAutoStarted = false` only in `onCreate()` (not `onResume`)
+- Auto-stop session in `onDestroy()` (not `onPause`, which fires on rotation)
+- Never call `pm clear` during development -- it resets all SharedPreferences including sessions
+
+### Live Session List Refresh
+
+`SessionListActivity` uses a `Handler` to refresh every 3 seconds while any session is active:
+
+```kotlin
+private val refreshHandler = Handler(Looper.getMainLooper())
+private val refreshRunnable = object : Runnable {
+    override fun run() {
+        loadSessions()
+        adapter.notifyDataSetChanged()
+        // Only keep refreshing if there's an active session
+        if (sessions.any { it.isActive }) {
+            refreshHandler.postDelayed(this, 3000L)
+        }
+    }
+}
+
+// Start in onResume, stop in onPause
+override fun onResume() {
+    super.onResume()
+    loadSessions()
+    if (sessions.any { it.isActive }) {
+        refreshHandler.postDelayed(refreshRunnable, 3000L)
+    }
+}
+
+override fun onPause() {
+    super.onPause()
+    refreshHandler.removeCallbacks(refreshRunnable)
+}
+```
+
+---
+
+## Chart System
+
+### ProChartView Features
+
+`ProChartView` is the time-series chart component used for dose rate and count rate. Features:
+- Gradient fill under line
+- Auto-scaled Y-axis
+- Time-labeled X-axis
+- Threshold lines (dashed)
+- Peak markers
+- Delta spike markers with percentage labels
+- Rolling average line
+- Bollinger bands
+- Forecast bands
+- Pinch-to-zoom and pan
+- Sticky tap markers
+
+### Trend Arrows (MetricCardView + Chart Panels)
+
+Trend arrows appear in two places:
+1. **MetricCardView** (DELTA DOSE RATE / DELTA COUNT RATE cards) -- built-in rendering
+2. **Chart title bars** (REAL TIME DOSE RATE / REAL TIME COUNT RATE) -- separate TextViews
+
+Both use the same z-score logic:
+
+```kotlin
+// absZ = absolute z-score (how many std devs from mean)
+val (arrow, color) = when {
+    absZ > 2f && zScore > 0 -> "\u25B2\u25B2" to pro_green    // Very high (>2 sigma)
+    absZ > 1f && zScore > 0 -> "\u25B2" to pro_green           // High (>1 sigma)
+    absZ > 2f && zScore < 0 -> "\u25BC\u25BC" to pro_red       // Very low (<-2 sigma)
+    absZ > 1f && zScore < 0 -> "\u25BC" to pro_red             // Low (<-1 sigma)
+    else -> "\u2500" to pro_text_muted                          // Stable (within 1 sigma)
+}
+// Shows percentage when |trend| >= 0.1f
+```
+
+Controlled by `Prefs.isShowTrendArrowsEnabled()` (default: ON).
+
+### Chart Trend Arrow XML
+
+Each chart panel has a `TextView` for the trend arrow in the title bar:
+```xml
+<TextView
+    android:id="@+id/doseChartTrend"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="8dp"
+    android:textSize="13sp"
+    android:fontFamily="monospace"
+    android:textStyle="bold"
+    android:visibility="gone" />
+```
+
+---
+
+## Hexagon Map System
+
+### Architecture
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| MapFragment | `MapFragment.kt` | Tab UI, GPS tier selector, export, sessions button |
+| MapCardView | `MapCardView.kt` | Core map rendering, hexagon overlays, scale bar |
+| HexGrid | `HexGrid.kt` | Pure math: lat/lng to axial hex coords (flat-top, 25m cells) |
+| FullscreenMapActivity | `FullscreenMapActivity.kt` | Landscape fullscreen map with stats panel |
+| ScaleBarView | `MapCardView.kt` (inner class) | Color scale bar with min/max labels |
+
+### Data Flow
+
+1. `MapFragment.addReading(uSvH, cps)` called by `MainActivity` on every sensor reading
+2. `MapCardView.addReading()` converts lat/lng to hex cell ID via `HexGrid`
+3. Readings stored in `hexagonData` map keyed by hex cell ID
+4. `HexagonOverlay` draws filled hexagons with green-yellow-red interpolation
+5. `HexagonTapOverlay` detects taps and shows statistics dialog
+
+### Unit Awareness
+
+All map display components respect `Prefs.isDoseNanoMode()`:
+- **Live dose badge**: `updateLiveDoseRate()` converts value and updates unit label
+- **Scale bar**: `ScaleBarView.formatValue()` converts min/max labels
+- **Hex details dialog**: Local `fmtDose()` helper converts all values
+- **Fullscreen stats panel**: `updateStatisticsPanel()` formats with units
 
 ---
