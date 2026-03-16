@@ -37,6 +37,7 @@ class DashboardFragment : Fragment() {
     // Charts
     private lateinit var doseChart: ProChartView
     private lateinit var doseChartTitle: TextView
+    private lateinit var doseChartTrend: TextView
     private lateinit var doseChartReset: ImageButton
     private lateinit var doseChartGoRealtime: ImageButton
     private lateinit var doseStats: StatRowView
@@ -44,6 +45,7 @@ class DashboardFragment : Fragment() {
 
     private lateinit var cpsChart: ProChartView
     private lateinit var cpsChartTitle: TextView
+    private lateinit var cpsChartTrend: TextView
     private lateinit var cpsChartReset: ImageButton
     private lateinit var cpsChartGoRealtime: ImageButton
     private lateinit var cpsStats: StatRowView
@@ -166,6 +168,7 @@ class DashboardFragment : Fragment() {
         doseChartPanel = view.findViewById(R.id.doseChartPanel)
         doseChart = view.findViewById(R.id.doseChart)
         doseChartTitle = view.findViewById(R.id.doseChartTitle)
+        doseChartTrend = view.findViewById(R.id.doseChartTrend)
         doseChartReset = view.findViewById(R.id.doseChartReset)
         doseChartGoRealtime = view.findViewById(R.id.doseChartGoRealtime)
         doseStats = view.findViewById(R.id.doseStats)
@@ -173,6 +176,7 @@ class DashboardFragment : Fragment() {
         cpsChartPanel = view.findViewById(R.id.cpsChartPanel)
         cpsChart = view.findViewById(R.id.cpsChart)
         cpsChartTitle = view.findViewById(R.id.cpsChartTitle)
+        cpsChartTrend = view.findViewById(R.id.cpsChartTrend)
         cpsChartReset = view.findViewById(R.id.cpsChartReset)
         cpsChartGoRealtime = view.findViewById(R.id.cpsChartGoRealtime)
         cpsStats = view.findViewById(R.id.cpsStats)
@@ -352,6 +356,40 @@ class DashboardFragment : Fragment() {
             cpsCard.setValue(cps, "CPS")
         }
         cpsCard.setTrend(trendCps)
+
+        // Update chart trend arrows if enabled
+        if (Prefs.isShowTrendArrowsEnabled(ctx)) {
+            updateChartTrendArrow(doseChartTrend, doseCard.getZScore(), trendDose)
+            updateChartTrendArrow(cpsChartTrend, cpsCard.getZScore(), trendCps)
+        }
+    }
+
+    /**
+     * Update a chart panel trend arrow based on z-score (statistical significance)
+     * and trend percentage. Shows green arrows for rising, red for falling.
+     */
+    private fun updateChartTrendArrow(trendView: TextView, zScore: Float, trendPct: Float) {
+        val ctx = context ?: return
+        val absZ = kotlin.math.abs(zScore)
+
+        val (arrow, colorRes) = when {
+            absZ > 2f && zScore > 0 -> "\u25B2\u25B2" to R.color.pro_green     // Very high
+            absZ > 1f && zScore > 0 -> "\u25B2" to R.color.pro_green           // High
+            absZ > 2f && zScore < 0 -> "\u25BC\u25BC" to R.color.pro_red       // Very low
+            absZ > 1f && zScore < 0 -> "\u25BC" to R.color.pro_red             // Low
+            else -> "\u2500" to R.color.pro_text_muted                          // Stable
+        }
+
+        val text = if (absZ > 1f && kotlin.math.abs(trendPct) >= 0.1f) {
+            val sign = if (trendPct > 0) "+" else ""
+            "$arrow ${sign}${String.format(Locale.US, "%.1f", trendPct)}%"
+        } else {
+            arrow
+        }
+
+        trendView.text = text
+        trendView.setTextColor(ContextCompat.getColor(ctx, colorRes))
+        trendView.visibility = View.VISIBLE
     }
 
     fun showEmptyMetrics() {
@@ -360,6 +398,8 @@ class DashboardFragment : Fragment() {
         doseCard.setTrend(0f)
         cpsCard.setValueText("\u2014")
         cpsCard.setTrend(0f)
+        doseChartTrend.visibility = View.GONE
+        cpsChartTrend.visibility = View.GONE
     }
 
     /**
@@ -455,6 +495,10 @@ class DashboardFragment : Fragment() {
         val showTrend = Prefs.isShowTrendArrowsEnabled(ctx)
         doseCard.setShowTrendArrows(showTrend)
         cpsCard.setShowTrendArrows(showTrend)
+        if (!showTrend) {
+            doseChartTrend.visibility = View.GONE
+            cpsChartTrend.visibility = View.GONE
+        }
 
         val windowSec = Prefs.getWindowSeconds(ctx, 60)
         updateTimeWindowChipHighlight(windowSec)

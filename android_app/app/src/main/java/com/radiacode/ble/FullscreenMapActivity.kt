@@ -429,9 +429,15 @@ class FullscreenMapActivity : AppCompatActivity() {
         // Update UI
         statsHexagonCount.text = hexCount.toString()
         statsReadingCount.text = totalReadings.toString()
-        statsAvgDose.text = String.format("%.4f", avgDose)
-        statsMaxDose.text = String.format("%.4f", maxDose)
-        statsStdDev.text = String.format("%.4f", stdDev)
+        if (Prefs.isDoseNanoMode(this)) {
+            statsAvgDose.text = String.format("%.1f nSv/h", avgDose * 1000)
+            statsMaxDose.text = String.format("%.1f nSv/h", maxDose * 1000)
+            statsStdDev.text = String.format("%.1f nSv/h", stdDev * 1000)
+        } else {
+            statsAvgDose.text = String.format("%.4f \u00B5Sv/h", avgDose)
+            statsMaxDose.text = String.format("%.4f \u00B5Sv/h", maxDose)
+            statsStdDev.text = String.format("%.4f \u00B5Sv/h", stdDev)
+        }
         statsAreaCovered.text = areaStr
     }
     
@@ -838,24 +844,28 @@ class FullscreenMapActivity : AppCompatActivity() {
             else -> "${timeSpanMs / 3600_000}h ${(timeSpanMs % 3600_000) / 60_000}m"
         }
         
+        val isNano = Prefs.isDoseNanoMode(this)
+        val doseUnitLabel = if (isNano) "nSv/h" else "\u00B5Sv/h"
+        fun fmtDose(v: Float): String = if (isNano) String.format("%.1f", v * 1000f) else String.format("%.4f", v)
+        
         val message = buildString {
-            appendLine("📊 HEXAGON STATISTICS")
+            appendLine("HEXAGON STATISTICS")
             appendLine()
-            appendLine("📍 Readings: $readingCount")
-            appendLine("⏱️ Time Span: $timeSpanStr")
+            appendLine("Readings: $readingCount")
+            appendLine("Time Span: $timeSpanStr")
             appendLine()
-            appendLine("☢️ DOSE RATE (µSv/h)")
-            appendLine("   Average: ${String.format("%.4f", avgDose)}")
-            appendLine("   Min: ${String.format("%.4f", minDose)}")
-            appendLine("   Max: ${String.format("%.4f", maxDose)}")
+            appendLine("DOSE RATE ($doseUnitLabel)")
+            appendLine("   Average: ${fmtDose(avgDose)}")
+            appendLine("   Min: ${fmtDose(minDose)}")
+            appendLine("   Max: ${fmtDose(maxDose)}")
             appendLine()
-            appendLine("📈 COUNT RATE (CPS)")
+            appendLine("COUNT RATE (CPS)")
             appendLine("   Average: ${String.format("%.1f", avgCps)}")
             appendLine("   Min: ${String.format("%.1f", minCps)}")
             appendLine("   Max: ${String.format("%.1f", maxCps)}")
             appendLine()
-            appendLine("🕐 First: $firstTimeStr")
-            appendLine("🕐 Last: $lastTimeStr")
+            appendLine("First: $firstTimeStr")
+            appendLine("Last: $lastTimeStr")
         }
         
         AlertDialog.Builder(this, R.style.DarkDialogTheme)

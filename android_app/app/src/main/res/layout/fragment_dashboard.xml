@@ -154,6 +154,16 @@
                         android:textStyle="bold"
                         android:letterSpacing="0.1" />
 
+                    <TextView
+                        android:id="@+id/doseChartTrend"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
                     <ImageButton
                         android:id="@+id/doseChartGoRealtime"
                         android:layout_width="28dp"
@@ -218,6 +228,16 @@
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:letterSpacing="0.1" />
+
+                    <TextView
+                        android:id="@+id/cpsChartTrend"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
 
                     <ImageButton
                         android:id="@+id/cpsChartGoRealtime"

@@ -55,6 +55,7 @@ class MapCardView @JvmOverloads constructor(
     private lateinit var centerButton: ImageButton
     private lateinit var scaleBarView: ScaleBarView
     private lateinit var liveDoseRateLabel: TextView
+    private lateinit var liveDoseUnitLabel: TextView
 
     // Disabled state overlay
     private lateinit var mapContent: View
@@ -228,6 +229,7 @@ class MapCardView @JvmOverloads constructor(
         metricSelector = findViewById(R.id.metricSelector)
         centerButton = findViewById(R.id.centerButton)
         liveDoseRateLabel = findViewById(R.id.liveDoseRateLabel)
+        liveDoseUnitLabel = findViewById(R.id.liveDoseUnitLabel)
 
         // Create and add scale bar programmatically
         val scaleBarContainer = findViewById<FrameLayout>(R.id.scaleBarContainer)
@@ -417,7 +419,13 @@ class MapCardView @JvmOverloads constructor(
      */
     fun updateLiveDoseRate(uSvH: Float) {
         if (!isAttachedToWindow) return
-        liveDoseRateLabel.text = String.format("%.3f", uSvH)
+        if (Prefs.isDoseNanoMode(context)) {
+            liveDoseRateLabel.text = String.format("%.1f", uSvH * 1000f)
+            liveDoseUnitLabel.text = "nSv/h"
+        } else {
+            liveDoseRateLabel.text = String.format("%.3f", uSvH)
+            liveDoseUnitLabel.text = "\u00B5Sv/h"
+        }
     }
 
     private fun setupMetricSelector() {
@@ -812,7 +820,13 @@ class MapCardView @JvmOverloads constructor(
         
         private fun formatValue(value: Float, metric: MetricType): String {
             return when (metric) {
-                MetricType.DOSE_RATE -> String.format("%.3f µSv/h", value)
+                MetricType.DOSE_RATE -> {
+                    if (Prefs.isDoseNanoMode(context)) {
+                        String.format("%.1f nSv/h", value * 1000f)
+                    } else {
+                        String.format("%.3f \u00B5Sv/h", value)
+                    }
+                }
                 MetricType.COUNT_RATE -> String.format("%.1f CPS", value)
             }
         }
@@ -932,24 +946,28 @@ class MapCardView @JvmOverloads constructor(
             else -> "${timeSpanMs / 3600_000}h ${(timeSpanMs % 3600_000) / 60_000}m"
         }
         
+        val isNano = Prefs.isDoseNanoMode(context)
+        val doseUnitLabel = if (isNano) "nSv/h" else "\u00B5Sv/h"
+        fun fmtDose(v: Float): String = if (isNano) String.format("%.1f", v * 1000f) else String.format("%.4f", v)
+        
         val message = buildString {
-            appendLine("📊 HEXAGON STATISTICS")
+            appendLine("HEXAGON STATISTICS")
             appendLine()
-            appendLine("📍 Readings: $readingCount")
-            appendLine("⏱️ Time Span: $timeSpanStr")
+            appendLine("Readings: $readingCount")
+            appendLine("Time Span: $timeSpanStr")
             appendLine()
-            appendLine("☢️ DOSE RATE (µSv/h)")
-            appendLine("   Average: ${String.format("%.4f", avgDose)}")
-            appendLine("   Min: ${String.format("%.4f", minDose)}")
-            appendLine("   Max: ${String.format("%.4f", maxDose)}")
+            appendLine("DOSE RATE ($doseUnitLabel)")
+            appendLine("   Average: ${fmtDose(avgDose)}")
+            appendLine("   Min: ${fmtDose(minDose)}")
+            appendLine("   Max: ${fmtDose(maxDose)}")
             appendLine()
-            appendLine("📈 COUNT RATE (CPS)")
+            appendLine("COUNT RATE (CPS)")
             appendLine("   Average: ${String.format("%.1f", avgCps)}")
             appendLine("   Min: ${String.format("%.1f", minCps)}")
             appendLine("   Max: ${String.format("%.1f", maxCps)}")
             appendLine()
-            appendLine("🕐 First: $firstTimeStr")
-            appendLine("🕐 Last: $lastTimeStr")
+            appendLine("First: $firstTimeStr")
+            appendLine("Last: $lastTimeStr")
         }
         
         AlertDialog.Builder(context, R.style.DarkDialogTheme)
