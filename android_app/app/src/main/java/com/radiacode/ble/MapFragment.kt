@@ -152,10 +152,8 @@ class MapFragment : Fragment() {
         Prefs.setGpsTier(ctx, tier)
         Prefs.setGpsTrackingEnabled(ctx, true)
         updateGpsTierHighlight(tier)
-        mapCard.updateGpsTrackingState()
-        // Notify location controller about mode change
+        // Notify location controller about mode change (no map re-init needed)
         LocationController.getInstance(ctx).setGpsTier(tier)
-        RadiaCodeForegroundService.reloadDevices(ctx)
     }
 
     private fun updateGpsTierHighlight(tier: Prefs.GpsTier) {

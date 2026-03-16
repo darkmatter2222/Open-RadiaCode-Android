@@ -241,19 +241,7 @@ class ContextualHelpPopup(
                 ),
                 emoji = "〰️"
             ),
-            "isotope_id" to HelpContent(
-                title = "Isotope Identification",
-                description = "The app analyzes the gamma spectrum to identify probable radioactive isotopes based on their characteristic energy signatures.",
-                details = listOf(
-                    "Each isotope emits gamma rays at specific energies",
-                    "K-40: Common in bananas, granite, your body",
-                    "Cs-137: Fission product from nuclear events",
-                    "Th-232, U-238, Ra-226: Natural in rocks/soil",
-                    "Probability shows confidence in identification"
-                ),
-                emoji = "🔬",
-                learnMoreLink = "isotopes"
-            ),
+
             "safety_status" to HelpContent(
                 title = "Safety Status",
                 description = "The safety indicator provides quick context about whether current radiation levels are normal or require attention.",

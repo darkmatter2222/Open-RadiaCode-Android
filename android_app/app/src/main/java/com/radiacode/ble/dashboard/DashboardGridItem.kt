@@ -84,8 +84,7 @@ enum class PanelType(
     DELTA_COUNT("Delta Count Rate", 1, 2, 1, 3),
     INTELLIGENCE("Intelligence Report", 1, 2, 1, 3),
     DOSE_CHART("Real Time Dose Rate", 1, 2, 2, 4),
-    COUNT_CHART("Real Time Count Rate", 1, 2, 2, 4),
-    ISOTOPE_ID("Isotope Identification", 1, 2, 2, 4);
+    COUNT_CHART("Real Time Count Rate", 1, 2, 2, 4);
     
     /** Check if a given size is valid for this panel type */
     fun isValidSize(colSpan: Int, rowSpan: Int): Boolean {
@@ -112,8 +111,7 @@ class DashboardLayout(
                 DashboardGridItem(PanelType.DELTA_COUNT, column = 1, row = 0, colSpan = 1, rowSpan = 2),
                 DashboardGridItem(PanelType.INTELLIGENCE, column = 0, row = 2, colSpan = 2, rowSpan = 2),
                 DashboardGridItem(PanelType.DOSE_CHART, column = 0, row = 4, colSpan = 2, rowSpan = 3),
-                DashboardGridItem(PanelType.COUNT_CHART, column = 0, row = 7, colSpan = 2, rowSpan = 3),
-                DashboardGridItem(PanelType.ISOTOPE_ID, column = 0, row = 10, colSpan = 2, rowSpan = 3)
+                DashboardGridItem(PanelType.COUNT_CHART, column = 0, row = 7, colSpan = 2, rowSpan = 3)
             ))
         }
         

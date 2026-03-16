@@ -256,53 +256,6 @@
                     app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
-            <!-- ═══ Isotope ═══ -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="ISOTOPE"
-                android:textColor="@color/pro_cyan"
-                android:textSize="12sp"
-                android:letterSpacing="0.1"
-                android:textStyle="bold"
-                android:paddingStart="4dp"
-                android:paddingTop="20dp"
-                android:paddingBottom="8dp" />
-
-            <!-- Isotope Detection -->
-            <LinearLayout
-                android:id="@+id/rowIsotope"
-                style="@style/SettingsRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/SettingsRowTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Isotope Detection" />
-
-                    <TextView
-                        style="@style/SettingsRowSub"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="ML model and scan settings" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:layout_gravity="center_vertical"
-                    android:src="@drawable/ic_chevron_right"
-                    app:tint="@color/pro_text_muted" />
-            </LinearLayout>
-
             <!-- ═══ Home Screen ═══ -->
             <TextView
                 android:layout_width="match_parent"

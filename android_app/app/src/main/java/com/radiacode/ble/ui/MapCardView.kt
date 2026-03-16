@@ -89,6 +89,7 @@ class MapCardView @JvmOverloads constructor(
     // Disabled automatically when the user drags the map.
     private var isFollowingLocation = false
     private var isUserInteractingWithMap = false
+    private var isMapInitialized = false
     
     // Data
     private var selectedMetric = MetricType.DOSE_RATE
@@ -269,12 +270,14 @@ class MapCardView @JvmOverloads constructor(
      */
     fun updateGpsTrackingState() {
         if (Prefs.isGpsTrackingEnabled(context)) {
-            // GPS tracking enabled - show map
-            setupMap()
-            setupMetricSelector()
-            setupCenterButton()
+            if (!isMapInitialized) {
+                // First-time setup only
+                setupMap()
+                setupMetricSelector()
+                setupCenterButton()
+                isMapInitialized = true
+            }
             showMapContent()
-            // Start location tracking if we have permission
             startLocationTracking()
             loadDataPoints()
         } else {
@@ -320,8 +323,16 @@ class MapCardView @JvmOverloads constructor(
         // Apply color filter for Home theme
         applyThemeColorFilter(theme)
         
-        // Set default center (will be updated when location is available)
-        mapView.controller.setCenter(GeoPoint(0.0, 0.0))
+        // Set default center (use last known location if available, otherwise data origin)
+        val lastLoc = LocationController.getInstance(context).getLastLocation()
+        val initCenter = if (lastLoc != null) {
+            GeoPoint(lastLoc.latitude, lastLoc.longitude)
+        } else {
+            // Fallback to grid origin or 0,0
+            val origin = Prefs.getMapGridOrigin(context)
+            if (origin != null) GeoPoint(origin.first, origin.second) else GeoPoint(0.0, 0.0)
+        }
+        mapView.controller.setCenter(initCenter)
         
         // Add hexagon overlay (below position marker)
         hexagonOverlay = HexagonOverlay()

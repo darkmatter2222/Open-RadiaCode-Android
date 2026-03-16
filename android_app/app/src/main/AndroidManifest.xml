@@ -88,11 +88,6 @@
             android:label="Smart Alerts" />
 
         <activity
-            android:name=".IsotopeSettingsActivity"
-            android:exported="false"
-            android:label="Isotope Settings" />
-
-        <activity
             android:name=".VegaStatisticalSettingsActivity"
             android:exported="false"
             android:label="VEGA Intelligence" />
@@ -153,13 +148,6 @@
             android:name=".spectrogram.VegaSpectralAnalysisActivity"
             android:exported="false"
             android:label="Vega Spectral Analysis" />
-
-        <!-- Isotope Analysis Results (Full-screen) -->
-        <activity
-            android:name=".spectrogram.IsotopeAnalysisActivity"
-            android:exported="false"
-            android:label="Isotope Analysis"
-            android:theme="@style/Theme.RadiaCode" />
 
         <service
             android:name=".RadiaCodeForegroundService"

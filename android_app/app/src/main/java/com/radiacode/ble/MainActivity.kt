@@ -34,7 +34,6 @@ import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import android.view.HapticFeedbackConstants
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.radiacode.ble.spectrogram.VegaSpectralAnalysisActivity
 import com.radiacode.ble.spectrogram.SpectrogramPrefs
 import com.radiacode.ble.ui.ProChartView
 import com.radiacode.ble.ui.VegaIntroDialog
@@ -74,17 +73,7 @@ class MainActivity : AppCompatActivity() {
     private var geigerTickEngine: GeigerTickEngine? = null
     private var deltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
     
-    // Isotope detection state
-    private var isotopeDetector: IsotopeDetector? = null
-    private val isotopePredictionHistories = mutableMapOf<String, IsotopePredictionHistory>()  // per-device history
-    private var isIsotopeRealtimeActive = false
-    private var lastSpectrumData: SpectrumData? = null
-    private var lastSpectrumDeviceId: String? = null
-    
-    // Spectrum accumulation for real-time mode (since differential spectrum has few counts)
-    private val accumulatedSpectra = mutableMapOf<String, SpectrumData>()
-    // In FULL_DURATION mode, we never reset; in INTERVAL mode, we use the chart time window
-    private val spectrumAccumulationStart = mutableMapOf<String, Long>()
+
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -288,38 +277,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private val spectrumReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            if (intent?.action != RadiaCodeForegroundService.ACTION_SPECTRUM_DATA) return
-            val counts = intent.getIntArrayExtra(RadiaCodeForegroundService.EXTRA_SPECTRUM_COUNTS) ?: return
-            val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
-            val a0 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A0, 0f)
-            val a1 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A1, 3.0f)
-            val a2 = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CALIB_A2, 0f)
-            val isRealtime = intent.getBooleanExtra(RadiaCodeForegroundService.EXTRA_IS_REALTIME, false)
-            
-            val spectrum = SpectrumData(
-                durationSeconds = 0,  // Not tracked in broadcast
-                counts = counts,
-                a0 = a0,
-                a1 = a1,
-                a2 = a2,
-                timestampMs = System.currentTimeMillis()
-            )
-            
-            // Only update lastSpectrumData for scans (for the SCAN button)
-            if (!isRealtime) {
-                lastSpectrumData = spectrum
-                lastSpectrumDeviceId = deviceId
-            }
-            
-            // Only feed realtime data to the realtime handler
-            if (isRealtime) {
-                onRealtimeSpectrumReceived(spectrum, deviceId)
-            }
-        }
-    }
-
     private val findDevicesLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val address = result.data?.getStringExtra(FindDevicesActivity.EXTRA_DEVICE_ADDRESS) ?: return@registerForActivityResult
@@ -554,7 +511,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupTabs() {
         val adapter = MainPagerAdapter(this)
         viewPager.adapter = adapter
-        viewPager.offscreenPageLimit = 3 // keep all tabs alive
+        viewPager.offscreenPageLimit = 2 // keep all tabs alive
 
         // Subtle crossfade transition when switching tabs
         viewPager.setPageTransformer { page, position ->
@@ -576,10 +533,9 @@ class MainActivity : AppCompatActivity() {
         val tabIcons = intArrayOf(
             R.drawable.ic_tab_dashboard,
             R.drawable.ic_tab_map,
-            R.drawable.ic_tab_isotope,
             R.drawable.ic_tab_device
         )
-        val tabLabels = arrayOf("Dashboard", "Map", "Isotope ID", "Device")
+        val tabLabels = arrayOf("Dashboard", "Map", "Device")
 
         TabLayoutMediator(tabLayout, viewPager) { tab, position ->
             tab.text = tabLabels[position]
@@ -608,26 +564,8 @@ class MainActivity : AppCompatActivity() {
     fun getMapFragment(): MapFragment? =
         supportFragmentManager.findFragmentByTag("f1") as? MapFragment
 
-    fun getIsotopeFragment(): IsotopeFragment? =
-        supportFragmentManager.findFragmentByTag("f2") as? IsotopeFragment
-
     fun getDeviceFragment(): DeviceFragment? =
-        supportFragmentManager.findFragmentByTag("f3") as? DeviceFragment
-
-    // --- Public state accessors for fragments ---
-    fun getIsotopeDetector(): IsotopeDetector? = isotopeDetector
-    fun getCurrentIsotopeHistory(): IsotopePredictionHistory = isotopePredictionHistories.getOrPut(selectedDeviceIdCache ?: "global") { IsotopePredictionHistory() }
-    fun getLastSpectrumData(): SpectrumData? = lastSpectrumData
-    fun getIsotopeRealtimeActive(): Boolean = isIsotopeRealtimeActive
-
-    fun setIsotopeRealtimeActive(active: Boolean) {
-        isIsotopeRealtimeActive = active
-    }
-
-    fun clearAccumulatedSpectra() {
-        accumulatedSpectra.clear()
-        spectrumAccumulationStart.clear()
-    }
+        supportFragmentManager.findFragmentByTag("f2") as? DeviceFragment
 
     fun onDeviceDiscovered(address: String) {
         val existingDevice = Prefs.getDeviceByMac(this, address)
@@ -686,76 +624,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
         return points
-    }
-
-    private fun getIsotopeHistory(deviceId: String?): IsotopePredictionHistory {
-        val key = deviceId ?: "global"
-        return isotopePredictionHistories.getOrPut(key) { IsotopePredictionHistory(300) }
-    }
-
-    private fun onRealtimeSpectrumReceived(spectrum: SpectrumData, deviceId: String? = null) {
-        if (!isIsotopeRealtimeActive) return
-        
-        val effectiveDeviceId = deviceId ?: "unknown"
-        val detector = isotopeDetector ?: return
-        
-        // Accumulate differential spectrum
-        val now = System.currentTimeMillis()
-        val startTime = spectrumAccumulationStart[effectiveDeviceId] ?: now
-        val existingSpectrum = accumulatedSpectra[effectiveDeviceId]
-        
-        val accumulationMode = Prefs.getIsotopeAccumulationMode(this)
-        
-        when (accumulationMode) {
-            Prefs.IsotopeAccumulationMode.FULL_DURATION -> {
-                // Never reset - just keep accumulating
-                if (existingSpectrum != null) {
-                    accumulatedSpectra[effectiveDeviceId] = existingSpectrum + spectrum
-                } else {
-                    accumulatedSpectra[effectiveDeviceId] = spectrum
-                    spectrumAccumulationStart[effectiveDeviceId] = now
-                }
-            }
-            Prefs.IsotopeAccumulationMode.INTERVAL -> {
-                // Use chart time window for accumulation interval
-                val windowMs = Prefs.getWindowSeconds(this, 60) * 1000L
-                
-                if (now - startTime > windowMs) {
-                    // Window expired - reset accumulation
-                    accumulatedSpectra[effectiveDeviceId] = spectrum
-                    spectrumAccumulationStart[effectiveDeviceId] = now
-                    android.util.Log.d("MainActivity", "Reset spectrum accumulation (INTERVAL mode, window=${windowMs}ms)")
-                } else if (existingSpectrum != null) {
-                    accumulatedSpectra[effectiveDeviceId] = existingSpectrum + spectrum
-                } else {
-                    accumulatedSpectra[effectiveDeviceId] = spectrum
-                    spectrumAccumulationStart[effectiveDeviceId] = now
-                }
-            }
-        }
-        
-        val accumulatedSpectrum = accumulatedSpectra[effectiveDeviceId] ?: spectrum
-        val elapsedSec = (now - (spectrumAccumulationStart[effectiveDeviceId] ?: now)) / 1000
-        android.util.Log.d("MainActivity", "Accumulated spectrum ($accumulationMode mode, ${elapsedSec}s): " +
-            "totalCounts=${accumulatedSpectrum.totalCounts}")
-        
-        // Only analyze if we have enough counts (at least 50 for meaningful analysis)
-        if (accumulatedSpectrum.totalCounts < 50) {
-            android.util.Log.d("MainActivity", "Skipping analysis - only ${accumulatedSpectrum.totalCounts} counts accumulated")
-            return
-        }
-        
-        val result = detector.analyze(accumulatedSpectrum)
-        
-        // Add to the correct device's history
-        val history = getIsotopeHistory(deviceId)
-        history.add(result)
-        
-        // Only refresh charts if this is the currently selected device
-        val selectedId = Prefs.getSelectedDeviceId(this)
-        if (deviceId == selectedId || (selectedId == null && deviceId != null)) {
-            getIsotopeFragment()?.refreshCharts()
-        }
     }
 
     /**
@@ -1219,7 +1087,6 @@ class MainActivity : AppCompatActivity() {
                 if (uiDirty) {
                     getDashboardFragment()?.refreshCharts()
                     getDashboardFragment()?.updateSessionInfo()
-                    getIsotopeFragment()?.updateIntelligenceCard()
                     uiDirty = false
                 }
 
@@ -1385,21 +1252,17 @@ class MainActivity : AppCompatActivity() {
     private fun registerReadingReceiver() {
         val readingFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_READING)
         val stateFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_DEVICE_STATE_CHANGED)
-        val spectrumFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_SPECTRUM_DATA)
         val statisticalFilter = android.content.IntentFilter(RadiaCodeForegroundService.ACTION_STATISTICAL_UPDATE)
         try {
             if (Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(readingReceiver, readingFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
                 registerReceiver(deviceStateReceiver, stateFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
-                registerReceiver(spectrumReceiver, spectrumFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
                 registerReceiver(statisticalReceiver, statisticalFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("DEPRECATION")
                 registerReceiver(readingReceiver, readingFilter)
                 @Suppress("DEPRECATION")
                 registerReceiver(deviceStateReceiver, stateFilter)
-                @Suppress("DEPRECATION")
-                registerReceiver(spectrumReceiver, spectrumFilter)
                 @Suppress("DEPRECATION")
                 registerReceiver(statisticalReceiver, statisticalFilter)
             }
@@ -1412,9 +1275,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
         try {
             unregisterReceiver(deviceStateReceiver)
-        } catch (_: Throwable) {}
-        try {
-            unregisterReceiver(spectrumReceiver)
         } catch (_: Throwable) {}
         try {
             unregisterReceiver(statisticalReceiver)

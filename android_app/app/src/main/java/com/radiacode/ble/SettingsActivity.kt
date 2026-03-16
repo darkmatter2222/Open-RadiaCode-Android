@@ -36,9 +36,6 @@ class SettingsActivity : AppCompatActivity() {
         wireRow(R.id.rowSound, "Sound & Geiger") {
             startActivity(Intent(this, SoundSettingsActivity::class.java))
         }
-        wireRow(R.id.rowIsotope, "Isotope Detection") {
-            startActivity(Intent(this, IsotopeSettingsActivity::class.java))
-        }
         wireRow(R.id.rowIntelligence, "VEGA Intelligence") {
             startActivity(Intent(this, VegaStatisticalSettingsActivity::class.java))
         }

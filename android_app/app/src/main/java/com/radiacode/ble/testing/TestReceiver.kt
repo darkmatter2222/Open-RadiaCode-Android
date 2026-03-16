@@ -16,7 +16,6 @@ import com.google.android.material.tabs.TabLayout
 import com.radiacode.ble.BuildConfig
 import com.radiacode.ble.DashboardFragment
 import com.radiacode.ble.DeviceFragment
-import com.radiacode.ble.IsotopeFragment
 import com.radiacode.ble.MainActivity
 import com.radiacode.ble.MainPagerAdapter
 import com.radiacode.ble.MapFragment
@@ -175,7 +174,6 @@ class TestReceiver : BroadcastReceiver() {
         when (fragment) {
             is DashboardFragment -> addDashboardInfo(result, fragment)
             is MapFragment -> addMapInfo(result, fragment, context)
-            is IsotopeFragment -> addIsotopeInfo(result, fragment)
             is DeviceFragment -> addDeviceInfo(result, fragment)
         }
 
@@ -232,21 +230,6 @@ class TestReceiver : BroadcastReceiver() {
         result.put("has_export_btn", view.findViewById<View>(R.id.btnExportData) != null)
         result.put("has_sessions_btn", view.findViewById<View>(R.id.btnSessions) != null)
         result.put("has_theme_btn", view.findViewById<View>(R.id.btnMapTheme) != null)
-    }
-
-    private fun addIsotopeInfo(result: JSONObject, fragment: IsotopeFragment) {
-        val view = fragment.view ?: return
-        result.put("has_isotope_panel", view.findViewById<View>(R.id.isotopePanel) != null)
-        result.put("has_scan_btn", view.findViewById<View>(R.id.isotopeScanBtn) != null)
-        result.put("has_realtime_switch", view.findViewById<View>(R.id.isotopeRealtimeSwitch) != null)
-        result.put("has_chart_container", view.findViewById<View>(R.id.isotopeChartContainer) != null)
-        result.put("has_status_label", view.findViewById<View>(R.id.isotopeStatusLabel) != null)
-
-        val statusLabel = view.findViewById<TextView>(R.id.isotopeStatusLabel)
-        result.put("isotope_status_text", statusLabel?.text?.toString() ?: "")
-
-        val topResult = view.findViewById<TextView>(R.id.isotopeTopResult)
-        result.put("isotope_top_result", topResult?.text?.toString() ?: "")
     }
 
     private fun addDeviceInfo(result: JSONObject, fragment: DeviceFragment) {
@@ -657,35 +640,10 @@ class TestReceiver : BroadcastReceiver() {
             }
         }
 
-        // ── Isotope Tab (2) Tests ──
+        // ── Device Tab (2) Tests ──
 
         viewPager?.setCurrentItem(2, false)
-        val isoFrag = activity?.let { getFragment(it, 2) }
-
-        test("isotope_fragment_exists") {
-            isoFrag is IsotopeFragment
-        }
-
-        test("isotope_panel") {
-            isoFrag?.view?.findViewById<View>(R.id.isotopePanel) != null
-        }
-
-        test("isotope_scan_button") {
-            isoFrag?.view?.findViewById<View>(R.id.isotopeScanBtn) != null
-        }
-
-        test("isotope_realtime_switch") {
-            isoFrag?.view?.findViewById<View>(R.id.isotopeRealtimeSwitch) != null
-        }
-
-        test("isotope_chart_container") {
-            isoFrag?.view?.findViewById<View>(R.id.isotopeChartContainer) != null
-        }
-
-        // ── Device Tab (3) Tests ──
-
-        viewPager?.setCurrentItem(3, false)
-        val devFrag = activity?.let { getFragment(it, 3) }
+        val devFrag = activity?.let { getFragment(it, 2) }
 
         test("device_fragment_exists") {
             devFrag is DeviceFragment

@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.util.Log
+import com.radiacode.ble.spectrogram.SpectrogramPrefs
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -295,14 +296,14 @@ class MultiDeviceBleManager(
                 // Increment poll cycle counter
                 m.pollCycleCount++
                 
-                // Check if we should read spectrum this cycle
-                val realtimeEnabled = Prefs.isIsotopeRealtimeEnabled(context)
+                // Check if we should read spectrum this cycle (for spectrogram recording)
+                val recordingEnabled = SpectrogramPrefs.isRecordingEnabled(context)
                 val hasCallback = onSpectrumReading != null
                 val isSpectrumCycle = m.pollCycleCount % SPECTRUM_POLL_INTERVAL == 0
-                val shouldReadSpectrum = hasCallback && realtimeEnabled && isSpectrumCycle
+                val shouldReadSpectrum = hasCallback && recordingEnabled && isSpectrumCycle
                 
                 if (m.pollCycleCount % 10 == 0) {
-                    Log.d(TAG, "Poll cycle ${m.pollCycleCount} for $deviceId: realtimeEnabled=$realtimeEnabled hasCallback=$hasCallback isSpectrumCycle=$isSpectrumCycle")
+                    Log.d(TAG, "Poll cycle ${m.pollCycleCount} for $deviceId: recordingEnabled=$recordingEnabled hasCallback=$hasCallback isSpectrumCycle=$isSpectrumCycle")
                 }
                 
                 client.readDataBuf()

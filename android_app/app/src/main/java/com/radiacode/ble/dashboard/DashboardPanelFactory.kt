@@ -37,7 +37,6 @@ object DashboardPanelFactory {
             PanelType.INTELLIGENCE -> inflater.inflate(R.layout.dashboard_panel_intelligence, null)
             PanelType.DOSE_CHART -> createChartPanel(inflater, isDose = true)
             PanelType.COUNT_CHART -> createChartPanel(inflater, isDose = false)
-            PanelType.ISOTOPE_ID -> createIsotopePanel(context)
         }
         
         wrapper.setContent(content)
@@ -79,35 +78,6 @@ object DashboardPanelFactory {
         }
         
         return view
-    }
-    
-    private fun createIsotopePanel(context: Context): View {
-        // For now, create a placeholder - will integrate with existing isotope UI
-        val layout = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
-        }
-        
-        val title = TextView(context).apply {
-            text = "ISOTOPE IDENTIFICATION"
-            setTextColor(ContextCompat.getColor(context, R.color.pro_text_muted))
-            textSize = 11f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            letterSpacing = 0.1f
-        }
-        
-        layout.addView(title)
-        
-        val placeholder = TextView(context).apply {
-            text = "Isotope panel content"
-            setTextColor(ContextCompat.getColor(context, R.color.pro_text_secondary))
-            textSize = 13f
-            setPadding(0, 16, 0, 0)
-        }
-        
-        layout.addView(placeholder)
-        
-        return layout
     }
 }
 

@@ -223,7 +223,6 @@ Shows:
 • Z-scores and trend indicators
 • Full charts with zoom/pan
 • Intelligence report
-• Isotope identification
 • Data science panels
 
 **To switch modes:**
@@ -419,7 +418,7 @@ Minimize exposure. Leave area unless you understand the source.
 
 **μSv**: Microsievert. 1/1,000,000 of a Sievert.
 
-**ROI**: Region of Interest. Energy window for isotope detection.
+**ROI**: Region of Interest. Energy window for spectrum analysis.
 
 **Scintillator**: Crystal that flashes when hit by radiation.
 

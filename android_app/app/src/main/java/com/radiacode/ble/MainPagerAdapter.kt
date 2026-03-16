@@ -6,18 +6,17 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 
 /**
  * ViewPager2 adapter for the main tab navigation.
- * Tabs: Dashboard | Map | Isotope ID | Device
+ * Tabs: Dashboard | Map | Device
  */
 class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activity) {
 
     companion object {
         const val TAB_DASHBOARD = 0
         const val TAB_MAP = 1
-        const val TAB_ISOTOPE = 2
-        const val TAB_DEVICE = 3
-        const val TAB_COUNT = 4
+        const val TAB_DEVICE = 2
+        const val TAB_COUNT = 3
 
-        val TAB_TITLES = arrayOf("Dashboard", "Map", "Isotope ID", "Device")
+        val TAB_TITLES = arrayOf("Dashboard", "Map", "Device")
     }
 
     override fun getItemCount(): Int = TAB_COUNT
@@ -26,7 +25,6 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
         return when (position) {
             TAB_DASHBOARD -> DashboardFragment()
             TAB_MAP -> MapFragment()
-            TAB_ISOTOPE -> IsotopeFragment()
             TAB_DEVICE -> DeviceFragment()
             else -> DashboardFragment()
         }
