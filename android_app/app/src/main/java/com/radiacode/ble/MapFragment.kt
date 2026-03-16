@@ -41,6 +41,7 @@ class MapFragment : Fragment() {
     private lateinit var btnExportData: MaterialButton
     private lateinit var btnSessions: MaterialButton
     private lateinit var btnMapTheme: ImageButton
+    private lateinit var btnGpsInfo: ImageButton
     private lateinit var btnFullscreen: ImageButton
 
     // Color scale controls
@@ -105,6 +106,7 @@ class MapFragment : Fragment() {
         btnExportData = view.findViewById(R.id.btnExportData)
         btnSessions = view.findViewById(R.id.btnSessions)
         btnMapTheme = view.findViewById(R.id.btnMapTheme)
+        btnGpsInfo = view.findViewById(R.id.btnGpsInfo)
         chipScaleAuto = view.findViewById(R.id.chipScaleAuto)
         editScaleMin = view.findViewById(R.id.editScaleMin)
         editScaleMax = view.findViewById(R.id.editScaleMax)
@@ -135,7 +137,6 @@ class MapFragment : Fragment() {
             setGpsTier(Prefs.GpsTier.BALANCED)
         }
         chipGpsHigh.setOnClickListener {
-            // Show battery warning only for high precision (Point 12)
             AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
                 .setTitle("High Precision GPS")
                 .setMessage("High precision mode uses the GPS radio for ~1-3m accuracy. This will increase battery drain significantly.\n\nContinue?")
@@ -145,6 +146,40 @@ class MapFragment : Fragment() {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+        btnGpsInfo.setOnClickListener {
+            showGpsModeInfo()
+        }
+    }
+
+    private fun showGpsModeInfo() {
+        val ctx = requireContext()
+        val currentTier = Prefs.getGpsTier(ctx)
+        val message = buildString {
+            appendLine("GPS modes control how location is acquired.")
+            appendLine()
+            appendLine("PASSIVE (current: ${if (currentTier == Prefs.GpsTier.PASSIVE) "active" else "inactive"})")
+            appendLine("-- Zero additional battery cost")
+            appendLine("-- Piggybacks on other apps' location requests")
+            appendLine("-- Updates only when another app requests GPS")
+            appendLine("-- Accuracy varies; may get no updates if no other app uses location")
+            appendLine()
+            appendLine("BALANCED (current: ${if (currentTier == Prefs.GpsTier.BALANCED) "active" else "inactive"})")
+            appendLine("-- Low-moderate battery usage")
+            appendLine("-- Uses Wi-Fi and cell towers (~100m accuracy)")
+            appendLine("-- Updates every ~5 seconds")
+            appendLine("-- Good for general area mapping")
+            appendLine()
+            appendLine("HIGH (current: ${if (currentTier == Prefs.GpsTier.HIGH) "active" else "inactive"})")
+            appendLine("-- Significant battery drain")
+            appendLine("-- Uses GPS radio directly (~1-3m accuracy)")
+            appendLine("-- Updates every ~1.5 seconds")
+            appendLine("-- Best for precise route tracking")
+        }
+        AlertDialog.Builder(ctx, R.style.DarkDialogTheme)
+            .setTitle("GPS Mode Guide")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun setGpsTier(tier: Prefs.GpsTier) {

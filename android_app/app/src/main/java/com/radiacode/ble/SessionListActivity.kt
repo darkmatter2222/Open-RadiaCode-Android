@@ -116,13 +116,13 @@ class SessionListActivity : AppCompatActivity() {
         if (Prefs.isDoseNanoMode(this)) "nSv/h" else "uSv/h"
 
     private fun loadSessions() {
-        sessions = SessionManager.getSessions(this).toMutableList()
+        val fresh = SessionManager.getSessions(this).toMutableList()
         // For any active session, refresh sample count from actual stored data
-        sessions.forEachIndexed { idx, s ->
+        fresh.forEachIndexed { idx, s ->
             if (s.isActive) {
                 val data = SessionManager.getSessionData(this, s.id)
                 if (data.isNotEmpty()) {
-                    sessions[idx] = s.copy(
+                    fresh[idx] = s.copy(
                         sampleCount = data.size,
                         doseMin = data.minOf { it.uSvPerHour },
                         doseMax = data.maxOf { it.uSvPerHour },
@@ -134,6 +134,9 @@ class SessionListActivity : AppCompatActivity() {
                 }
             }
         }
+        // Update list in place so the adapter's reference stays valid
+        sessions.clear()
+        sessions.addAll(fresh)
         updateEmptyView()
     }
 
@@ -195,9 +198,9 @@ class SessionListActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Start") { _, _ ->
                 val name = input.text.toString().takeIf { it.isNotBlank() }
-                val session = SessionManager.startSession(this, name)
-                sessions.add(0, session)
-                adapter.notifyItemInserted(0)
+                SessionManager.startSession(this, name)
+                loadSessions()
+                adapter.notifyDataSetChanged()
                 recyclerView.scrollToPosition(0)
                 updateEmptyView()
                 

@@ -738,6 +738,18 @@ class RadiaCodeForegroundService : Service() {
             }
             sendBroadcast(i)
         } catch (_: Throwable) {}
+
+        // Session recording: always feed data from the service so recording works
+        // regardless of which activity is in the foreground
+        if (SessionManager.isRecording(this)) {
+            SessionManager.addDataPoint(
+                this,
+                uSvPerHour, cps,
+                locationSnap?.latitude,
+                locationSnap?.longitude,
+                deviceId
+            )
+        }
         
         // PRIORITY 2: Statistical analysis - feed data to VEGA engine
         // This is fast (just math) and runs on the calling thread

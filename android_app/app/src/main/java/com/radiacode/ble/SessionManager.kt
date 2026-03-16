@@ -168,9 +168,15 @@ object SessionManager {
     // ============== Session Management ==============
 
     /**
-     * Start a new recording session
+     * Start a new recording session.
+     * Automatically stops any existing active session first.
      */
     fun startSession(context: Context, name: String? = null): Session {
+        // Stop any existing active session before starting a new one
+        if (isRecording(context)) {
+            stopSession(context)
+        }
+
         val sessionName = name ?: "Session ${filenameDateFormat.format(Date())}"
         val session = Session(
             name = sessionName,
