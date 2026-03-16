@@ -413,6 +413,10 @@ class RadiaCodeForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        // Finalize any active recording session
+        if (SessionManager.isRecording(this)) {
+            SessionManager.stopSession(this)
+        }
         stopInternal("Service destroyed")
         locationController?.releaseBackground(backgroundLocationToken)
         backgroundLocationToken = null
@@ -739,17 +743,18 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
 
-        // Session recording: always feed data from the service so recording works
-        // regardless of which activity is in the foreground
-        if (SessionManager.isRecording(this)) {
-            SessionManager.addDataPoint(
-                this,
-                uSvPerHour, cps,
-                locationSnap?.latitude,
-                locationSnap?.longitude,
-                deviceId
-            )
+        // Session recording: the service is the single owner of session lifecycle.
+        // Auto-start a session on first reading if none is active, then record data.
+        if (!SessionManager.isRecording(this)) {
+            SessionManager.startSession(this)
         }
+        SessionManager.addDataPoint(
+            this,
+            uSvPerHour, cps,
+            locationSnap?.latitude,
+            locationSnap?.longitude,
+            deviceId
+        )
         
         // PRIORITY 2: Statistical analysis - feed data to VEGA engine
         // This is fast (just math) and runs on the calling thread

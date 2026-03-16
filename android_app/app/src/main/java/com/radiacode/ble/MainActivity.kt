@@ -185,13 +185,6 @@ class MainActivity : AppCompatActivity() {
                 cpsHistory.add(ts, cps)
                 sampleCount++
 
-                // Auto-start a session if none is active.
-                // Session data recording is handled by the foreground service
-                // so it works regardless of which activity is in the foreground.
-                if (!SessionManager.isRecording(this@MainActivity)) {
-                    SessionManager.startSession(this@MainActivity)
-                }
-
                 uiDirty = true
                 
                 // Trigger immediate chart update (throttled to avoid overwhelming the UI)
@@ -830,10 +823,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Finalize any active recording session
-        if (SessionManager.isRecording(this)) {
-            SessionManager.stopSession(this)
-        }
         if (BuildConfig.DEBUG) {
             com.radiacode.ble.testing.TestReceiver.activityRef = null
         }

@@ -335,7 +335,7 @@ object SessionManager {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_ACTIVE_SESSION, sessionId)
-            .apply()
+            .commit()
     }
 
     private fun saveSessions(context: Context, sessions: List<Session>) {
@@ -343,18 +343,22 @@ object SessionManager {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_SESSIONS_JSON, json)
-            .apply()
+            .commit()
     }
 
+    private val dataLock = Any()
+
     private fun appendSessionData(context: Context, sessionId: String, dataPoint: SessionDataPoint) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val key = KEY_SESSION_DATA_PREFIX + sessionId
-        val existing = prefs.getString(key, "") ?: ""
-        val newData = if (existing.isEmpty()) dataPoint.toCsv() else "$existing\n${dataPoint.toCsv()}"
-        
-        prefs.edit()
-            .putString(key, newData)
-            .apply()
+        synchronized(dataLock) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val key = KEY_SESSION_DATA_PREFIX + sessionId
+            val existing = prefs.getString(key, "") ?: ""
+            val newData = if (existing.isEmpty()) dataPoint.toCsv() else "$existing\n${dataPoint.toCsv()}"
+
+            prefs.edit()
+                .putString(key, newData)
+                .commit()
+        }
     }
 
     private fun clearSessionData(context: Context, sessionId: String) {
