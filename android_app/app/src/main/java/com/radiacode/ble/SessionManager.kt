@@ -232,6 +232,24 @@ object SessionManager {
     }
 
     /**
+     * Resume recording to a previously stopped session.
+     * Stops any currently active session first, then re-opens the target session.
+     */
+    fun resumeSession(context: Context, sessionId: String): Boolean {
+        if (isRecording(context)) {
+            stopSession(context)
+        }
+        val sessions = getSessions(context).toMutableList()
+        val index = sessions.indexOfFirst { it.id == sessionId }
+        if (index < 0) return false
+
+        sessions[index].endTimeMs = null
+        saveSessions(context, sessions)
+        setActiveSession(context, sessionId)
+        return true
+    }
+
+    /**
      * Add data point to active session
      */
     fun addDataPoint(
@@ -327,6 +345,30 @@ object SessionManager {
         return csv.split("\n")
             .filter { it.isNotEmpty() }
             .mapNotNull { SessionDataPoint.fromCsv(it) }
+    }
+
+    /**
+     * Get map data points for the currently active session.
+     * Returns only points with lat/lng. Returns empty if no session is active.
+     */
+    fun getActiveSessionMapDataPoints(context: Context): List<Prefs.MapDataPoint> {
+        val activeId = getActiveSessionId(context) ?: return emptyList()
+        return getSessionMapDataPoints(context, activeId)
+    }
+
+    /**
+     * Get map data points for a specific session by ID.
+     * Returns only points with lat/lng.
+     */
+    fun getSessionMapDataPoints(context: Context, sessionId: String): List<Prefs.MapDataPoint> {
+        val points = getSessionData(context, sessionId)
+        val result = mutableListOf<Prefs.MapDataPoint>()
+        for (p in points) {
+            val lat = p.latitude ?: continue
+            val lng = p.longitude ?: continue
+            result.add(Prefs.MapDataPoint(lat, lng, p.uSvPerHour, p.cps, p.timestampMs))
+        }
+        return result
     }
 
     // ============== Private Helpers ==============

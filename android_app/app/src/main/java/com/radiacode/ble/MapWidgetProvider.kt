@@ -165,7 +165,7 @@ class MapWidgetProvider : AppWidgetProvider() {
             }
             
             // Get data point count for subtitle
-            val dataPoints = Prefs.getMapDataPoints(context)
+            val dataPoints = SessionManager.getActiveSessionMapDataPoints(context)
             val pointCount = dataPoints.size
             views.setTextViewText(R.id.mapPointCount, "$pointCount points")
             
@@ -298,7 +298,7 @@ class MapWidgetProvider : AppWidgetProvider() {
             val canvas = Canvas(bitmap)
             
             // Get map data points
-            val dataPoints = Prefs.getMapDataPoints(context)
+            val dataPoints = SessionManager.getActiveSessionMapDataPoints(context)
             
             // Determine center and zoom
             val center = if (dataPoints.isNotEmpty()) {

@@ -32,6 +32,7 @@ class MapFragment : Fragment() {
     private lateinit var mapCard: MapCardView
 
     // GPS tier chips
+    private lateinit var chipGpsOff: TextView
     private lateinit var chipGpsPassive: TextView
     private lateinit var chipGpsBalanced: TextView
     private lateinit var chipGpsHigh: TextView
@@ -99,6 +100,7 @@ class MapFragment : Fragment() {
 
     private fun bindViews(view: View) {
         mapCard = view.findViewById(R.id.mapCard)
+        chipGpsOff = view.findViewById(R.id.chipGpsOff)
         chipGpsPassive = view.findViewById(R.id.chipGpsPassive)
         chipGpsBalanced = view.findViewById(R.id.chipGpsBalanced)
         chipGpsHigh = view.findViewById(R.id.chipGpsHigh)
@@ -123,13 +125,9 @@ class MapFragment : Fragment() {
         val currentTier = Prefs.getGpsTier(ctx)
         updateGpsTierHighlight(currentTier)
 
-        // Always enable GPS in passive mode by default (Point 11 - zero battery cost)
-        if (!Prefs.isGpsTrackingEnabled(ctx)) {
-            // Auto-enable passive GPS - no warning needed
-            Prefs.setGpsTrackingEnabled(ctx, true)
-            Prefs.setGpsTier(ctx, Prefs.GpsTier.PASSIVE)
+        chipGpsOff.setOnClickListener {
+            setGpsTier(Prefs.GpsTier.OFF)
         }
-
         chipGpsPassive.setOnClickListener {
             setGpsTier(Prefs.GpsTier.PASSIVE)
         }
@@ -156,6 +154,12 @@ class MapFragment : Fragment() {
         val currentTier = Prefs.getGpsTier(ctx)
         val message = buildString {
             appendLine("GPS modes control how location is acquired.")
+            appendLine()
+            appendLine("OFF (current: ${if (currentTier == Prefs.GpsTier.OFF) "active" else "inactive"})")
+            appendLine("-- GPS completely disabled")
+            appendLine("-- Zero battery usage from location")
+            appendLine("-- No map tracking, no session GPS data, no logbook locations")
+            appendLine("-- Radiation readings still collected, just without location")
             appendLine()
             appendLine("PASSIVE (current: ${if (currentTier == Prefs.GpsTier.PASSIVE) "active" else "inactive"})")
             appendLine("-- Zero additional battery cost")
@@ -185,9 +189,23 @@ class MapFragment : Fragment() {
     private fun setGpsTier(tier: Prefs.GpsTier) {
         val ctx = requireContext()
         Prefs.setGpsTier(ctx, tier)
-        Prefs.setGpsTrackingEnabled(ctx, true)
+        if (tier == Prefs.GpsTier.OFF) {
+            Prefs.setGpsTrackingEnabled(ctx, false)
+            // Stop map location tracking
+            mapCard.stopLocationTracking()
+            // Notify the foreground service to release GPS
+            val intent = android.content.Intent("com.radiacode.ble.action.GPS_STATE_CHANGED")
+            ctx.sendBroadcast(intent)
+        } else {
+            Prefs.setGpsTrackingEnabled(ctx, true)
+            // Restart map location tracking
+            mapCard.startLocationTracking()
+            // Notify the foreground service to acquire GPS
+            val intent = android.content.Intent("com.radiacode.ble.action.GPS_STATE_CHANGED")
+            ctx.sendBroadcast(intent)
+        }
         updateGpsTierHighlight(tier)
-        // Notify location controller about mode change (no map re-init needed)
+        // Notify location controller about mode change
         LocationController.getInstance(ctx).setGpsTier(tier)
     }
 
@@ -198,11 +216,13 @@ class MapFragment : Fragment() {
         val amber = ContextCompat.getColor(ctx, R.color.pro_amber)
         val red = ContextCompat.getColor(ctx, R.color.pro_red)
 
+        chipGpsOff.setTextColor(if (tier == Prefs.GpsTier.OFF) red else inactive)
         chipGpsPassive.setTextColor(if (tier == Prefs.GpsTier.PASSIVE) active else inactive)
         chipGpsBalanced.setTextColor(if (tier == Prefs.GpsTier.BALANCED) amber else inactive)
         chipGpsHigh.setTextColor(if (tier == Prefs.GpsTier.HIGH) red else inactive)
 
         gpsAccuracyLabel.text = when (tier) {
+            Prefs.GpsTier.OFF -> "disabled"
             Prefs.GpsTier.PASSIVE -> "~varies"
             Prefs.GpsTier.BALANCED -> "~100m"
             Prefs.GpsTier.HIGH -> "~3m"
@@ -354,7 +374,8 @@ class MapFragment : Fragment() {
 
     private fun loadMap() {
         val ctx = requireContext()
-        if (Prefs.isGpsTrackingEnabled(ctx)) {
+        val tier = Prefs.getGpsTier(ctx)
+        if (tier != Prefs.GpsTier.OFF && Prefs.isGpsTrackingEnabled(ctx)) {
             mapCard.loadDataPoints()
             mapCard.startLocationTracking()
         }

@@ -468,7 +468,7 @@ object MapTileLoader {
      * Centers on the most recent data point, or averages all points if preferred.
      */
     fun getLastKnownCenter(context: Context): Pair<Double, Double>? {
-        val dataPoints = Prefs.getMapDataPoints(context)
+        val dataPoints = SessionManager.getActiveSessionMapDataPoints(context)
         if (dataPoints.isNotEmpty()) {
             // Center on the most recent data point
             val latest = dataPoints.maxByOrNull { it.timestampMs }
@@ -484,7 +484,7 @@ object MapTileLoader {
      * Get bounds that encompass all data points with some padding.
      */
     fun getDataBounds(context: Context): MapBounds? {
-        val dataPoints = Prefs.getMapDataPoints(context)
+        val dataPoints = SessionManager.getActiveSessionMapDataPoints(context)
         if (dataPoints.isEmpty()) return null
         
         val minLat = dataPoints.minOf { it.latitude }

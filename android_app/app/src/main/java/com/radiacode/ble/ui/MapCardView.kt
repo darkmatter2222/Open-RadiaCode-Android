@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.radiacode.ble.HexGrid
 import com.radiacode.ble.Prefs
 import com.radiacode.ble.R
+import com.radiacode.ble.SessionManager
 import com.radiacode.ble.location.LocationController
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
@@ -575,7 +576,7 @@ class MapCardView @JvmOverloads constructor(
      * Load existing data points from storage and rebuild hexagon grid.
      */
     fun loadDataPoints() {
-        setDataPoints(Prefs.getMapDataPoints(context))
+        setDataPoints(SessionManager.getActiveSessionMapDataPoints(context))
     }
 
     /**
@@ -604,7 +605,6 @@ class MapCardView @JvmOverloads constructor(
     fun clearMapData() {
         dataPoints.clear()
         hexagonData.clear()
-        Prefs.clearMapDataPoints(context)
         updateHexagonColors()
         updateScaleBar()
     }

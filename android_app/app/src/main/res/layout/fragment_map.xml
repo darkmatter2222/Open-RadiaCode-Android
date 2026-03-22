@@ -30,6 +30,14 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/chipGpsOff"
+            style="@style/RadiaCodeChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="5dp"
+            android:text="OFF" />
+
+        <TextView
             android:id="@+id/chipGpsPassive"
             style="@style/RadiaCodeChip.Active"
             android:layout_width="wrap_content"

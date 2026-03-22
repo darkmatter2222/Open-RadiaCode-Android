@@ -234,6 +234,18 @@ internal class RadiacodeBleClient(
             }
     }
 
+    fun readVSFR(vsfr: Int): CompletableFuture<Int> {
+        val payload = RadiacodeProtocol.packU32LE(vsfr.toLong())
+        return execute(RadiacodeProtocol.COMMAND_RD_VIRT_SFR, payload)
+            .thenApply { resp ->
+                if (resp.size < 8) throw IllegalStateException("RD_VIRT_SFR response too short (${resp.size})")
+                val bb = ByteBuffer.wrap(resp).order(ByteOrder.LITTLE_ENDIAN)
+                val retcode = bb.int
+                if (retcode != 1) throw IllegalStateException("RD_VIRT_SFR failed ret=$retcode")
+                bb.int
+            }
+    }
+
     fun readDataBuf(): CompletableFuture<ByteArray> {
         Log.d(TAG, "readDataBuf: RD_VIRT_STRING VS_DATA_BUF")
         val payload = RadiacodeProtocol.packU32LE(RadiacodeProtocol.VS_DATA_BUF.toLong())

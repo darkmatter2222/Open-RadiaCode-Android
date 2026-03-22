@@ -57,7 +57,6 @@ object Prefs {
     private const val MAX_DEVICES = 8
     
     // Map tracking keys
-    private const val KEY_MAP_DATA_POINTS = "map_data_points"
     private const val KEY_MAP_GRID_ORIGIN_LAT = "map_grid_origin_lat"
     private const val KEY_MAP_GRID_ORIGIN_LNG = "map_grid_origin_lng"
     private const val KEY_MAP_THEME = "map_theme"
@@ -66,7 +65,6 @@ object Prefs {
     private const val KEY_MAP_SCALE_MAX = "map_scale_max"
     private const val KEY_GPS_TRACKING_ENABLED = "gps_tracking_enabled"
     private const val KEY_GPS_TIER = "gps_tier"
-    private const val MAX_MAP_POINTS = 86400  // 24 hours at 1 reading/sec
     
     // Intro/Welcome keys
     private const val KEY_INTRO_SEEN_VERSION = "intro_seen_version"
@@ -167,11 +165,12 @@ object Prefs {
      */
     /**
      * GPS precision tiers (Point 12): trade battery for accuracy.
+     * OFF = completely disabled, no GPS, no tracking, no map data.
      * PASSIVE = zero extra drain, uses whatever the OS already has.
      * BALANCED = cell/Wi-Fi, ~100 m.
      * HIGH = GPS radio, ~3 m.
      */
-    enum class GpsTier { PASSIVE, BALANCED, HIGH }
+    enum class GpsTier { OFF, PASSIVE, BALANCED, HIGH }
 
     enum class NotificationStyle {
         NONE,                   // Hidden/None - minimal notification, guide to disable in Android settings
@@ -1274,6 +1273,13 @@ object Prefs {
         val devices = getDevices(context).filter { it.id != deviceId }
         setDevices(context, devices)
         
+        // Clear stale selectedDeviceId if the deleted device was selected
+        if (getSelectedDeviceId(context) == deviceId) {
+            // Auto-select the remaining device if exactly one left, otherwise clear
+            val autoSelect = if (devices.size == 1) devices.first().id else null
+            setSelectedDeviceId(context, autoSelect)
+        }
+        
         // Also clean up per-device data
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
@@ -1694,73 +1700,6 @@ object Prefs {
         val cps: Float,
         val timestampMs: Long
     )
-    
-    /**
-     * Add a new map data point. Automatically limits to MAX_MAP_POINTS.
-     */
-    fun addMapDataPoint(context: Context, latitude: Double, longitude: Double, uSvPerHour: Float, cps: Float) {
-        ensureMapGridOrigin(context, latitude, longitude)
-        val points = getMapDataPoints(context).toMutableList()
-        points.add(MapDataPoint(latitude, longitude, uSvPerHour, cps, System.currentTimeMillis()))
-        
-        // Limit to MAX_MAP_POINTS by removing oldest
-        while (points.size > MAX_MAP_POINTS) {
-            points.removeAt(0)
-        }
-        
-        // Serialize to JSON
-        val json = points.joinToString(separator = "\n") { point ->
-            "${point.latitude},${point.longitude},${point.uSvPerHour},${point.cps},${point.timestampMs}"
-        }
-        
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_MAP_DATA_POINTS, json)
-            .apply()
-    }
-    
-    /**
-     * Get all map data points.
-     */
-    fun getMapDataPoints(context: Context): List<MapDataPoint> {
-        val json = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .getString(KEY_MAP_DATA_POINTS, "") ?: ""
-        
-        if (json.isEmpty()) return emptyList()
-        
-        return json.lines()
-            .filter { it.isNotEmpty() }
-            .mapNotNull { line ->
-                val parts = line.split(",")
-                if (parts.size == 5) {
-                    try {
-                        MapDataPoint(
-                            latitude = parts[0].toDouble(),
-                            longitude = parts[1].toDouble(),
-                            uSvPerHour = parts[2].toFloat(),
-                            cps = parts[3].toFloat(),
-                            timestampMs = parts[4].toLong()
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
-                } else {
-                    null
-                }
-            }
-    }
-    
-    /**
-     * Clear all map data points.
-     */
-    fun clearMapDataPoints(context: Context) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_MAP_DATA_POINTS)
-            .remove(KEY_MAP_GRID_ORIGIN_LAT)
-            .remove(KEY_MAP_GRID_ORIGIN_LNG)
-            .apply()
-    }
 
     /**
      * Map grid origin for the hex tessellation.
@@ -1792,6 +1731,9 @@ object Prefs {
      * When disabled, no location data is collected or stored.
      */
     fun isGpsTrackingEnabled(context: Context): Boolean {
+        // GPS is enabled if the tier is anything other than OFF
+        val tier = getGpsTier(context)
+        if (tier == GpsTier.OFF) return false
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .getBoolean(KEY_GPS_TRACKING_ENABLED, false)  // OFF by default
     }

@@ -214,9 +214,11 @@ class SessionListActivity : AppCompatActivity() {
     }
 
     private fun openSession(session: SessionManager.Session) {
-        val options = mutableListOf("View Details", "Rename", "Add Notes", "Export CSV", "Delete")
+        val options = mutableListOf("View Map", "View Details", "Rename", "Add Notes", "Export CSV", "Delete")
         if (session.isActive) {
             options.add(0, "Stop Recording")
+        } else {
+            options.add(0, "Resume Recording")
         }
 
         AlertDialog.Builder(this, R.style.DarkDialogTheme)
@@ -225,6 +227,8 @@ class SessionListActivity : AppCompatActivity() {
                 val action = options[which]
                 when (action) {
                     "Stop Recording" -> stopSession(session)
+                    "Resume Recording" -> resumeSession(session)
+                    "View Map" -> FullscreenMapActivity.launch(this, session.id)
                     "View Details" -> showSessionDetails(session)
                     "Rename" -> renameSession(session)
                     "Add Notes" -> editNotes(session)
@@ -242,6 +246,18 @@ class SessionListActivity : AppCompatActivity() {
         adapter.notifyDataSetChanged()
         updateEmptyView()
         Snackbar.make(findViewById(android.R.id.content), "Recording stopped", Snackbar.LENGTH_SHORT)
+            .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
+            .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
+            .show()
+    }
+
+    private fun resumeSession(session: SessionManager.Session) {
+        findViewById<View>(android.R.id.content).performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        SessionManager.resumeSession(this, session.id)
+        loadSessions()
+        adapter.notifyDataSetChanged()
+        updateEmptyView()
+        Snackbar.make(findViewById(android.R.id.content), "Recording resumed", Snackbar.LENGTH_SHORT)
             .setBackgroundTint(ContextCompat.getColor(this, R.color.pro_surface))
             .setTextColor(ContextCompat.getColor(this, R.color.pro_cyan))
             .show()

@@ -73,6 +73,41 @@
                     app:tint="@color/pro_text_muted" />
             </LinearLayout>
 
+            <!-- Poll Interval -->
+            <LinearLayout
+                android:id="@+id/rowPollInterval"
+                style="@style/SettingsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SettingsRowTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Poll Interval" />
+
+                    <TextView
+                        android:id="@+id/pollIntervalSub"
+                        style="@style/SettingsRowSub"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="How often to read from device (ms)" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center_vertical"
+                    android:src="@drawable/ic_chevron_right"
+                    app:tint="@color/pro_text_muted" />
+            </LinearLayout>
+
             <!-- Notifications -->
             <LinearLayout
                 android:id="@+id/rowNotifications"

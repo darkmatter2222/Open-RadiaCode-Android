@@ -157,9 +157,17 @@ class LocationController private constructor(appContext: Context) {
     /**
      * Set the GPS precision tier from the UI (Point 12).
      * Forces a mode re-evaluation so the correct priority is applied.
+     * When set to OFF, all location updates are stopped.
      */
     fun setGpsTier(tier: Prefs.GpsTier) {
         gpsTier = tier
+        if (tier == Prefs.GpsTier.OFF) {
+            // Immediately stop all location updates
+            currentMode = Mode.STOPPED
+            stopUpdatesInternal()
+            Log.d(TAG, "GPS tier set to OFF - all location updates stopped")
+            return
+        }
         // Force restart with new priority
         val prev = currentMode
         currentMode = Mode.STOPPED
@@ -167,6 +175,9 @@ class LocationController private constructor(appContext: Context) {
     }
 
     private fun desiredModeLocked(): Mode {
+        // If GPS is OFF, never request location
+        if (gpsTier == Prefs.GpsTier.OFF) return Mode.STOPPED
+
         val wantsAnything = interactiveTokens.isNotEmpty() || backgroundTokens.isNotEmpty()
         if (!wantsAnything) return Mode.STOPPED
 
@@ -224,8 +235,13 @@ class LocationController private constructor(appContext: Context) {
 
         stopUpdatesInternal()
 
-        // Apply GPS tier (Point 12): PASSIVE/BALANCED/HIGH
+        // Apply GPS tier (Point 12): OFF/PASSIVE/BALANCED/HIGH
         val (priority, interval, minInterval, minDist) = when (gpsTier) {
+            Prefs.GpsTier.OFF -> {
+                // Should not reach here, but guard anyway
+                stopUpdatesInternal()
+                return
+            }
             Prefs.GpsTier.PASSIVE -> Quadruple(
                 Priority.PRIORITY_PASSIVE,
                 PASSIVE_INTERVAL_MS,

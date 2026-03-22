@@ -310,7 +310,7 @@ class MapWidgetConfigActivity : AppCompatActivity() {
         val canvas = Canvas(bitmap)
         
         // Get map data points
-        val dataPoints = Prefs.getMapDataPoints(this)
+        val dataPoints = SessionManager.getActiveSessionMapDataPoints(this)
         
         // Calculate bounds
         val bounds = if (dataPoints.isNotEmpty()) {

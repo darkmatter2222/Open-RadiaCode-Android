@@ -12,6 +12,7 @@ internal object RadiacodeProtocol {
     const val COMMAND_SET_EXCHANGE = 0x0007
     // cdump/radiacode: COMMAND.SET_TIME = 0x0A04
     const val COMMAND_SET_TIME = 0x0A04
+    const val COMMAND_RD_VIRT_SFR = 0x0824
     const val COMMAND_WR_VIRT_SFR = 0x0825
     const val COMMAND_RD_VIRT_STRING = 0x0826
 
@@ -21,6 +22,8 @@ internal object RadiacodeProtocol {
     const val VS_SPEC_ACCUM = 0x0205      // Accumulated spectrum
     const val VS_SPEC_DIFF = 0x0206       // Differential spectrum (recent counts)
     const val VSFR_DEVICE_TIME = 0x0504
+    const val VSFR_CPS = 0x8020         // Current counts per second (U32)
+    const val VSFR_DR_UR_H = 0x8021     // Current dose rate in uR/h (U32)
 
     fun buildRequest(command: Int, seq: Int, args: ByteArray): ByteArray {
         val reqSeqNo = (0x80 + (seq and 0x1F)) and 0xFF

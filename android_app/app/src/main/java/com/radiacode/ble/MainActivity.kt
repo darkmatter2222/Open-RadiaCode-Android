@@ -131,6 +131,10 @@ class MainActivity : AppCompatActivity() {
             val cps = intent.getFloatExtra(RadiaCodeForegroundService.EXTRA_CPS, 0f)
             val deviceId = intent.getStringExtra(RadiaCodeForegroundService.EXTRA_DEVICE_ID)
 
+            // RadiaCode never produces true zero dose rate (background radiation is always > 0).
+            // Zeros are BLE initialization artifacts -- discard them.
+            if (uSvH == 0f && cps == 0f) return
+
             // Feed Geiger tick engine based on selected mode
             val geigerMode = Prefs.getGeigerTickMode(this@MainActivity)
             if (geigerMode != Prefs.GeigerTickMode.OFF) {
@@ -1048,8 +1052,9 @@ class MainActivity : AppCompatActivity() {
 
                 // Status text
                 val statusIndicatesConnected = svc?.message?.contains("connected", ignoreCase = true) == true
+                val bleConnected = deviceConnectionStates.values.any { it == DeviceConnectionState.CONNECTED }
                 val hasRecent = lastShownReading != null && (now - (lastShownReading?.timestampMs ?: 0L)) < 10_000
-                val isConnected = hasRecent || statusIndicatesConnected
+                val isConnected = hasRecent || statusIndicatesConnected || bleConnected
 
                 val statusText = when {
                     !auto -> "OFF"
@@ -1077,7 +1082,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshDevicesAndSelection(force: Boolean) {
         val devices = Prefs.getDevices(this)
-        val selectedId = Prefs.getSelectedDeviceId(this)
+        var selectedId = Prefs.getSelectedDeviceId(this)
+        
+        // Validate: if selectedId points to a device that no longer exists, clear it
+        if (selectedId != null && devices.none { it.id == selectedId }) {
+            // Auto-select the remaining device if exactly one left, otherwise clear
+            selectedId = if (devices.size == 1) devices.first().id else null
+            Prefs.setSelectedDeviceId(this, selectedId)
+        }
+        
         selectedDeviceIdCache = selectedId
         isAllDevicesModeCache = (selectedId == null && devices.size > 1)
         lastDeviceRefreshMs = System.currentTimeMillis()

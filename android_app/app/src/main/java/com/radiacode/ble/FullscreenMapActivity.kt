@@ -77,6 +77,7 @@ class FullscreenMapActivity : AppCompatActivity() {
     // Data
     private var selectedMetric = MetricType.DOSE_RATE
     private val hexagonData = mutableMapOf<String, MutableList<HexReading>>()
+    private var sessionId: String? = null  // null = active session; set = view specific session
     
     // Live updates
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -87,6 +88,9 @@ class FullscreenMapActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != RadiaCodeForegroundService.ACTION_READING) return
             pulseReadingDot()
+            
+            // Only add live readings when viewing the active session (sessionId == null)
+            if (sessionId != null) return
             
             // Add reading to hexagon grid immediately if location is available
             val lat = intent.getDoubleExtra(RadiaCodeForegroundService.EXTRA_LATITUDE, Double.NaN)
@@ -121,9 +125,16 @@ class FullscreenMapActivity : AppCompatActivity() {
     
     companion object {
         const val HEX_SIZE_METERS = 25.0
+        const val EXTRA_SESSION_ID = "extra_session_id"
         
         fun launch(context: Context) {
             context.startActivity(Intent(context, FullscreenMapActivity::class.java))
+        }
+        
+        fun launch(context: Context, sessionId: String) {
+            val intent = Intent(context, FullscreenMapActivity::class.java)
+            intent.putExtra(EXTRA_SESSION_ID, sessionId)
+            context.startActivity(intent)
         }
     }
     
@@ -160,6 +171,9 @@ class FullscreenMapActivity : AppCompatActivity() {
         
         // Initialize osmdroid
         Configuration.getInstance().userAgentValue = packageName
+        
+        // Read optional session ID from intent
+        sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
         
         setContentView(R.layout.activity_fullscreen_map)
         
@@ -316,7 +330,12 @@ class FullscreenMapActivity : AppCompatActivity() {
     }
     
     private fun loadSavedData() {
-        val savedPoints = Prefs.getMapDataPoints(this)
+        val sid = sessionId
+        val savedPoints = if (sid != null) {
+            SessionManager.getSessionMapDataPoints(this, sid)
+        } else {
+            SessionManager.getActiveSessionMapDataPoints(this)
+        }
         savedPoints.forEach { point ->
             val hexId = latLngToHexId(point.latitude, point.longitude)
             val reading = HexReading(point.uSvPerHour, point.cps, point.timestampMs)
@@ -362,7 +381,12 @@ class FullscreenMapActivity : AppCompatActivity() {
      * Check for new map data points and add them to hexagon grid.
      */
     private fun refreshNewReadings() {
-        val allPoints = Prefs.getMapDataPoints(this)
+        val sid = sessionId
+        val allPoints = if (sid != null) {
+            SessionManager.getSessionMapDataPoints(this, sid)
+        } else {
+            SessionManager.getActiveSessionMapDataPoints(this)
+        }
         val newPoints = allPoints.filter { it.timestampMs > lastProcessedTimestampMs }
         
         if (newPoints.isEmpty()) return

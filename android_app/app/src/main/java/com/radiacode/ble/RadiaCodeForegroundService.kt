@@ -200,19 +200,23 @@ class RadiaCodeForegroundService : Service() {
     private var geigerTickEngine: GeigerTickEngine? = null
     private var geigerDeltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
 
-    private var lastMapSaveLogMs: Long = 0L
-    private var lastNoLocationLogMs: Long = 0L
     private var lastAlertEvalMs: Long = 0L
 
     private val btStateReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
-            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
-            if (state == BluetoothAdapter.STATE_ON) {
-                Log.d(TAG, "btStateReceiver: STATE_ON")
-                // Reconnect all enabled devices
-                if (Prefs.isAutoConnectEnabled(this@RadiaCodeForegroundService)) {
-                    deviceManager?.forceReconnectAll()
+            when (intent.action) {
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    if (state == BluetoothAdapter.STATE_ON) {
+                        Log.d(TAG, "btStateReceiver: STATE_ON")
+                        if (Prefs.isAutoConnectEnabled(this@RadiaCodeForegroundService)) {
+                            deviceManager?.forceReconnectAll()
+                        }
+                    }
+                }
+                "com.radiacode.ble.action.GPS_STATE_CHANGED" -> {
+                    Log.d(TAG, "GPS state changed broadcast received")
+                    updateGpsTrackingState()
                 }
             }
         }
@@ -250,7 +254,11 @@ class RadiaCodeForegroundService : Service() {
         )
         
         try {
-            registerReceiver(btStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+            val filter = IntentFilter().apply {
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+                addAction("com.radiacode.ble.action.GPS_STATE_CHANGED")
+            }
+            registerReceiver(btStateReceiver, filter)
         } catch (t: Throwable) {
             Log.w(TAG, "registerReceiver failed", t)
         }
@@ -413,10 +421,6 @@ class RadiaCodeForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        // Finalize any active recording session
-        if (SessionManager.isRecording(this)) {
-            SessionManager.stopSession(this)
-        }
         stopInternal("Service destroyed")
         locationController?.releaseBackground(backgroundLocationToken)
         backgroundLocationToken = null
@@ -743,18 +747,17 @@ class RadiaCodeForegroundService : Service() {
             sendBroadcast(i)
         } catch (_: Throwable) {}
 
-        // Session recording: the service is the single owner of session lifecycle.
-        // Auto-start a session on first reading if none is active, then record data.
-        if (!SessionManager.isRecording(this)) {
-            SessionManager.startSession(this)
+        // Session recording: only record if the user has explicitly started a session.
+        // Never auto-create sessions -- the user must tap the "+" button in the logbook.
+        if (SessionManager.isRecording(this)) {
+            SessionManager.addDataPoint(
+                this,
+                uSvPerHour, cps,
+                locationSnap?.latitude,
+                locationSnap?.longitude,
+                deviceId
+            )
         }
-        SessionManager.addDataPoint(
-            this,
-            uSvPerHour, cps,
-            locationSnap?.latitude,
-            locationSnap?.longitude,
-            deviceId
-        )
         
         // PRIORITY 2: Statistical analysis - feed data to VEGA engine
         // This is fast (just math) and runs on the calling thread
@@ -828,25 +831,6 @@ class RadiaCodeForegroundService : Service() {
                 
                 // Append to device-specific CSV (file I/O)
                 appendReadingCsvIfNew(deviceId, device.displayName, timestampMs, uSvPerHour, cps)
-                
-                // Save map data point if we have location
-                // This is SLOW: parses and rebuilds 86400-entry string
-                if (locationSnap != null) {
-                    Prefs.addMapDataPoint(this, locationSnap.latitude, locationSnap.longitude, uSvPerHour, cps)
-
-                    // Rate-limited logging
-                    val logNow = System.currentTimeMillis()
-                    if (logNow - lastMapSaveLogMs > 5_000L) {
-                        lastMapSaveLogMs = logNow
-                        Log.d(TAG, "MapPoint saved: dev=$deviceId dose=$uSvPerHour cps=$cps loc=${locationSnap.latitude},${locationSnap.longitude}")
-                    }
-                } else {
-                    val logNow = System.currentTimeMillis()
-                    if (logNow - lastNoLocationLogMs > 5_000L) {
-                        lastNoLocationLogMs = logNow
-                        Log.w(TAG, "MapPoint skipped: no location (dev=$deviceId dose=$uSvPerHour cps=$cps)")
-                    }
-                }
             } catch (t: Throwable) {
                 Log.w(TAG, "Background handleDeviceReading failed", t)
             }

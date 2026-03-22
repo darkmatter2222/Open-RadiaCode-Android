@@ -41,13 +41,16 @@ class MultiDeviceBleManager(
         var reconnectTask: ScheduledFuture<*>? = null,
         var reconnectAttempts: Int = 0,
         var consecutivePollFailures: Int = 0,
+        var consecutiveEmptyPolls: Int = 0,
         var lastSuccessfulPollMs: Long = 0L,
         @Volatile var intentionalClose: Boolean = false,
         var state: DeviceState = DeviceState(config),
         var pollCycleCount: Int = 0,  // Track poll cycles for spectrum reading
         var cachedCalibration: Triple<Float, Float, Float>? = null,  // a0, a1, a2
         var previousSpectrum: IntArray? = null,  // For computing manual differential
-        var previousSpectrumTime: Long = 0L  // Timestamp of previous spectrum
+        var previousSpectrumTime: Long = 0L,  // Timestamp of previous spectrum
+        var lastGoodUsvH: Float = -1f,  // Last known-good dose rate for zero-guard
+        var lastGoodCps: Float = -1f    // Last known-good CPS for zero-guard
     )
     
     private val devices = ConcurrentHashMap<String, ManagedDevice>()
@@ -213,6 +216,7 @@ class MultiDeviceBleManager(
                     // Connection established!
                     managed.reconnectAttempts = 0
                     managed.consecutivePollFailures = 0
+                    managed.consecutiveEmptyPolls = 0
                     managed.lastSuccessfulPollMs = System.currentTimeMillis()
                     
                     managed.state = managed.state.copy(
@@ -309,13 +313,78 @@ class MultiDeviceBleManager(
                 client.readDataBuf()
                     .thenAccept { buf ->
                         val decoded = RadiacodeDataBuf.decodeFullData(buf)
-                        val rt = decoded.realTimeData ?: return@thenAccept
+                        val rt = decoded.realTimeData
+                        if (rt == null) {
+                            // BLE command succeeded but no RealTimeData in DATA_BUF.
+                            // Device is alive; fall back to direct VSFR register reads.
+                            m.lastSuccessfulPollMs = System.currentTimeMillis()
+                            m.consecutivePollFailures = 0
+                            m.consecutiveEmptyPolls++
+
+                            val cl = m.client ?: return@thenAccept
+                            cl.readVSFR(RadiacodeProtocol.VSFR_CPS)
+                                .thenCompose { cpsRaw ->
+                                    cl.readVSFR(RadiacodeProtocol.VSFR_DR_UR_H)
+                                        .thenApply { drRaw -> Pair(cpsRaw, drRaw) }
+                                }
+                                .thenAccept { pair ->
+                                    var cpsVal = pair.first.toFloat()
+                                    var uSvH = pair.second.toFloat() / 100.0f
+                                    val ts = System.currentTimeMillis()
+
+                                    // Guard against zero readings from VSFR registers.
+                                    // The device can return 0 during internal state transitions;
+                                    // a connected, powered-on detector always has nonzero background.
+                                    if (uSvH <= 0f && m.lastGoodUsvH > 0f) {
+                                        Log.w(TAG, "VSFR fallback: zero dose rate, using last good value ${m.lastGoodUsvH}")
+                                        uSvH = m.lastGoodUsvH
+                                        cpsVal = if (cpsVal > 0f) cpsVal else m.lastGoodCps
+                                    } else if (uSvH > 0f) {
+                                        m.lastGoodUsvH = uSvH
+                                        m.lastGoodCps = cpsVal
+                                    }
+
+                                    Log.d(TAG, "VSFR fallback: CPS=$cpsVal DR_uR_h=${pair.second} -> uSvH=$uSvH")
+
+                                    m.state = m.state.copy(
+                                        lastReading = DeviceReading(
+                                            deviceId = deviceId,
+                                            macAddress = m.config.macAddress,
+                                            uSvPerHour = uSvH,
+                                            cps = cpsVal,
+                                            timestampMs = ts,
+                                            isConnected = true
+                                        ),
+                                        statusMessage = "${"%.3f".format(uSvH)} \u00B5Sv/h"
+                                    )
+                                    onDeviceStateChanged(m.state)
+                                    onDeviceReading(deviceId, uSvH, cpsVal, ts)
+                                }
+                                .exceptionally { t ->
+                                    Log.w(TAG, "VSFR fallback failed for ${m.config.displayName}", t)
+                                    null
+                                }
+                            return@thenAccept
+                        }
+                        m.consecutiveEmptyPolls = 0
                         m.consecutivePollFailures = 0
                         m.lastSuccessfulPollMs = System.currentTimeMillis()
                         
-                        val uSvPerHour = rt.doseRate * 10000.0f
-                        val cps = rt.countRate
+                        var uSvPerHour = rt.doseRate * 10000.0f
+                        var cps = rt.countRate
                         val timestampMs = System.currentTimeMillis()
+
+                        // Guard against zero readings from DATA_BUF.
+                        // A connected detector always produces nonzero background;
+                        // zero means a transient firmware glitch in the record.
+                        if (uSvPerHour <= 0f && m.lastGoodUsvH > 0f) {
+                            Log.w(TAG, "DATA_BUF: zero dose rate in RealTimeData, using last good value ${m.lastGoodUsvH}")
+                            uSvPerHour = m.lastGoodUsvH
+                            cps = if (cps > 0f) cps else m.lastGoodCps
+                        } else if (uSvPerHour > 0f) {
+                            m.lastGoodUsvH = uSvPerHour
+                            m.lastGoodCps = cps
+                        }
                         
                         // Update device state FIRST (fast, in-memory)
                         m.state = m.state.copy(
