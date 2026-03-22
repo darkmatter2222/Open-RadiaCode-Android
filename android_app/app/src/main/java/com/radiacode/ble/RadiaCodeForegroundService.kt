@@ -13,12 +13,14 @@ import android.content.Context
 import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.radiacode.ble.location.LocationController
 import com.radiacode.ble.spectrogram.SpectrogramPrefs
@@ -199,6 +201,10 @@ class RadiaCodeForegroundService : Service() {
     // Geiger tick engine - runs in service for background audio
     private var geigerTickEngine: GeigerTickEngine? = null
     private var geigerDeltaBaseline: Float = Float.NaN  // EMA baseline for delta modes
+
+    // First startForeground must include ALL types to establish the max set
+    // on API 34+; subsequent calls can use a subset to control the indicator.
+    private var foregroundTypesEstablished = false
 
     private var lastAlertEvalMs: Long = 0L
 
@@ -418,6 +424,12 @@ class RadiaCodeForegroundService : Service() {
             backgroundLocationToken = null
             Log.d(TAG, "GPS tracking disabled - released background location token")
         }
+
+        // Refresh the foreground notification types so the OS updates
+        // the "Location in use" indicator immediately.
+        val title = lastNotifTitle ?: "Open RadiaCode"
+        val text = lastNotifText ?: "Running"
+        updateForeground(title, text)
     }
 
     override fun onDestroy() {
@@ -1059,7 +1071,26 @@ class RadiaCodeForegroundService : Service() {
     private fun updateForeground(title: String, text: String) {
         try {
             val notif = buildNotification(title, text)
-            startForeground(NOTIF_ID, notif)
+            if (!foregroundTypesEstablished) {
+                // First call: include ALL manifest types to establish the max
+                // set on API 34+.  This is required because later GPS toggles
+                // may need to re-add FOREGROUND_SERVICE_TYPE_LOCATION and
+                // Android prohibits adding types not present in the first call.
+                val allTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                               ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or
+                               ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                ServiceCompat.startForeground(this, NOTIF_ID, notif, allTypes)
+                foregroundTypesEstablished = true
+            } else {
+                // Subsequent calls: only declare location type when GPS is
+                // enabled so Android drops the "Location in use" indicator.
+                var types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                if (Prefs.isGpsTrackingEnabled(this)) {
+                    types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                ServiceCompat.startForeground(this, NOTIF_ID, notif, types)
+            }
         } catch (t: Throwable) {
             Log.e(TAG, "startForeground failed", t)
             stopInternal("Foreground notification failed")

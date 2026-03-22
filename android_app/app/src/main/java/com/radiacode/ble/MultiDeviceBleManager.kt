@@ -321,6 +321,17 @@ class MultiDeviceBleManager(
                             m.consecutivePollFailures = 0
                             m.consecutiveEmptyPolls++
 
+                            // Skip VSFR fallback on the first empty poll to avoid
+                            // jamming the BLE queue at fast poll rates.  VSFR
+                            // register reads (~500 ms each, 2 reads) serialize on the
+                            // GATT connection and block the next readDataBuf().  For
+                            // 250 ms polling this would push the effective cycle to
+                            // over 1 s.  Only fall back after 2+ consecutive empties
+                            // so short gaps are handled by the next DATA_BUF read.
+                            if (m.consecutiveEmptyPolls < 2) {
+                                return@thenAccept
+                            }
+
                             val cl = m.client ?: return@thenAccept
                             cl.readVSFR(RadiacodeProtocol.VSFR_CPS)
                                 .thenCompose { cpsRaw ->
