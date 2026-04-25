@@ -21,10 +21,10 @@ Ui           gUi;
 } // namespace
 
 static int readBatteryPercent() {
-    digitalWrite(cfg::VBAT_ADC_CTRL, LOW);   // enable divider
-    delay(2);
+    digitalWrite(cfg::VBAT_EN_PIN, HIGH);    // enable divider
+    delay(10);
     const int raw = analogRead(cfg::VBAT_ADC_PIN);
-    digitalWrite(cfg::VBAT_ADC_CTRL, HIGH);  // disable to save power
+    digitalWrite(cfg::VBAT_EN_PIN, LOW);     // disable to save power
 
     // ESP32-S3 ADC ~3.3V full scale at 12-bit.
     const float volts = (raw / 4095.0f) * 3.3f * cfg::VBAT_DIV_MULT;
@@ -39,16 +39,29 @@ static int readBatteryPercent() {
 }
 
 static void enablePeripherals() {
-    pinMode(cfg::VEXT_CTRL_PIN, OUTPUT);
-    digitalWrite(cfg::VEXT_CTRL_PIN, LOW);   // active LOW
-    pinMode(cfg::VBAT_ADC_CTRL, OUTPUT);
-    digitalWrite(cfg::VBAT_ADC_CTRL, HIGH);
-    delay(50);
+    // VTFT/VGNSS rail. The Heltec HT_st7735 library (used by the reference
+    // darkmatter HTIT-Tracker firmware) drives this pin HIGH to enable the
+    // 3.3V rail feeding both the ST7735 panel and the UC6580 GNSS module.
+    pinMode(cfg::VGNSS_CTRL_PIN, OUTPUT);
+    digitalWrite(cfg::VGNSS_CTRL_PIN, HIGH);
+
+    // TFT backlight (active HIGH).
+    pinMode(cfg::BL_CTRL_PIN, OUTPUT);
+    digitalWrite(cfg::BL_CTRL_PIN, HIGH);
+
+    // Battery divider control (idle LOW; pulsed HIGH only when sampling).
+    pinMode(cfg::VBAT_EN_PIN, OUTPUT);
+    digitalWrite(cfg::VBAT_EN_PIN, LOW);
+
+    delay(250);   // let regulator + GNSS settle
 }
 
 void setup() {
     Serial.begin(115200);
-    delay(200);
+    // Heltec V3 uses native USB CDC; give the host a moment to enumerate so
+    // the first prints aren't lost.
+    const uint32_t cdcDeadline = millis() + 1500;
+    while (!Serial && millis() < cdcDeadline) { delay(10); }
     Serial.println();
     Serial.printf("HTIT-Tracker firmware v%s starting...\n", cfg::FW_VERSION);
 
@@ -98,6 +111,14 @@ void loop() {
     gGps.update();
     gRadia.loop();
 
+    // If a manual scan was kicked off and just completed, hand the results
+    // to the UI so the picker is populated.
+    static bool manualScanArmed = false;
+    if (manualScanArmed && !gRadia.isManualScanActive()) {
+        manualScanArmed = false;
+        gUi.enterPicker(gRadia.getScanResults());
+    }
+
     // Button events
     switch (gButton.poll()) {
         case Button::SHORT_PRESS:
@@ -106,12 +127,40 @@ void loop() {
         case Button::LONG_PRESS:
             gUi.onLongPress();
             switch (gUi.lastLongAction()) {
-                case Ui::ACTION_TOGGLE_REC: gStore.toggle();    break;
-                case Ui::ACTION_RESCAN:     gRadia.requestScan(); break;
+                case Ui::ACTION_TOGGLE_REC:
+                    gStore.toggle();
+                    break;
+                case Ui::ACTION_START_PICKER:
+                    Serial.println("[UI] starting RadiaCode picker scan");
+                    gRadia.startManualScan(6000);
+                    gUi.enterPicker({});      // show "Scanning..." placeholder
+                    manualScanArmed = true;
+                    break;
+                case Ui::ACTION_PICK_DEVICE: {
+                    String addr = gUi.pickedAddress();
+                    Serial.printf("[UI] picker chose %s\n", addr.c_str());
+                    gRadia.connectTo(std::string(addr.c_str()));
+                    gUi.exitPicker();
+                    break;
+                }
+                case Ui::ACTION_CANCEL_PICKER:
+                    gRadia.cancelManualScan();
+                    gUi.exitPicker();
+                    break;
                 default: break;
             }
             break;
         default: break;
+    }
+
+    // While in picker mode, keep refreshing the list (devices appear over time)
+    if (manualScanArmed && gRadia.isManualScanActive()) {
+        static uint32_t lastListPush = 0;
+        const uint32_t now = millis();
+        if ((now - lastListPush) > 600) {
+            lastListPush = now;
+            gUi.enterPicker(gRadia.getScanResults());
+        }
     }
 
     // Battery refresh + heartbeat log

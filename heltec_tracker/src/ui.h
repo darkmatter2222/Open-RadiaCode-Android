@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <vector>
 #include "radiacode.h"
 
 class GpsModule;
@@ -7,35 +8,54 @@ class SessionStore;
 
 class Ui {
 public:
-    enum Screen : uint8_t { SCREEN_STATS = 0, SCREEN_GPS, SCREEN_STORAGE, SCREEN_COUNT };
+    enum Screen : uint8_t {
+        SCREEN_STATS = 0,
+        SCREEN_GPS,
+        SCREEN_STORAGE,
+        SCREEN_PICKER,
+        SCREEN_NORMAL_COUNT = SCREEN_PICKER, // STATS/GPS/STORAGE only in cycle
+    };
 
     void begin();
     void setSources(GpsModule* gps, SessionStore* store, RadiaCode* rc);
 
-    // Inputs
-    void onShortPress();   // cycle screen
-    void onLongPress();    // contextual
+    void onShortPress();
+    void onLongPress();
 
-    // External pushes
     void setReading(const RadiaCode::Reading& r);
     void setRadiaState(RadiaCode::State s, const String& addr);
     void setBatteryPercent(int pct) { vbatPct_ = pct; }
 
-    void tick();           // call from loop()
+    // Picker entry / exit
+    void enterPicker(const std::vector<RadiaCode::ScanResult>& results);
+    void exitPicker() { screen_ = SCREEN_STATS; forceFullRedraw_ = true; }
 
-    // Returned by onLongPress for the main loop to action.
-    enum LongAction : uint8_t { ACTION_NONE = 0, ACTION_TOGGLE_REC, ACTION_RESCAN };
+    void tick();
+
+    enum LongAction : uint8_t {
+        ACTION_NONE = 0,
+        ACTION_TOGGLE_REC,
+        ACTION_START_PICKER,    // Stats long-press: scan + show picker
+        ACTION_PICK_DEVICE,     // Picker: connect to selected
+        ACTION_CANCEL_PICKER,
+    };
     LongAction lastLongAction() {
         LongAction a = pendingAction_;
         pendingAction_ = ACTION_NONE;
         return a;
     }
+    String pickedAddress() const { return pickedAddr_; }
 
 private:
+    // Flicker-free field redraw. Each call site picks a unique index 0..MAX_FIELDS-1.
+    void field(int idx, int x, int y, int w, int h,
+               const char* str, uint16_t fg, uint16_t bg, uint8_t size);
+
+    void renderHeader();
     void renderStats();
     void renderGps();
     void renderStorage();
-    void renderHeader();
+    void renderPicker();
 
     Screen        screen_ = SCREEN_STATS;
     GpsModule*    gps_ = nullptr;
@@ -47,9 +67,17 @@ private:
     String             rcAddr_;
     int                vbatPct_ = -1;
 
-    uint32_t           lastDrawMs_ = 0;
-    bool               dirty_ = true;
-    Screen             lastDrawnScreen_ = SCREEN_COUNT;
-
     LongAction         pendingAction_ = ACTION_NONE;
+    bool               forceFullRedraw_ = true;
+    Screen             lastDrawnScreen_ = SCREEN_NORMAL_COUNT;
+
+    static constexpr int MAX_FIELDS = 40;
+    String   prevText_[MAX_FIELDS];
+    uint16_t prevFg_[MAX_FIELDS] = {0};
+    uint8_t  prevSize_[MAX_FIELDS] = {0};
+
+    // Picker state
+    std::vector<RadiaCode::ScanResult> pickList_;
+    int    pickerCursor_ = 0;
+    String pickedAddr_;
 };

@@ -29,8 +29,9 @@ Wi-Fi/API offload is intentionally **not** implemented — see TODO at the botto
 | TFT CS | 5 | ST7735 |
 | TFT DC | 27 | |
 | TFT RST | 26 | |
-| Vext rail enable | 36 | active LOW |
-| VBat ADC enable | 37 | active LOW during read |
+| TFT backlight | 21 | active HIGH |
+| GNSS+TFT power (VGNSS_CTRL) | 3 | active LOW |
+| VBat divider enable | 2 | active HIGH during read |
 | VBat ADC read | 1 | divider × 5.05 |
 | PRG button | 0 | active LOW |
 

@@ -43,24 +43,26 @@ struct Internal {
     String            peerName;
     int               rssi = 0;
 
-    // request/response state
     uint8_t           seqCounter = 0;
     uint16_t          activeCmd = 0;
     uint8_t           activeSeq = 0;
     uint32_t          activeDeadlineMs = 0;
     bool              awaitingResponse = false;
 
-    // re-assembly
     int32_t           expectedLen = -1;
     std::vector<uint8_t> respBuffer;
 
-    // poll/heartbeat
     uint32_t          lastPollMs = 0;
     uint32_t          lastReadingMs = 0;
 
-    // init step machine
     enum InitStep { INIT_NONE = 0, INIT_EXCHANGE, INIT_SET_TIME, INIT_DEV_TIME0, INIT_DONE };
     InitStep          initStep = INIT_NONE;
+
+    // Manual picker scan
+    bool              manualScanActive = false;
+    uint32_t          manualScanDeadline = 0;
+    std::vector<RadiaCode::ScanResult> scanResults;
+    std::string       pendingConnectAddr;     // set by connectTo()
 
     Preferences       prefs;
 };
@@ -154,10 +156,33 @@ public:
                                name.rfind("RC-",       0) == 0;
         const bool svcMatch  = dev->isAdvertisingService(SVC_UUID);
 
-        if (nameMatch || svcMatch) {
-            log_i("Match: %s rssi=%d svcMatch=%d",
-                  dev->getAddress().toString().c_str(), dev->getRSSI(), svcMatch);
-            // remember strongest match
+        if (!(nameMatch || svcMatch)) return;
+
+        const std::string addr = dev->getAddress().toString();
+        const int rssi = dev->getRSSI();
+        log_i("Match: %s rssi=%d svcMatch=%d name=%s",
+              addr.c_str(), rssi, svcMatch, name.c_str());
+
+        // Update or insert into scan results table (manual + auto both feed it).
+        bool found = false;
+        for (auto& r : g.scanResults) {
+            if (r.address == addr) {
+                r.rssi = rssi;
+                if (!name.empty()) r.name = name;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            RadiaCode::ScanResult r;
+            r.address = addr;
+            r.name    = name;
+            r.rssi    = rssi;
+            g.scanResults.push_back(r);
+        }
+
+        // For auto-scan only: remember strongest match for auto-connect.
+        if (!g.manualScanActive) {
             if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
                 if (g.foundDev) delete g.foundDev;
                 g.foundDev = new NimBLEAdvertisedDevice(*dev);
@@ -431,13 +456,14 @@ static bool connectToFound() {
 static void doScan(uint32_t durMs) {
     setState(RadiaCode::State::Scanning);
     if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
+    g.scanResults.clear();
 
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
     scan->setActiveScan(true);
     scan->setInterval(100);
     scan->setWindow(99);
-    scan->start(durMs / 1000, false);    // blocking; durMs in seconds
+    scan->start(durMs / 1000, false);
     scan->stop();
 
     if (g.foundDev) {
@@ -445,6 +471,19 @@ static void doScan(uint32_t durMs) {
     } else {
         setState(RadiaCode::State::Disconnected);
     }
+}
+
+// Non-blocking scan (uses NimBLE's async start). Results land in g.scanResults
+// via the existing ScanCb. Caller polls isManualScanComplete().
+static void startAsyncScan(uint32_t durMs) {
+    g.scanResults.clear();
+    if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
+    scan->setActiveScan(true);
+    scan->setInterval(100);
+    scan->setWindow(99);
+    scan->start(durMs / 1000, nullptr, false);   // async, no completion cb
 }
 
 // ----------------- public surface ---------------------------------------------
@@ -463,6 +502,53 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
 void RadiaCode::loop() {
     const uint32_t now = millis();
 
+    // Manual picker scan: poll for deadline, then stop and stay in Scanning
+    // state until caller picks a device or cancels.
+    if (g.manualScanActive) {
+        if ((int32_t)(now - g.manualScanDeadline) >= 0) {
+            NimBLEDevice::getScan()->stop();
+            g.manualScanActive = false;
+            // Stay in Scanning state to indicate "scan complete, awaiting choice".
+        }
+        return;
+    }
+
+    // Pending connect request from picker
+    if (!g.pendingConnectAddr.empty() &&
+        (g.state == State::Disconnected || g.state == State::Idle ||
+         g.state == State::Scanning)) {
+        std::string target = g.pendingConnectAddr;
+        g.pendingConnectAddr.clear();
+        // Find in cached results to build NimBLEAdvertisedDevice; if not
+        // present, start a short scan first to find it.
+        bool started = false;
+        if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
+        NimBLEScan* scan = NimBLEDevice::getScan();
+        scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
+        scan->setActiveScan(true);
+        scan->start(4, false);     // 4s blocking re-scan to (re)acquire
+        scan->stop();
+        // Pick the matching address out of the fresh results
+        NimBLEAdvertisedDevice* match = nullptr;
+        BLEScanResults rs = scan->getResults();
+        for (int i = 0; i < rs.getCount(); ++i) {
+            NimBLEAdvertisedDevice d = rs.getDevice(i);
+            if (d.getAddress().toString() == target) {
+                match = new NimBLEAdvertisedDevice(d);
+                break;
+            }
+        }
+        if (match) {
+            g.foundDev = match;
+            started = connectToFound();
+        }
+        if (!started) {
+            log_w("connectTo(%s) failed: device not seen in rescan", target.c_str());
+            setState(State::Disconnected);
+        }
+        return;
+    }
+
     // Request timeout
     if (g.awaitingResponse && (int32_t)(now - g.activeDeadlineMs) >= 0) {
         log_w("Request 0x%04X timed out", g.activeCmd);
@@ -470,7 +556,7 @@ void RadiaCode::loop() {
         if (g.client && g.client->isConnected()) g.client->disconnect();
     }
 
-    // Drive scan/reconnect when not connected
+    // Drive scan/reconnect when not connected (auto-mode)
     if (g.state == State::Idle || g.state == State::Disconnected) {
         static uint32_t nextScan = 0;
         if ((int32_t)(now - nextScan) >= 0) {
@@ -488,6 +574,34 @@ void RadiaCode::loop() {
             sendCommand(CMD_RD_VIRT_STRING, args.data(), args.size());
         }
     }
+}
+
+void RadiaCode::startManualScan(uint32_t durMs) {
+    if (g.client && g.client->isConnected()) g.client->disconnect();
+    g.manualScanActive = true;
+    g.manualScanDeadline = millis() + durMs;
+    setState(State::Scanning);
+    startAsyncScan(durMs);
+}
+
+bool RadiaCode::isManualScanActive() const   { return g.manualScanActive; }
+bool RadiaCode::isManualScanComplete() const {
+    return !g.manualScanActive && !g.scanResults.empty();
+}
+const std::vector<RadiaCode::ScanResult>& RadiaCode::getScanResults() const {
+    return g.scanResults;
+}
+bool RadiaCode::connectTo(const std::string& address) {
+    g.pendingConnectAddr = address;
+    g.manualScanActive = false;
+    NimBLEDevice::getScan()->stop();
+    setState(State::Disconnected);    // triggers loop() to honor pendingConnectAddr
+    return true;
+}
+void RadiaCode::cancelManualScan() {
+    g.manualScanActive = false;
+    NimBLEDevice::getScan()->stop();
+    setState(State::Disconnected);
 }
 
 void RadiaCode::requestScan() {

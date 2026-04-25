@@ -28,7 +28,11 @@ String pathFor(const String& id) {
 } // namespace
 
 bool SessionStore::begin() {
-    if (!LittleFS.begin(true)) {
+    // Our partition table labels the LittleFS partition "littlefs" (subtype
+    // "spiffs" because LittleFS reuses the SPIFFS subtype on ESP-IDF). The
+    // Arduino LittleFS wrapper defaults to label "spiffs" — pass our actual
+    // label so the mount succeeds.
+    if (!LittleFS.begin(true, "/littlefs", 10, "littlefs")) {
         log_e("LittleFS mount failed even after format");
         return false;
     }

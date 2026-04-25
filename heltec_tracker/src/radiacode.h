@@ -1,6 +1,8 @@
 #pragma once
 #include <Arduino.h>
 #include <functional>
+#include <vector>
+#include <string>
 
 // RadiaCode BLE central client.
 // Mirrors the Android `RadiacodeBleClient` / `RadiacodeProtocol` / `RadiacodeDataBuf`
@@ -30,13 +32,34 @@ public:
         uint32_t timestampMs = 0; // millis() when received
     };
 
+    struct ScanResult {
+        std::string address;     // e.g. "52:43:06:60:20:24"
+        std::string name;        // advertised name ("RadiaCode-...")
+        int         rssi = 0;
+    };
+
     using ReadingCb = std::function<void(const Reading&)>;
     using StateCb   = std::function<void(State, const String& addr)>;
 
     void begin(ReadingCb onReading, StateCb onState);
     void loop();
 
-    // Trigger manual scan. Will replace any in-progress scan.
+    // Picker flow:
+    //   1) Caller invokes startManualScan(durMs). State -> Scanning. Auto-connect
+    //      is suppressed for this scan; results accumulate in getScanResults().
+    //   2) When millis() >= scanDeadline (poll via isManualScanComplete()),
+    //      caller fetches getScanResults() and shows a picker UI.
+    //   3) Caller invokes connectTo(address) to start the connect flow.
+    //   4) cancelManualScan() reverts to normal auto-reconnect behaviour.
+    void startManualScan(uint32_t durMs);
+    bool isManualScanComplete() const;
+    bool isManualScanActive()   const;
+    const std::vector<ScanResult>& getScanResults() const;
+    bool connectTo(const std::string& address);
+    void cancelManualScan();
+
+    // Trigger an automatic scan-and-connect (auto-pick strongest match).
+    // Used as the default behaviour when there's no saved peer.
     void requestScan();
     void disconnectAndForget();
 
