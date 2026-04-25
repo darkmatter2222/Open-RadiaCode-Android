@@ -119,6 +119,7 @@ void Ui::onLongPress() {
                 }
                 if (realIdx >= 0 && realIdx < (int)pickList_.size()) {
                     pickedAddr_ = String(pickList_[realIdx].address.c_str());
+                    pickedAddrType_ = pickList_[realIdx].addrType;
                     pendingAction_ = ACTION_PICK_DEVICE;
                 }
             }

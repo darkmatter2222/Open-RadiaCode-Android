@@ -36,6 +36,7 @@ public:
         std::string address;     // e.g. "52:43:06:60:20:24"
         std::string name;        // advertised name (may be empty)
         int         rssi = 0;
+        uint8_t     addrType = 0;          // BLE_ADDR_PUBLIC=0 / RANDOM=1 / etc.
         bool        likelyMatch = false;  // name matched RadiaCode* or RadiaCode service UUID present
     };
 
@@ -57,6 +58,7 @@ public:
     bool isManualScanActive()   const;
     const std::vector<ScanResult>& getScanResults() const;
     bool connectTo(const std::string& address);
+    bool connectTo(const std::string& address, uint8_t addrType);
     void cancelManualScan();
 
     // Trigger an automatic scan-and-connect (auto-pick strongest match).

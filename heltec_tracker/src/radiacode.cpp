@@ -70,6 +70,7 @@ struct Internal {
     uint32_t          manualScanDeadline = 0;
     std::vector<RadiaCode::ScanResult> scanResults;
     std::string       pendingConnectAddr;     // set by connectTo()
+    uint8_t           pendingConnectAddrType = 0; // BLE_ADDR_PUBLIC by default
 
     Preferences       prefs;
 };
@@ -239,10 +240,12 @@ public:
         // RadiaCode 110 advertises with no name, so name-only filtering is
         // not enough.
         if (g.manualScanActive) {
+            const uint8_t aType = dev->getAddressType();
             bool found = false;
             for (auto& r : g.scanResults) {
                 if (r.address == addr) {
                     r.rssi = rssi;
+                    r.addrType = aType;
                     if (!name.empty()) r.name = name;
                     found = true;
                     break;
@@ -253,6 +256,7 @@ public:
                 r.address    = addr;
                 r.name       = name;
                 r.rssi       = rssi;
+                r.addrType   = aType;
                 r.likelyMatch = nameMatch || svcMatch;
                 g.scanResults.push_back(r);
             } else {
@@ -558,7 +562,7 @@ static bool connectToFound() {
     return finishConnect(g.client);
 }
 
-static bool connectToAddress(const std::string& addr) {
+static bool connectToAddress(const std::string& addr, uint8_t addrType) {
     g.peerAddr = addr.c_str();
     g.peerName = "";
     g.rssi     = 0;
@@ -571,9 +575,10 @@ static bool connectToAddress(const std::string& addr) {
         g.client->setConnectTimeout(10);
     }
 
-    NimBLEAddress target(addr);
+    log_i("Connect %s (addrType=%u)", addr.c_str(), (unsigned)addrType);
+    NimBLEAddress target(addr, addrType);
     if (!g.client->connect(target)) {
-        log_e("connect(addr) failed for %s", addr.c_str());
+        log_e("connect(addr) failed for %s type=%u", addr.c_str(), (unsigned)addrType);
         setState(RadiaCode::State::Disconnected);
         return false;
     }
@@ -694,6 +699,7 @@ void RadiaCode::loop() {
                     nr.address     = addr;
                     nr.name        = name;
                     nr.rssi        = rssi;
+                    nr.addrType    = d.getAddressType();
                     nr.likelyMatch = nameMatch || svcMatch;
                     g.scanResults.push_back(nr);
                 }
@@ -708,9 +714,11 @@ void RadiaCode::loop() {
         (g.state == State::Disconnected || g.state == State::Idle ||
          g.state == State::Scanning)) {
         std::string target = g.pendingConnectAddr;
+        uint8_t targetType = g.pendingConnectAddrType;
         g.pendingConnectAddr.clear();
-        log_i("Picker connect -> %s", target.c_str());
-        connectToAddress(target);
+        g.pendingConnectAddrType = 0;
+        log_i("Picker connect -> %s (type=%u)", target.c_str(), (unsigned)targetType);
+        connectToAddress(target, targetType);
         return;
     }
 
@@ -775,7 +783,11 @@ const std::vector<RadiaCode::ScanResult>& RadiaCode::getScanResults() const {
     return g.scanResults;
 }
 bool RadiaCode::connectTo(const std::string& address) {
+    return connectTo(address, 0);
+}
+bool RadiaCode::connectTo(const std::string& address, uint8_t addrType) {
     g.pendingConnectAddr = address;
+    g.pendingConnectAddrType = addrType;
     g.manualScanActive = false;
     NimBLEDevice::getScan()->stop();
     setState(State::Disconnected);    // triggers loop() to honor pendingConnectAddr

@@ -138,8 +138,9 @@ void loop() {
                     break;
                 case Ui::ACTION_PICK_DEVICE: {
                     String addr = gUi.pickedAddress();
-                    Serial.printf("[UI] picker chose %s\n", addr.c_str());
-                    gRadia.connectTo(std::string(addr.c_str()));
+                    uint8_t aType = gUi.pickedAddrType();
+                    Serial.printf("[UI] picker chose %s (type=%u)\n", addr.c_str(), (unsigned)aType);
+                    gRadia.connectTo(std::string(addr.c_str()), aType);
                     gUi.exitPicker();
                     break;
                 }

@@ -45,6 +45,7 @@ public:
         return a;
     }
     String pickedAddress() const { return pickedAddr_; }
+    uint8_t pickedAddrType() const { return pickedAddrType_; }
 
 private:
     // Flicker-free field redraw. Each call site picks a unique index 0..MAX_FIELDS-1.
@@ -81,4 +82,5 @@ private:
     std::vector<int> pickerOrder_;          // sort order indices into pickList_
     int    pickerCursor_ = 0;
     String pickedAddr_;
+    uint8_t pickedAddrType_ = 0;
 };
