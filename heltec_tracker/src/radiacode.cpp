@@ -12,6 +12,12 @@ const NimBLEUUID SVC_UUID   ("e63215e5-7003-49d8-96b0-b024798fb901");
 const NimBLEUUID WRITE_UUID ("e63215e6-7003-49d8-96b0-b024798fb901");
 const NimBLEUUID NOTIFY_UUID("e63215e7-7003-49d8-96b0-b024798fb901");
 
+// Nordic UART Service short UUID. RadiaCode devices are built on Nordic
+// chips and advertise this service in their adv packet -- their custom
+// service UUID is only visible after GATT discovery (post-connect). So we
+// also flag any device advertising 0xfeaf as a "likely RadiaCode" candidate.
+const NimBLEUUID NORDIC_UART_SVC((uint16_t)0xfeaf);
+
 constexpr uint16_t CMD_SET_EXCHANGE   = 0x0007;
 constexpr uint16_t CMD_SET_TIME       = 0x0A04;
 constexpr uint16_t CMD_RD_VIRT_SFR    = 0x0824;
@@ -190,7 +196,8 @@ public:
         std::string name = dev->getName();
         if (name.empty()) name = extractNameFromPayload(dev);
         const bool nameMatch = nameLooksLikeRadiaCode(name);
-        const bool svcMatch  = dev->isAdvertisingService(SVC_UUID);
+        const bool svcMatch  = dev->isAdvertisingService(SVC_UUID) ||
+                               dev->isAdvertisingService(NORDIC_UART_SVC);
         const std::string addr = dev->getAddress().toString();
         const int rssi = dev->getRSSI();
 
@@ -505,6 +512,24 @@ static bool finishConnect(NimBLEClient* client) {
     if (!g.notifyChar->subscribe(true, handleNotify)) {
         log_e("subscribe failed"); client->disconnect(); return false;
     }
+
+    // If we don't have a name yet (RadiaCode 110 doesn't broadcast it), read
+    // the GAP Device Name characteristic (0x2A00) of the Generic Access service
+    // (0x1800). This is what Android does when you tap "pair new device".
+    if (g.peerName.length() == 0) {
+        auto* gap = client->getService(NimBLEUUID((uint16_t)0x1800));
+        if (gap) {
+            auto* devNameChar = gap->getCharacteristic(NimBLEUUID((uint16_t)0x2A00));
+            if (devNameChar && devNameChar->canRead()) {
+                std::string n = devNameChar->readValue();
+                if (!n.empty()) {
+                    g.peerName = String(n.c_str());
+                    log_i("Resolved GAP device name: %s", n.c_str());
+                }
+            }
+        }
+    }
+
     g.prefs.putString(PREFS_KEY_LAST_PEER, g.peerAddr);
     delay(500);
     startInit();
@@ -621,9 +646,11 @@ void RadiaCode::loop() {
             // Restart scan -- previous burst finished but deadline not hit yet.
             // is_continue=true preserves the merged adv+scan-response table so
             // names resolved from scan responses are NOT lost on restart.
+            // Window == Interval = 100% scan duty cycle, maximises chance of
+            // catching slow advertisers and their scan responses.
             scan->setActiveScan(true);
-            scan->setInterval(80);
-            scan->setWindow(60);
+            scan->setInterval(160);
+            scan->setWindow(160);
             scan->setDuplicateFilter(false);
             scan->start(0, nullptr, /*is_continue=*/true);
         }
@@ -643,7 +670,8 @@ void RadiaCode::loop() {
                 if (name.empty()) name = extractNameFromPayload(&d);
                 const int rssi = d.getRSSI();
                 const bool nameMatch = nameLooksLikeRadiaCode(name);
-                const bool svcMatch  = d.isAdvertisingService(SVC_UUID);
+                const bool svcMatch  = d.isAdvertisingService(SVC_UUID) ||
+                                       d.isAdvertisingService(NORDIC_UART_SVC);
 
                 bool foundIt = false;
                 for (auto& r : g.scanResults) {
@@ -733,8 +761,8 @@ void RadiaCode::startManualScan(uint32_t durMs) {
 
     scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
     scan->setActiveScan(true);
-    scan->setInterval(80);
-    scan->setWindow(60);
+    scan->setInterval(160);
+    scan->setWindow(160);    // 100% duty cycle
     scan->setDuplicateFilter(false);   // get scan responses w/ names
     scan->start(0, nullptr, false);   // run until loop() stops it
 }

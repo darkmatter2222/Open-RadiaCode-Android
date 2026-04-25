@@ -443,11 +443,14 @@ void Ui::renderPicker() {
 
         if (row < (int)pickList_.size()) {
             const auto& r = pickList_[order[row]];
-            // Label: name if present, else last 3 octets of MAC formatted
-            // like AA:BB:CC so the user can recognise it.
+            // Label: name if present; if it's a likely RadiaCode without a
+            // resolved name, show "RadiaCode?" so the user knows to pick it.
+            // Otherwise fall back to last 3 octets of the MAC.
             char label[16];
             if (!r.name.empty()) {
                 snprintf(label, sizeof(label), "%-12.12s", r.name.c_str());
+            } else if (r.likelyMatch) {
+                snprintf(label, sizeof(label), "%-12.12s", "RadiaCode?");
             } else {
                 std::string a = r.address;
                 std::string tail = a.length() >= 8
