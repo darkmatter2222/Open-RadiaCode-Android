@@ -528,13 +528,11 @@ static void doScan(uint32_t durMs) {
     g.scanResults.clear();
 
     NimBLEScan* scan = NimBLEDevice::getScan();
-    scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
     scan->setActiveScan(true);
     scan->setInterval(100);
     scan->setWindow(99);
-#if defined(CONFIG_BT_NIMBLE_ENABLED)
-    scan->setDuplicateFilter(false);   // capture scan responses (names)
-#endif
+    scan->setDuplicateFilter(false);
     scan->start(durMs / 1000, false);
     scan->stop();
 
@@ -551,10 +549,11 @@ static void startAsyncScan(uint32_t durMs) {
     g.scanResults.clear();
     if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
     NimBLEScan* scan = NimBLEDevice::getScan();
-    scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
     scan->setActiveScan(true);
     scan->setInterval(100);
     scan->setWindow(99);
+    scan->setDuplicateFilter(false);
     scan->start(durMs / 1000, nullptr, false);   // async, no completion cb
 }
 
@@ -590,9 +589,7 @@ void RadiaCode::loop() {
             scan->setActiveScan(true);
             scan->setInterval(80);
             scan->setWindow(60);
-#if defined(CONFIG_BT_NIMBLE_ENABLED)
             scan->setDuplicateFilter(false);
-#endif
             scan->start(0, nullptr, false);   // 0 = scan forever (we stop it)
         }
         return;
@@ -654,13 +651,11 @@ void RadiaCode::startManualScan(uint32_t durMs) {
     g.manualScanDeadline = millis() + durMs;
     setState(State::Scanning);
 
-    scan->setAdvertisedDeviceCallbacks(&gScanCb, false);
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
     scan->setActiveScan(true);
     scan->setInterval(80);
     scan->setWindow(60);
-#if defined(CONFIG_BT_NIMBLE_ENABLED)
     scan->setDuplicateFilter(false);   // get scan responses w/ names
-#endif
     scan->start(0, nullptr, false);   // run until loop() stops it
 }
 
