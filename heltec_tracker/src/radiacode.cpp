@@ -167,28 +167,34 @@ public:
         const std::string addr = dev->getAddress().toString();
         const int rssi = dev->getRSSI();
 
-        // Serial dump for diagnostics. Log first time we see an address AND
-        // any time the resolved name appears (RadiaCode often only sends the
-        // name in scan-response, which arrives later than the initial adv).
+        // Serial dump for diagnostics. Print one line per device every ~1s
+        // while picker is open, with the LATEST resolved name and service
+        // UUIDs. This makes it easy to identify a device by holding it close.
         if (g.manualScanActive) {
-            static std::vector<std::pair<std::string,std::string>> seen;
+            struct SeenInfo { std::string addr; std::string name; uint32_t lastLogMs; };
+            static std::vector<SeenInfo> seen;
+            const uint32_t now = millis();
             auto it = std::find_if(seen.begin(), seen.end(),
-                [&](const std::pair<std::string,std::string>& p){
-                    return p.first == addr;
-                });
+                [&](const SeenInfo& s){ return s.addr == addr; });
             const bool firstSight = (it == seen.end());
-            const bool nameAppeared = !firstSight && it->second != name && !name.empty();
-            if (firstSight || nameAppeared) {
-                if (firstSight) seen.push_back({addr, name});
-                else            it->second = name;
+            const bool nameChanged = !firstSight && it->name != name && !name.empty();
+            const bool dueAgain = !firstSight && (now - it->lastLogMs) > 1000;
+            if (firstSight || nameChanged || dueAgain) {
+                if (firstSight) {
+                    seen.push_back({addr, name, now});
+                } else {
+                    if (!name.empty()) it->name = name;
+                    it->lastLogMs = now;
+                }
                 std::string svcStr;
                 const size_t nSvc = dev->getServiceUUIDCount();
                 for (size_t i = 0; i < nSvc; ++i) {
                     if (i) svcStr += ",";
                     svcStr += dev->getServiceUUID(i).toString();
                 }
-                Serial.printf("[ADV] %s rssi=%d name='%s' svcs=[%s] match=%d/%d\n",
-                              addr.c_str(), rssi, name.c_str(), svcStr.c_str(),
+                const char* tag = firstSight ? "NEW" : (nameChanged ? "NAME" : "upd");
+                Serial.printf("[%s] %s rssi=%d name='%s' svcs=[%s] match=%d/%d\n",
+                              tag, addr.c_str(), rssi, name.c_str(), svcStr.c_str(),
                               nameMatch ? 1 : 0, svcMatch ? 1 : 0);
             }
         }
@@ -592,6 +598,49 @@ void RadiaCode::loop() {
             scan->setDuplicateFilter(false);
             scan->start(0, nullptr, false);   // 0 = scan forever (we stop it)
         }
+
+        // Refresh scanResults from the scan's merged table every ~500 ms.
+        // NimBLE merges advertisement + scan-response into one device record
+        // here, so this picks up names that streaming callbacks may miss.
+        static uint32_t lastMerge = 0;
+        if ((now - lastMerge) > 500) {
+            lastMerge = now;
+            NimBLEScanResults res = scan->getResults();
+            const int n = res.getCount();
+            for (int i = 0; i < n; ++i) {
+                NimBLEAdvertisedDevice d = res.getDevice((uint32_t)i);
+                const std::string addr = d.getAddress().toString();
+                const std::string name = d.getName();
+                const int rssi = d.getRSSI();
+                const bool nameMatch = nameLooksLikeRadiaCode(name);
+                const bool svcMatch  = d.isAdvertisingService(SVC_UUID);
+
+                bool foundIt = false;
+                for (auto& r : g.scanResults) {
+                    if (r.address == addr) {
+                        r.rssi = rssi;
+                        if (!name.empty() && r.name != name) {
+                            r.name = name;
+                            // Re-evaluate likelyMatch when name resolves.
+                            if (nameLooksLikeRadiaCode(name)) r.likelyMatch = true;
+                            Serial.printf("[merge-name] %s -> '%s'\n",
+                                          addr.c_str(), name.c_str());
+                        }
+                        if (svcMatch || nameMatch) r.likelyMatch = true;
+                        foundIt = true;
+                        break;
+                    }
+                }
+                if (!foundIt) {
+                    RadiaCode::ScanResult nr;
+                    nr.address     = addr;
+                    nr.name        = name;
+                    nr.rssi        = rssi;
+                    nr.likelyMatch = nameMatch || svcMatch;
+                    g.scanResults.push_back(nr);
+                }
+            }
+        }
         return;
     }
 
@@ -644,6 +693,7 @@ void RadiaCode::startManualScan(uint32_t durMs) {
     }
     NimBLEScan* scan = NimBLEDevice::getScan();
     scan->stop();
+    scan->clearResults();
     g.scanResults.clear();
     if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
 
