@@ -158,10 +158,37 @@ static bool nameLooksLikeRadiaCode(const std::string& nIn) {
            n.rfind("rc-",       0) == 0;
 }
 
+// Walk the raw advertising payload (TLV: len, type, data...) looking for the
+// Complete Local Name (0x09) or Shortened Local Name (0x08). NimBLE's
+// AdvertisedDevice::getName() only reflects the most recent packet, so for
+// devices whose name is only in the SCAN_RSP we may need to keep the
+// previously-extracted name -- but parsing the live payload here lets us pick
+// up the name from whichever packet (adv or scan response) just arrived.
+static std::string extractNameFromPayload(NimBLEAdvertisedDevice* dev) {
+    uint8_t* p = dev->getPayload();
+    const size_t total = dev->getPayloadLength();
+    if (!p || total == 0) return "";
+    size_t i = 0;
+    while (i < total) {
+        const uint8_t fieldLen = p[i];
+        if (fieldLen == 0 || i + fieldLen >= total) break;
+        const uint8_t fieldType = p[i + 1];
+        if (fieldType == 0x09 || fieldType == 0x08) {     // complete or short local name
+            return std::string((const char*)&p[i + 2], fieldLen - 1);
+        }
+        i += 1 + fieldLen;
+    }
+    return "";
+}
+
 class ScanCb : public NimBLEAdvertisedDeviceCallbacks {
 public:
     void onResult(NimBLEAdvertisedDevice* dev) override {
-        const std::string name = dev->getName();
+        // Name resolution: prefer NimBLE's getName(), fall back to manual
+        // payload parsing (covers cases where getName() returns empty even
+        // though the local-name TLV is present in the current packet).
+        std::string name = dev->getName();
+        if (name.empty()) name = extractNameFromPayload(dev);
         const bool nameMatch = nameLooksLikeRadiaCode(name);
         const bool svcMatch  = dev->isAdvertisingService(SVC_UUID);
         const std::string addr = dev->getAddress().toString();
@@ -592,11 +619,13 @@ void RadiaCode::loop() {
             g.manualScanActive = false;
         } else if (!scan->isScanning()) {
             // Restart scan -- previous burst finished but deadline not hit yet.
+            // is_continue=true preserves the merged adv+scan-response table so
+            // names resolved from scan responses are NOT lost on restart.
             scan->setActiveScan(true);
             scan->setInterval(80);
             scan->setWindow(60);
             scan->setDuplicateFilter(false);
-            scan->start(0, nullptr, false);   // 0 = scan forever (we stop it)
+            scan->start(0, nullptr, /*is_continue=*/true);
         }
 
         // Refresh scanResults from the scan's merged table every ~500 ms.
@@ -610,7 +639,8 @@ void RadiaCode::loop() {
             for (int i = 0; i < n; ++i) {
                 NimBLEAdvertisedDevice d = res.getDevice((uint32_t)i);
                 const std::string addr = d.getAddress().toString();
-                const std::string name = d.getName();
+                std::string name = d.getName();
+                if (name.empty()) name = extractNameFromPayload(&d);
                 const int rssi = d.getRSSI();
                 const bool nameMatch = nameLooksLikeRadiaCode(name);
                 const bool svcMatch  = d.isAdvertisingService(SVC_UUID);
