@@ -78,6 +78,7 @@ private:
 
     // Picker state
     std::vector<RadiaCode::ScanResult> pickList_;
+    std::vector<int> pickerOrder_;          // sort order indices into pickList_
     int    pickerCursor_ = 0;
     String pickedAddr_;
 };

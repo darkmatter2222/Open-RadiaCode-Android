@@ -132,7 +132,7 @@ void loop() {
                     break;
                 case Ui::ACTION_START_PICKER:
                     Serial.println("[UI] starting RadiaCode picker scan");
-                    gRadia.startManualScan(6000);
+                    gRadia.startManualScan(15000);
                     gUi.enterPicker({});      // show "Scanning..." placeholder
                     manualScanArmed = true;
                     break;
@@ -153,12 +153,13 @@ void loop() {
         default: break;
     }
 
-    // While in picker mode, keep refreshing the list (devices appear over time)
+    // While in picker mode, push the (possibly growing) list to the UI ~2 Hz.
+    // The UI itself decides if anything actually changed and only redraws then.
     if (manualScanArmed && gRadia.isManualScanActive()) {
         static uint32_t lastListPush = 0;
-        const uint32_t now = millis();
-        if ((now - lastListPush) > 600) {
-            lastListPush = now;
+        const uint32_t now2 = millis();
+        if ((now2 - lastListPush) > 500) {
+            lastListPush = now2;
             gUi.enterPicker(gRadia.getScanResults());
         }
     }

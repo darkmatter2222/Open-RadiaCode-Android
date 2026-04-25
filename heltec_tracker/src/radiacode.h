@@ -34,8 +34,9 @@ public:
 
     struct ScanResult {
         std::string address;     // e.g. "52:43:06:60:20:24"
-        std::string name;        // advertised name ("RadiaCode-...")
+        std::string name;        // advertised name (may be empty)
         int         rssi = 0;
+        bool        likelyMatch = false;  // name matched RadiaCode* or RadiaCode service UUID present
     };
 
     using ReadingCb = std::function<void(const Reading&)>;

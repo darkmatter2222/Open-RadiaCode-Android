@@ -6,13 +6,22 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
+#include <algorithm>
 
 namespace {
+// Subclass exposes the protected setColRowStart() helper so we can apply the
+// HTIT-Tracker mini panel's RAM offsets and kill the rainbow edges.
+class Tracker_ST7735 : public Adafruit_ST7735 {
+public:
+    using Adafruit_ST7735::Adafruit_ST7735;
+    void applyMiniOffsets() { setColRowStart(26, 1); }   // landscape rotation 1
+};
+
 // HTIT-Tracker V1.2 SPI pins (custom HSPI, not default).
 // Software-SPI constructor avoids the lib re-binding the HW SPI peripheral.
-Adafruit_ST7735 tft(cfg::TFT_CS, cfg::TFT_DC,
-                    cfg::TFT_MOSI, cfg::TFT_SCLK,
-                    cfg::TFT_RST);
+Tracker_ST7735 tft(cfg::TFT_CS, cfg::TFT_DC,
+                   cfg::TFT_MOSI, cfg::TFT_SCLK,
+                   cfg::TFT_RST);
 
 constexpr uint16_t COL_BG       = ST77XX_BLACK;
 constexpr uint16_t COL_FG       = 0xFFFF;
@@ -52,10 +61,8 @@ uint16_t stateColor(RadiaCode::State s) {
 void Ui::begin() {
     tft.initR(INITR_MINI160x80);
     tft.setRotation(cfg::TFT_ROTATION);
+    tft.applyMiniOffsets();               // kills rainbow edge pixels
     tft.invertDisplay(true);              // black BG, light text
-    // NOTE: HTIT-Tracker mini panel may show 1-2 px of uninitialised RAM
-    // along the right/bottom edges (Adafruit's MINI160x80 offsets differ
-    // slightly from Heltec's). Acceptable for now; revisit if user dislikes.
     tft.fillScreen(COL_BG);
     tft.setTextWrap(false);
     tft.setTextColor(COL_FG, COL_BG);
@@ -84,6 +91,7 @@ void Ui::onShortPress() {
         if (pickList_.empty()) return;
         // cursor 0..N-1 = device index, N = "Cancel"
         pickerCursor_ = (pickerCursor_ + 1) % ((int)pickList_.size() + 1);
+        forceFullRedraw_ = true;     // redraw rows so cursor is visible
         return;
     }
     // Cycle STATS -> GPS -> STORAGE -> STATS
@@ -103,8 +111,16 @@ void Ui::onLongPress() {
             if (pickerCursor_ >= (int)pickList_.size()) {
                 pendingAction_ = ACTION_CANCEL_PICKER;
             } else {
-                pickedAddr_ = String(pickList_[pickerCursor_].address.c_str());
-                pendingAction_ = ACTION_PICK_DEVICE;
+                // pickerCursor_ indexes the displayed (sorted) order, so map
+                // through pickerOrder_ to get the real pickList_ entry.
+                int realIdx = pickerCursor_;
+                if (pickerCursor_ < (int)pickerOrder_.size()) {
+                    realIdx = pickerOrder_[pickerCursor_];
+                }
+                if (realIdx >= 0 && realIdx < (int)pickList_.size()) {
+                    pickedAddr_ = String(pickList_[realIdx].address.c_str());
+                    pendingAction_ = ACTION_PICK_DEVICE;
+                }
             }
             break;
         default: break;
@@ -124,10 +140,38 @@ void Ui::setRadiaState(RadiaCode::State s, const String& addr) {
 }
 
 void Ui::enterPicker(const std::vector<RadiaCode::ScanResult>& results) {
+    // Decide if anything visible actually changed -- only redraw on real change
+    // to avoid flicker. Address membership change OR significant RSSI delta.
+    bool changed = (results.size() != pickList_.size());
+    if (!changed) {
+        for (size_t i = 0; i < results.size(); ++i) {
+            // Match by address (order may differ between snapshots).
+            const auto& a = results[i];
+            bool found = false;
+            for (const auto& b : pickList_) {
+                if (a.address == b.address) {
+                    if (a.name != b.name ||
+                        a.likelyMatch != b.likelyMatch ||
+                        std::abs(a.rssi - b.rssi) > 8) {
+                        changed = true;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) { changed = true; break; }
+        }
+    }
     pickList_ = results;
-    pickerCursor_ = 0;
-    screen_ = SCREEN_PICKER;
-    forceFullRedraw_ = true;
+    if (screen_ != SCREEN_PICKER) {
+        pickerCursor_ = 0;
+        screen_ = SCREEN_PICKER;
+        forceFullRedraw_ = true;
+    } else if (changed) {
+        forceFullRedraw_ = true;
+    }
+    // pickList_.size() entries + 1 Cancel row, so max valid cursor = size().
+    if (pickerCursor_ > (int)pickList_.size()) pickerCursor_ = (int)pickList_.size();
 }
 
 // ---------------------------------------------------------------------------
@@ -248,10 +292,11 @@ void Ui::renderStats() {
     // Footer line: state hint + last 5 of MAC
     char foot[24];
     if (rcState_ != RadiaCode::State::Ready) {
-        snprintf(foot, sizeof(foot), "Hold btn: pick RC");
+        snprintf(foot, sizeof(foot), "Hold: pick RC");
     } else if (rcAddr_.length() >= 5) {
-        snprintf(foot, sizeof(foot), "RC %s",
-                 rcAddr_.substring(rcAddr_.length() - 5).c_str());
+        snprintf(foot, sizeof(foot), "RC %s%s",
+                 rcAddr_.substring(rcAddr_.length() - 5).c_str(),
+                 (gps_ && gps_->hasFix()) ? "" : " *noGPS");
     } else {
         strcpy(foot, "");
     }
@@ -276,8 +321,14 @@ void Ui::renderGps() {
     snprintf(buf, sizeof(buf), "HDOP %.1f", gps_->hdop());
     field(22, 4, 38, 76, 8, buf, COL_FG, COL_BG, 1);
 
-    snprintf(buf, sizeof(buf), "RX %lu", (unsigned long)gps_->bytesIn());
-    field(23, 4, 50, 76, 8, buf, COL_DIM, COL_BG, 1);
+    // Estimated horizontal accuracy: HDOP * UERE (~3 m typical for L1 GNSS).
+    if (gps_->hasFix() && gps_->hdop() < 50.0) {
+        const float acc = (float)gps_->hdop() * 3.0f;
+        snprintf(buf, sizeof(buf), "+/-%4.1fm", acc);
+        field(23, 4, 50, 76, 8, buf, COL_GREEN, COL_BG, 1);
+    } else {
+        field(23, 4, 50, 76, 8, "+/- ---", COL_DIM, COL_BG, 1);
+    }
 
     if (gps_->hasFix()) {
         snprintf(buf, sizeof(buf), "%.5f", gps_->latitude());
@@ -305,9 +356,12 @@ void Ui::renderStorage() {
     char buf[40];
 
     const bool rec = store_->isRecording();
+    const bool fix = gps_ && gps_->hasFix();
     field(30, 4, 14, 50, 8, "REC", COL_DIM, COL_BG, 1);
-    field(31, 36, 14, 50, 8, rec ? "ON " : "OFF",
-          rec ? COL_GREEN : COL_RED, COL_BG, 1);
+    field(31, 36, 14, 60, 8,
+          rec ? (fix ? "ON     " : "ON noGPS") : "OFF    ",
+          rec ? (fix ? COL_GREEN : COL_AMBER) : COL_RED,
+          COL_BG, 1);
 
     snprintf(buf, sizeof(buf), "Samp %lu", (unsigned long)store_->sampleCount());
     field(32, 80, 14, 76, 8, buf, COL_FG, COL_BG, 1);
@@ -346,52 +400,76 @@ void Ui::renderStorage() {
 }
 
 // ---------------------------------------------------------------------------
-// PICKER screen: list of RadiaCode devices found during scan.
-// Up to 4 devices fit at 12 px row height (after header).
+// PICKER screen: list of nearby BLE devices found during scan.
+// RadiaCode 110 sometimes advertises with no name, so we list ALL nearby
+// advertisers sorted by signal strength. Likely RadiaCode matches (name or
+// service UUID) are prefixed with '*' in green.
 void Ui::renderPicker() {
-    if (forceFullRedraw_) {
-        tft.fillRect(0, HEADER_H, cfg::TFT_W, cfg::TFT_H - HEADER_H, COL_BG);
-    }
+    if (!forceFullRedraw_) return;       // only redraw on real changes
+    tft.fillRect(0, HEADER_H, cfg::TFT_W, cfg::TFT_H - HEADER_H, COL_BG);
 
     if (pickList_.empty()) {
-        field(40 % MAX_FIELDS, 4, 16, 156, 8, "Scanning...", COL_AMBER, COL_BG, 1);
-        field(41 % MAX_FIELDS, 4, 30, 156, 8, "no RadiaCode yet", COL_DIM, COL_BG, 1);
-        field(42 % MAX_FIELDS, 4, 46, 156, 8, "long press = cancel", COL_DIM, COL_BG, 1);
+        tft.setTextSize(1);
+        tft.setTextColor(COL_AMBER, COL_BG);
+        tft.setCursor(4, 16); tft.print("Scanning...");
+        tft.setTextColor(COL_DIM, COL_BG);
+        tft.setCursor(4, 30); tft.print("no devices yet");
+        tft.setCursor(4, 46); tft.print("long press = cancel");
         return;
     }
 
-    const int rowH = 11;
-    const int maxRows = 5;     // 4 devices + cancel
-    const int total = (int)pickList_.size() + 1;
-    const int show = total < maxRows ? total : maxRows;
+    // Build sorted view (descending RSSI, likely matches first within tie).
+    std::vector<int> order(pickList_.size());
+    for (size_t i = 0; i < pickList_.size(); ++i) order[i] = (int)i;
+    std::sort(order.begin(), order.end(), [&](int a, int b){
+        const auto& ra = pickList_[a];
+        const auto& rb = pickList_[b];
+        if (ra.likelyMatch != rb.likelyMatch) return ra.likelyMatch && !rb.likelyMatch;
+        return ra.rssi > rb.rssi;
+    });
+    pickerOrder_ = order;   // remember mapping so onLongPress picks correct entry
+
+    const int rowH = 12;
+    const int total = (int)pickList_.size() + 1;       // +1 for Cancel
+    const int show = total < 5 ? total : 5;
 
     char line[40];
     for (int row = 0; row < show; ++row) {
-        const int y = HEADER_H + 2 + row * rowH;
+        const int y = HEADER_H + 1 + row * rowH;
         const bool selected = (row == pickerCursor_);
         const uint16_t bg = selected ? COL_PICK : COL_BG;
-        const uint16_t fg = selected ? 0xFFFF : COL_FG;
-        tft.fillRect(0, y - 1, cfg::TFT_W, rowH, bg);
+        tft.fillRect(0, y, cfg::TFT_W, rowH, bg);
+        tft.setTextSize(1);
 
         if (row < (int)pickList_.size()) {
-            const auto& r = pickList_[row];
-            // last 5 of MAC
-            std::string a = r.address;
-            std::string suffix = a.length() >= 5 ? a.substr(a.length() - 5) : a;
-            const char* nm = r.name.empty() ? "RadiaCode" : r.name.c_str();
-            snprintf(line, sizeof(line), "%c %-10.10s %s %4d",
-                     selected ? '>' : ' ', nm, suffix.c_str(), r.rssi);
+            const auto& r = pickList_[order[row]];
+            // Label: name if present, else last 3 octets of MAC formatted
+            // like AA:BB:CC so the user can recognise it.
+            char label[16];
+            if (!r.name.empty()) {
+                snprintf(label, sizeof(label), "%-12.12s", r.name.c_str());
+            } else {
+                std::string a = r.address;
+                std::string tail = a.length() >= 8
+                    ? a.substr(a.length() - 8) : a;     // "xx:xx:xx"
+                char tmp[16];
+                snprintf(tmp, sizeof(tmp), "?%s", tail.c_str());
+                snprintf(label, sizeof(label), "%-12.12s", tmp);
+            }
+            const uint16_t fg = r.likelyMatch ? COL_GREEN : 0xFFFF;
+            const char marker = r.likelyMatch ? '*' : (selected ? '>' : ' ');
+            snprintf(line, sizeof(line), "%c%s", marker, label);
+            tft.setTextColor(fg, bg);
+            tft.setCursor(2, y + 2); tft.print(line);
+            // RSSI right-aligned
+            char rs[8]; snprintf(rs, sizeof(rs), "%4d", r.rssi);
+            tft.setTextColor(0xFFFF, bg);
+            tft.setCursor(cfg::TFT_W - 26, y + 2); tft.print(rs);
         } else {
             snprintf(line, sizeof(line), "%c [Cancel]",
                      selected ? '>' : ' ');
+            tft.setTextColor(0xFFFF, bg);
+            tft.setCursor(2, y + 2); tft.print(line);
         }
-        tft.setTextColor(fg, bg);
-        tft.setTextSize(1);
-        tft.setCursor(2, y);
-        tft.print(line);
-        // We already cleared row backgrounds, so don't reuse the field cache.
     }
-
-    // Force per-frame redraw of picker rows so cursor moves are reflected.
-    for (int i = 40 % MAX_FIELDS; i < MAX_FIELDS; ++i) prevText_[i] = "";
 }
