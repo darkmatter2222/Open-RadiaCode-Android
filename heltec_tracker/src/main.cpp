@@ -196,6 +196,16 @@ static void handleSerialCommand(const String& line) {
         gRadia.disconnectKeepPin();
         return;
     }
+    if (c == 't') {
+        // t <pattern>     -> auto-grab any connectable peer with name matching
+        // t                -> clear grab pattern
+        String pat = (line.length() > 2) ? line.substring(2) : String();
+        pat.trim();
+        gRadia.setNameGrabPattern(std::string(pat.c_str()));
+        if (pat.length()) Serial.printf("[CMD] auto-grab armed for name~='%s'\n", pat.c_str());
+        else              Serial.println("[CMD] auto-grab cleared");
+        return;
+    }
     Serial.printf("[CMD] unknown '%s' (use ?)\n", line.c_str());
 }
 

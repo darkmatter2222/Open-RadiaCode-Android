@@ -67,6 +67,11 @@ public:
     void disconnectAndForget();
     // Disconnect current peer but keep the pinned address so auto-reconnect resumes.
     void disconnectKeepPin();
+    // Auto-grab: scanner will immediately pin+connect to ANY connectable
+    // peer whose advertised local-name contains this substring (case-
+    // insensitive). Designed to race the brief connectable window of
+    // bonded RadiaCode-110 units. Empty pattern = clear the grab.
+    void setNameGrabPattern(const std::string& pattern);
 
     State          state();
     const String&  peerAddress();

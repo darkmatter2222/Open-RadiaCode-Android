@@ -45,7 +45,11 @@ constexpr uint16_t BUTTON_DEBOUNCE_MS = 30;
 constexpr uint16_t BUTTON_LONG_PRESS_MS = 800;
 
 // ---------------- RadiaCode polling -------------------------------------------
-constexpr uint32_t RADIACODE_POLL_MS = 1000;     // matches Android (~1 Hz)
+// Poll interval. Matches Android (~1 Hz). Going slower (3s) was observed to
+// make the RadiaCode-110 drop the link almost immediately after Ready --
+// the peer apparently expects continuous client activity to keep the
+// connection alive.
+constexpr uint32_t RADIACODE_POLL_MS = 1000;
 constexpr uint32_t RADIACODE_SCAN_MS = 8000;
 constexpr uint32_t RADIACODE_RECONNECT_MS = 5000;
 

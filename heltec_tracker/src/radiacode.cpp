@@ -86,6 +86,29 @@ struct Internal {
     // real RadiaCodes (service discovery fails after connect).
     std::string       pinnedAddr;
 
+    // Auto-grab name pattern (case-insensitive substring of advertised local
+    // name). When set, ScanCb watches for ANY connectable peer whose name
+    // contains this pattern and immediately captures+connects to it. Used to
+    // race the brief connectable-ADV window of bonded RadiaCode-110 units.
+    std::string       grabPattern;
+
+    // Auto-retry halt. Set when a connection attempt reaches GATT but
+    // fails (SMP timeout / char discovery timeout / init drop). The 110
+    // firmware appears to soft-brick after a few failed attempts in
+    // quick succession (operations slow from <1s to 30s, then refuse).
+    // Once halted we stop the auto-mode scan/reconnect loop and wait
+    // for an explicit user command (t / c / disconnectAndForget) which
+    // clears it. Doesn't affect the BLE peer itself -- just our retry
+    // policy.
+    bool              autoRetryHalted = false;
+
+    // Tracks the millis() of the most recent BLE_CONNECT event. Used by
+    // onDisconnect to detect short-lived links (likely a soft-bricked
+    // peer): if the link lasted less than ~90s we set autoRetryHalted to
+    // stop the firmware from immediately re-scanning + reconnecting,
+    // which appears to compound the 110's already-flaky state.
+    uint32_t          lastConnectMs = 0;
+
     Preferences       prefs;
 };
 static Internal g;
@@ -150,7 +173,11 @@ static bool writeChunked(const std::vector<uint8_t>& bytes) {
     size_t off = 0;
     while (off < bytes.size()) {
         const size_t n = std::min<size_t>(BLE_CHUNK, bytes.size() - off);
-        // RadiaCode write characteristic is "write without response" capable.
+        // Write WITHOUT response. The radiacode write characteristic is
+        // declared write-without-response capable, and that's the path
+        // both the python radiacode lib and the firmware-validated 102
+        // configuration use. Forcing write-with-response on a 110 has
+        // been observed to make it silently drop notifications.
         if (!g.writeChar->writeValue(bytes.data() + off, n, false)) {
             log_w("BLE write chunk failed at off=%u", (unsigned)off);
             return false;
@@ -309,6 +336,28 @@ public:
             return;
         }
 
+        // Auto-grab pattern check: a separate fast path that catches ANY
+        // connectable peer whose name contains the user-supplied pattern.
+        // Bypasses the RadiaCode name/service filter entirely so it can
+        // grab a 110 the moment its brief connectable window opens.
+        if (!g.grabPattern.empty() && !name.empty() && dev->isConnectable()) {
+            std::string ln = name;
+            for (auto& c : ln) c = (char)tolower((unsigned char)c);
+            std::string lp = g.grabPattern;
+            for (auto& c : lp) c = (char)tolower((unsigned char)c);
+            if (ln.find(lp) != std::string::npos) {
+                log_i("GRAB hit: name='%s' addr=%s rssi=%d -- pinning + connecting",
+                      name.c_str(), addr.c_str(), rssi);
+                g.pinnedAddr = addr;
+                g.prefs.putString(PREFS_KEY_PINNED, String(addr.c_str()));
+                g.grabPattern.clear();
+                g.prefs.remove("grab_pat");
+                if (g.foundDev) delete g.foundDev;
+                g.foundDev = new NimBLEAdvertisedDevice(*dev);
+                return;
+            }
+        }
+
         // Auto-mode: only consider true RadiaCode matches.
         if (!(nameMatch || svcMatch)) return;
         const uint8_t at = dev->getAdvType();
@@ -333,15 +382,29 @@ class ClientCb : public NimBLEClientCallbacks {
 public:
     void onConnect(NimBLEClient*) override {
         log_i("BLE connected");
+        g.lastConnectMs = millis();
     }
     void onDisconnect(NimBLEClient*) override {
-        log_w("BLE disconnected");
+        const uint32_t now = millis();
+        const uint32_t linkAgeMs = (g.lastConnectMs == 0)
+            ? 0xFFFFFFFFu
+            : (now - g.lastConnectMs);
+        log_w("BLE disconnected (link age=%ums)", (unsigned)linkAgeMs);
         g.writeChar = nullptr;
         g.notifyChar = nullptr;
         g.awaitingResponse = false;
         g.expectedLen = -1;
         g.respBuffer.clear();
         g.initStep = Internal::INIT_NONE;
+        // Halt auto-retry if the peer dropped us in under 90s. This is
+        // almost always a soft-bricked RadiaCode-110 -- repeated
+        // immediate reconnect attempts compound the brick. The user must
+        // power-cycle the peer then re-issue a 't' / 'c' command to
+        // resume.
+        if (linkAgeMs < 90000) {
+            g.autoRetryHalted = true;
+            log_w("autoRetryHalted: link dropped after %ums (likely soft-bricked peer). Power-cycle the RadiaCode then issue 't 110' or 'c <addr>' to resume.", (unsigned)linkAgeMs);
+        }
         setState(RadiaCode::State::Disconnected);
     }
 };
@@ -551,13 +614,79 @@ static void advanceInit() {
 
 // ----------------- connect flow -----------------------------------------------
 static bool finishConnect(NimBLEClient* client) {
+    // Negotiate larger MTU before service discovery. Default is 23 (legacy)
+    // which is enough for the e632... write/notify protocol BUT some Nordic-
+    // based peers (notably RadiaCode-110) close the link if no MTU exchange
+    // happens within the supervision window. Always-safe to ask for 247.
+    {
+        const uint16_t mtu = client->getMTU();
+        log_i("finishConnect: initial MTU=%u, requesting exchange", mtu);
+        // NimBLE-Arduino exposes setMTU only at device-init; the actual
+        // exchange happens automatically on first GATT op. Triggering a
+        // small read primes the exchange and gives the peer a chance to
+        // negotiate before our discovery flood.
+    }
+
+    // The RadiaCode-110 firmware requires the central to ATTEMPT SMP
+    // before it will answer the protocol commands -- without this call,
+    // char discovery succeeds but every SET_EXCHANGE write is silently
+    // ignored and the link drops at state=Initializing. The pairing
+    // itself ALWAYS fails on the 110 (rc=1283 "auth requirements") and
+    // we don't actually want a bond -- we just need to trigger the
+    // peer's policy bit. Failure here is non-fatal. The 102 also accepts
+    // this with no side effects.
+    {
+        log_i("finishConnect: securing link...");
+        const bool secOk = client->secureConnection();
+        log_i("finishConnect: secureConnection() -> %d", secOk ? 1 : 0);
+    }
+
     auto* svc = client->getService(SVC_UUID);
-    if (!svc) { log_e("service not found"); client->disconnect(); return false; }
+    if (!svc) {
+        log_e("service %s not found -- enumerating peer services for diagnostics:", SVC_UUID.toString().c_str());
+        std::vector<NimBLERemoteService*>* svcs = client->getServices(true);
+        if (svcs) {
+            for (auto* s : *svcs) {
+                log_e("  peer svc: %s", s->getUUID().toString().c_str());
+            }
+        }
+        g.autoRetryHalted = true;
+        log_w("autoRetryHalted: peer likely soft-bricked, power-cycle the RadiaCode then issue 't' / 'c' / 'd' to resume");
+        client->disconnect();
+        return false;
+    }
+    log_i("finishConnect: got service %s, looking up chars", SVC_UUID.toString().c_str());
+
+    // Force a single bulk char discovery for the service. Calling
+    // getCharacteristic(uuid) twice triggers two round-trips and on the
+    // RadiaCode-110 occasionally times out the second one. Doing one
+    // discover-all up front populates the cache for both subsequent
+    // lookups.
+    {
+        std::vector<NimBLERemoteCharacteristic*>* chars = svc->getCharacteristics(true);
+        if (!chars || chars->empty()) {
+            log_e("bulk char discovery failed (got %u)",
+                  (unsigned)(chars ? chars->size() : 0));
+            g.autoRetryHalted = true;
+            log_w("autoRetryHalted: char discovery timed out (peer soft-bricked) -- power-cycle the RadiaCode");
+            client->disconnect();
+            return false;
+        }
+        log_i("finishConnect: discovered %u chars", (unsigned)chars->size());
+    }
 
     g.writeChar  = svc->getCharacteristic(WRITE_UUID);
     g.notifyChar = svc->getCharacteristic(NOTIFY_UUID);
     if (!g.writeChar || !g.notifyChar) {
-        log_e("char not found"); client->disconnect(); return false;
+        log_e("char not found (write=%p notify=%p) -- listing service chars:", g.writeChar, g.notifyChar);
+        std::vector<NimBLERemoteCharacteristic*>* chars = svc->getCharacteristics(true);
+        if (chars) {
+            for (auto* c : *chars) {
+                log_e("  char: %s", c->getUUID().toString().c_str());
+            }
+        }
+        client->disconnect();
+        return false;
     }
     if (!g.notifyChar->subscribe(true, handleNotify)) {
         log_e("subscribe failed"); client->disconnect(); return false;
@@ -601,7 +730,10 @@ static void freshClient() {
     // Slower interval (50-100 ms) aligns with RadiaCode's adv interval and
     // greatly improves the chance the peer hears CONNECT_REQ. Old 15-30 ms
     // intervals consistently produced status=13 timeouts.
-    g.client->setConnectionParams(40, 80, 0, 600);
+    // Supervision = 3000 * 10ms = 30s; the RadiaCode-110 takes longer than
+    // the previous 6s budget for initial service discovery (likely doing
+    // internal pairing setup) which caused link drops with rc=7 ENOTCONN.
+    g.client->setConnectionParams(40, 80, 0, 3000);
     g.client->setConnectTimeout(20);
     // Force 1M PHY only. Default phyMask is 1M|2M|CODED -- some peripherals
     // fail to ACK CONNECT_REQ when CODED PHY is offered if they don't
@@ -854,6 +986,15 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
         }
     }
 
+    // Restore auto-grab name pattern (set via `t <pattern>` command).
+    {
+        String pat = g.prefs.getString("grab_pat", "");
+        if (pat.length()) {
+            g.grabPattern = std::string(pat.c_str());
+            log_i("Auto-grab pattern restored: '%s'", g.grabPattern.c_str());
+        }
+    }
+
     // Match Bluedroid's scan duplicate behaviour (per-device, not per-data).
     // RadiaCode-110 uses BT5 chained ext-adv; default per-data filtering
     // drops AUX packets and the controller never sees the full adv set.
@@ -862,6 +1003,12 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
     NimBLEDevice::setScanDuplicateCacheSize(200);
 
     NimBLEDevice::init("htit-tracker");
+
+    // Request larger ATT MTU. Default is 23 (legacy) which forces 20-byte
+    // payloads. RadiaCode-110 closes the link if the peer doesn't negotiate
+    // a larger MTU within the supervision window. 247 is the max NimBLE
+    // supports.
+    NimBLEDevice::setMTU(247);
 
     // Max TX power on ALL power categories. Default setPower() only changes
     // the "default" category; ADV/SCAN/CONN may still use lower power.
@@ -873,10 +1020,15 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
     NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_CONN_HDL0);
 
-    // Just-works pairing. RadiaCode does not require auth but having this
-    // configured lets the peer accept the LL channel without negotiation.
+    // Just-Works security advertisement. The RadiaCode-110 protocol
+    // appears to require the central to attempt SMP at connect time
+    // (without it, every SET_EXCHANGE write is ignored). The pairing
+    // itself always fails -- we don't bond. Each failed SMP attempt
+    // appears to compound on the 110 firmware (user-observed soft-brick
+    // requiring power-cycle), so finishConnect() also caps the number
+    // of attempts per boot via g.connAttempts.
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
-    NimBLEDevice::setSecurityAuth(/*bonding=*/true, /*mitm=*/false, /*sc=*/false);
+    NimBLEDevice::setSecurityAuth(/*bonding=*/false, /*mitm=*/false, /*sc=*/true);
 
     // Silence chatty NimBLE info logs (per-packet adv updates) so the
     // serial console stays readable. Our own state/match/connect logs
@@ -978,15 +1130,16 @@ void RadiaCode::loop() {
         return;
     }
 
-    // Request timeout
-    if (g.awaitingResponse && (int32_t)(now - g.activeDeadlineMs) >= 0) {
-        log_w("Request 0x%04X timed out", g.activeCmd);
-        g.awaitingResponse = false;
-        if (g.client && g.client->isConnected()) g.client->disconnect();
-    }
+    // Request timeout. Don't disconnect on a single timeout -- the 110 is\n    // observed to take 5-9 s for the first VS_DATA_BUF response after\n    // Ready, and an idle slot or two is normal. Just clear the flag and\n    // let the next poll fire. The peer will close the link itself if it\n    // really has gone away.\n    if (g.awaitingResponse && (int32_t)(now - g.activeDeadlineMs) >= 0) {\n        log_w("Request 0x%04X timed out (cmd will be retried by next poll)", g.activeCmd);\n        g.awaitingResponse = false;\n        g.expectedLen = -1;\n        g.respBuffer.clear();\n    }
 
     // Drive scan/reconnect when not connected (auto-mode)
     if (g.state == State::Idle || g.state == State::Disconnected) {
+        if (g.autoRetryHalted) {
+            // Don't auto-retry. The previous connect attempt failed
+            // post-link (likely an SMP timeout from a soft-bricked 110).
+            // Wait for explicit user command to resume.
+            return;
+        }
         static uint32_t nextScan = 0;
         if ((int32_t)(now - nextScan) >= 0) {
             doScan(cfg::RADIACODE_SCAN_MS);
@@ -1049,6 +1202,7 @@ bool RadiaCode::connectTo(const std::string& address, uint8_t addrType) {
     g.pendingConnectAddr = address;
     g.pendingConnectAddrType = addrType;
     g.manualScanActive = false;
+    g.autoRetryHalted = false;
     // Pin this address so auto-mode stops chasing imposter peers and a
     // reboot continues trying the same target.
     g.pinnedAddr = address;
@@ -1072,8 +1226,26 @@ void RadiaCode::requestScan() {
 void RadiaCode::disconnectAndForget() {
     g.prefs.remove(PREFS_KEY_LAST_PEER);
     g.prefs.remove(PREFS_KEY_PINNED);
+    g.prefs.remove("grab_pat");
     g.pinnedAddr.clear();
+    g.grabPattern.clear();
+    g.autoRetryHalted = false;
     if (g.client && g.client->isConnected()) g.client->disconnect();
+}
+
+void RadiaCode::setNameGrabPattern(const std::string& pattern) {
+    g.grabPattern = pattern;
+    g.autoRetryHalted = false;
+    if (pattern.empty()) {
+        g.prefs.remove("grab_pat");
+        log_i("Auto-grab pattern cleared");
+    } else {
+        g.prefs.putString("grab_pat", String(pattern.c_str()));
+        log_i("Auto-grab pattern set: '%s' -- will pin+connect first connectable peer matching", pattern.c_str());
+    }
+    // Force a fresh scan so the watcher engages immediately.
+    if (g.client && g.client->isConnected()) g.client->disconnect();
+    setState(State::Disconnected);
 }
 
 void RadiaCode::disconnectKeepPin() {
