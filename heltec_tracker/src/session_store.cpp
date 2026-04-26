@@ -146,3 +146,128 @@ int SessionStore::sessionCount() const {
     }
     return n;
 }
+
+// ---------------- export / wipe ------------------------------------------
+
+namespace {
+String stripCsvSuffix(const String& fname) {
+    if (fname.endsWith(".csv")) return fname.substring(0, fname.length() - 4);
+    return fname;
+}
+String fileBaseName(const String& path) {
+    int slash = path.lastIndexOf('/');
+    return (slash >= 0) ? path.substring(slash + 1) : path;
+}
+} // namespace
+
+std::vector<SessionStore::SessionInfo> SessionStore::listSessions() const {
+    std::vector<SessionInfo> out;
+    File dir = LittleFS.open(cfg::SESSIONS_DIR);
+    if (!dir || !dir.isDirectory()) return out;
+
+    File f = dir.openNextFile();
+    while (f) {
+        if (!f.isDirectory()) {
+            String name = fileBaseName(String(f.name()));
+            if (name.endsWith(".csv")) {
+                SessionInfo info;
+                info.id        = stripCsvSuffix(name);
+                info.sizeBytes = f.size();
+                info.samples   = 0;
+                // Cheap line count. Re-open for a separate read pass since
+                // the directory's File handle is positioned at metadata.
+                File data = LittleFS.open(String(cfg::SESSIONS_DIR) + "/" + name, "r");
+                if (data) {
+                    while (data.available()) {
+                        data.readStringUntil('\n');
+                        ++info.samples;
+                    }
+                    if (info.samples > 0) --info.samples;   // header
+                    data.close();
+                }
+                out.push_back(info);
+            }
+        }
+        f = dir.openNextFile();
+    }
+    return out;
+}
+
+bool SessionStore::dumpSession(const String& id, Stream& out) const {
+    String path = String(cfg::SESSIONS_DIR) + "/" + id + ".csv";
+    File f = LittleFS.open(path, "r");
+    if (!f) {
+        out.printf("[DUMP-ERR] id=%s reason=open-failed\n", id.c_str());
+        return false;
+    }
+
+    // Re-count samples for the header so the host can verify byte/sample
+    // integrity after streaming.
+    uint32_t samples = 0;
+    File counter = LittleFS.open(path, "r");
+    if (counter) {
+        while (counter.available()) {
+            counter.readStringUntil('\n');
+            ++samples;
+        }
+        if (samples > 0) --samples;
+        counter.close();
+    }
+
+    out.printf("[DUMP-BEGIN] id=%s bytes=%u samples=%u\n",
+               id.c_str(), (unsigned)f.size(), (unsigned)samples);
+    // Stream raw bytes verbatim. The host side reads until [DUMP-END].
+    uint8_t buf[256];
+    while (f.available()) {
+        size_t n = f.read(buf, sizeof(buf));
+        if (n > 0) out.write(buf, n);
+        // Tiny yield so the BLE stack & WDT keep running on big files.
+        yield();
+    }
+    f.close();
+    // Make sure the final line has a terminating newline so the marker
+    // appears on its own line regardless of CSV trailing state.
+    out.print('\n');
+    out.printf("[DUMP-END] id=%s\n", id.c_str());
+    return true;
+}
+
+void SessionStore::dumpAll(Stream& out) const {
+    auto sessions = listSessions();
+    out.printf("[DUMP-ALL-BEGIN] count=%u\n", (unsigned)sessions.size());
+    uint32_t ok = 0;
+    for (const auto& s : sessions) {
+        // Skip the active session's tail-of-write hazard by closing append
+        // handles between rows -- our append() already does that, so dump
+        // is safe to run concurrently with logging.
+        if (dumpSession(s.id, out)) ++ok;
+    }
+    out.printf("[DUMP-DONE] ok=%u total=%u\n", (unsigned)ok, (unsigned)sessions.size());
+}
+
+uint32_t SessionStore::wipeAll() {
+    if (recording_) stop();
+    LittleFS.remove(cfg::ACTIVE_FILE);
+
+    uint32_t removed = 0;
+    File dir = LittleFS.open(cfg::SESSIONS_DIR);
+    if (!dir || !dir.isDirectory()) return 0;
+
+    // Two-pass: collect names first, then remove. Removing while iterating
+    // openNextFile() is undefined behaviour on LittleFS.
+    std::vector<String> paths;
+    File f = dir.openNextFile();
+    while (f) {
+        if (!f.isDirectory()) {
+            paths.push_back(String(cfg::SESSIONS_DIR) + "/" + fileBaseName(String(f.name())));
+        }
+        f = dir.openNextFile();
+    }
+    for (const auto& p : paths) {
+        if (LittleFS.remove(p)) ++removed;
+    }
+
+    activeId_    = "";
+    sampleCount_ = 0;
+    return removed;
+}

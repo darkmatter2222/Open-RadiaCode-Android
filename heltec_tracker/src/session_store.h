@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <vector>
 
 // CSV session writer.
 // File format matches Android `SessionDataPoint.toCsv()`:
@@ -32,6 +33,31 @@ public:
     size_t usedBytes() const;
     int    percentUsed() const;
     int    sessionCount() const;
+
+    // Export / wipe -----------------------------------------------------
+    struct SessionInfo {
+        String   id;          // e.g. "20260426_104210" or "boot_1234567"
+        size_t   sizeBytes;
+        uint32_t samples;     // line count minus header (if present)
+    };
+    // Enumerate every CSV under /sessions. Order is whatever LittleFS
+    // returns from openNextFile (effectively insertion order).
+    std::vector<SessionInfo> listSessions() const;
+
+    // Stream one session over the supplied Stream. Frames the body with
+    //   [DUMP-BEGIN] id=<id> bytes=<n> samples=<m>\n
+    //   <raw csv...>
+    //   [DUMP-END] id=<id>\n
+    // Returns true on success.
+    bool dumpSession(const String& id, Stream& out) const;
+
+    // Stream every session in turn. Emits a [DUMP-DONE] count=N marker
+    // when finished.
+    void dumpAll(Stream& out) const;
+
+    // Delete every CSV under /sessions. If the active session is open it
+    // is stopped first. Returns number of files removed.
+    uint32_t wipeAll();
 
 private:
     bool   recording_   = false;

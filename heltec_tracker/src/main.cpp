@@ -122,9 +122,65 @@ static void handleSerialCommand(const String& line) {
     if (line.length() == 0) return;
     const char c = line[0];
     if (c == '?' || c == 'h') {
-        Serial.println("[CMD] commands: s, l, c <idx>, x, f, ?");
+        Serial.println("[CMD] commands: s, l, c <idx|addr [type]>, x, f, D, t <pat>");
+        Serial.println("[CMD]           LS                  - list sessions");
+        Serial.println("[CMD]           DUMP <id>           - stream one session csv");
+        Serial.println("[CMD]           DUMPALL             - stream all sessions");
+        Serial.println("[CMD]           WIPE <count>        - delete all sessions (count must match LS)");
+        Serial.println("[CMD]           STATFS              - show filesystem usage");
         return;
     }
+
+    // Multi-char keyword commands (case-insensitive). Handled before the
+    // single-letter fallthrough so e.g. `LS` doesn't get matched as `l`.
+    String upper = line; upper.toUpperCase(); upper.trim();
+    if (upper == "LS") {
+        auto sessions = gStore.listSessions();
+        Serial.printf("[LS] %u sessions on /sessions:\n", (unsigned)sessions.size());
+        for (const auto& s : sessions) {
+            Serial.printf("  %s  bytes=%u  samples=%u%s\n",
+                          s.id.c_str(), (unsigned)s.sizeBytes, (unsigned)s.samples,
+                          (gStore.activeId() == s.id) ? "  (active)" : "");
+        }
+        Serial.printf("[LS-END] count=%u\n", (unsigned)sessions.size());
+        return;
+    }
+    if (upper.startsWith("DUMP ")) {
+        String id = line.substring(5); id.trim();
+        gStore.dumpSession(id, Serial);
+        return;
+    }
+    if (upper == "DUMPALL") {
+        gStore.dumpAll(Serial);
+        return;
+    }
+    if (upper == "STATFS") {
+        Serial.printf("[STATFS] used=%u total=%u pct=%d sessions=%d\n",
+                      (unsigned)gStore.usedBytes(), (unsigned)gStore.totalBytes(),
+                      gStore.percentUsed(), gStore.sessionCount());
+        return;
+    }
+    if (upper.startsWith("WIPE")) {
+        // Require the user to pass the current session count as a guard
+        // against accidental invocation. `WIPE 0` will clear an empty fs;
+        // `WIPE` (no arg) prints help.
+        String args = line.substring(4); args.trim();
+        if (args.length() == 0) {
+            Serial.println("[WIPE] usage: WIPE <expected-count>  (run LS first)");
+            return;
+        }
+        int expected = args.toInt();
+        int have = gStore.sessionCount();
+        if (expected != have) {
+            Serial.printf("[WIPE-ABORT] expected=%d have=%d (run LS, retry with matching count)\n",
+                          expected, have);
+            return;
+        }
+        uint32_t removed = gStore.wipeAll();
+        Serial.printf("[WIPE-DONE] removed=%u\n", (unsigned)removed);
+        return;
+    }
+
     if (c == 's') {
         // Optional arg: duration in seconds (default 15)
         uint32_t ms = 15000;
