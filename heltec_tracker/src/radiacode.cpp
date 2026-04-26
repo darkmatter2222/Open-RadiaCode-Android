@@ -284,32 +284,20 @@ public:
         // SID/PHY) so we connect with full BT5 metadata.
         if (!g.targetAddr.empty()) {
             if (addr == g.targetAddr) {
-                // Legacy adv types: 0=ADV_IND (connectable+scannable+undirected),
-                // 1=ADV_DIRECT_IND, 2=ADV_SCAN_IND (non-connectable scannable),
-                // 3=ADV_NONCONN_IND (NON-CONNECTABLE), 4=SCAN_RSP. Only 0 and 1
-                // accept CONNECT_REQ. RadiaCode-110/102 sit in NONCONN mode
-                // until the user wakes them (button press) -- in that state
-                // sending CONNECT_REQ produces an inevitable status=13 timeout.
                 const uint8_t at = dev->getAdvType();
-                const bool connectable = (at == 0) || (at == 1);
-                log_i("Target seen: %s rssi=%d advType=%u (%s) primPhy=%u secPhy=%u sid=%u name=%s",
-                      addr.c_str(), rssi, (unsigned)at,
-                      connectable ? "connectable" : "NON-connectable",
+                const bool isLegacy = dev->isLegacyAdvertisement();
+                const bool isConnectable = dev->isConnectable();
+                log_i("Target seen: %s rssi=%d advType=%u legacy=%d conn=%d primPhy=%u secPhy=%u sid=%u name=%s",
+                      addr.c_str(), rssi, (unsigned)at, isLegacy, isConnectable,
                       (unsigned)dev->getPrimaryPhy(), (unsigned)dev->getSecondaryPhy(),
                       (unsigned)dev->getSetId(), name.c_str());
-                if (!connectable) {
-                    static uint32_t lastHint = 0;
-                    if (millis() - lastHint > 8000) {
-                        log_w("%s is in non-connectable mode -- press the button on the RadiaCode to wake it for pairing",
-                              addr.c_str());
-                        lastHint = millis();
-                    }
-                    return;  // do not capture, keep scanning for connectable adv
-                }
-                if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
-                    if (g.foundDev) delete g.foundDev;
-                    g.foundDev = new NimBLEAdvertisedDevice(*dev);
-                }
+                // Always capture the latest adv -- we'll attempt CONNECT_REQ
+                // regardless of the advertised connectable flag (some peers
+                // accept connections even from NONCONN_IND state once the
+                // central has the address; worst case it times out and we
+                // retry on the next adv).
+                if (g.foundDev) delete g.foundDev;
+                g.foundDev = new NimBLEAdvertisedDevice(*dev);
             }
             return;
         }
@@ -317,11 +305,11 @@ public:
         // Auto-mode: only consider true RadiaCode matches.
         if (!(nameMatch || svcMatch)) return;
         const uint8_t at = dev->getAdvType();
-        const bool connectable = (at == 0) || (at == 1);
-        log_i("Match: %s rssi=%d svcMatch=%d advType=%u (%s) name=%s",
+        const bool isConn = dev->isConnectable();
+        log_i("Match: %s rssi=%d svcMatch=%d advType=%u legacy=%d conn=%d name=%s",
               addr.c_str(), rssi, svcMatch, (unsigned)at,
-              connectable ? "connectable" : "non-connectable", name.c_str());
-        if (!connectable) return;  // never queue a non-connectable peer for auto-connect
+              dev->isLegacyAdvertisement(), isConn, name.c_str());
+        if (!isConn) return;  // skip non-connectable peers in auto mode
         if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
             if (g.foundDev) delete g.foundDev;
             g.foundDev = new NimBLEAdvertisedDevice(*dev);
@@ -604,6 +592,12 @@ static void freshClient() {
     // intervals consistently produced status=13 timeouts.
     g.client->setConnectionParams(40, 80, 0, 600);
     g.client->setConnectTimeout(20);
+    // Force 1M PHY only. Default phyMask is 1M|2M|CODED -- some peripherals
+    // fail to ACK CONNECT_REQ when CODED PHY is offered if they don't
+    // support it on the BLE 5 secondary channel. RadiaCode peers are 1M.
+#if CONFIG_BT_NIMBLE_EXT_ADV
+    g.client->setConnectPhy(BLE_GAP_LE_PHY_1M_MASK);
+#endif
 }
 
 static bool connectToFound() {
@@ -688,28 +682,43 @@ static bool connectToAddress(const std::string& addr, uint8_t addrType) {
     g.manualScanActive = false;
     delay(40);
 
-    // Sleepy RadiaCode peers can have very long advertising intervals when
-    // idle. Wait (scanning) up to 3 minutes per attempt for the peer to
-    // beacon, then connect with the captured adv (preserves BT5 ext-adv SID).
+    // Forever-retry: keep cycling scan-then-connect until success or until
+    // the user issues a disconnect/cancel (sets state to Idle/Disconnected
+    // through some other code path). Sleepy RadiaCode peers can take many
+    // minutes to advertise; we never give up.
     bool ok = false;
-    for (int attempt = 1; attempt <= 3; ++attempt) {
-        log_i("Connect %s attempt %d/3 -- scanning for adv (up to 180 s)", addr.c_str(), attempt);
-        if (!waitForTargetAdv(addr, 180000)) {
-            log_w("attempt %d: peer never advertised", attempt);
+    int attempt = 0;
+    while (!ok) {
+        attempt++;
+        log_i("Connect %s attempt %d -- scanning for adv (up to 240 s)", addr.c_str(), attempt);
+        if (!waitForTargetAdv(addr, 240000)) {
+            log_w("attempt %d: peer never advertised in window, retrying", attempt);
+            // Brief power cycle of the BLE host to clear any controller state.
+            teardownClient();
+            delay(500);
             continue;
         }
-        log_i("attempt %d: adv seen, connecting", attempt);
+        log_i("attempt %d: adv captured, issuing CONNECT_REQ", attempt);
         freshClient();
         ok = g.client->connect(g.foundDev, /*deleteAttibutes=*/true);
         if (ok) {
             log_i("connect ok on attempt %d", attempt);
             break;
         }
-        log_w("connect attempt %d failed for %s", attempt, addr.c_str());
-        delay(800);
+        log_w("connect attempt %d failed for %s, retrying", attempt, addr.c_str());
+        // Kick the host: full client teardown between attempts.
+        teardownClient();
+        // Exponential-ish backoff capped at 4 s.
+        const uint32_t backoff = (attempt < 5) ? (200u * attempt) : 4000u;
+        delay(backoff);
+        // Cap total attempts at 200 (~20 minutes worst case) just to avoid
+        // a runaway in case of a permanent fault.
+        if (attempt >= 200) {
+            log_e("giving up on %s after %d attempts", addr.c_str(), attempt);
+            break;
+        }
     }
     if (!ok) {
-        log_e("connect(addr) failed for %s after retries", addr.c_str());
         setState(RadiaCode::State::Disconnected);
         return false;
     }
