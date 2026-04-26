@@ -24,8 +24,22 @@ public:
 
     uint32_t bytesIn() const { return bytesIn_; }
     uint32_t sentencesWithFix() { return gps_.sentencesWithFix(); }
+    uint32_t passedChecksum()  { return gps_.passedChecksum(); }
+    uint32_t failedChecksum()  { return gps_.failedChecksum(); }
+    uint32_t lastByteMs() const { return lastByteMs_; }
+    uint32_t baud()      const { return currentBaud_; }
+
+    // Pipe raw GPS UART bytes to the supplied stream for `secs` seconds.
+    // Useful for confirming the GPS module is even producing NMEA.
+    void passthru(Stream& out, uint32_t secs);
+
+    // Try fallback bauds if no bytes have arrived after `silenceMs`.
+    // Returns true if data is now flowing.
+    bool autoBaudIfSilent(uint32_t silenceMs);
 
 private:
     TinyGPSPlus gps_;
     uint32_t    bytesIn_ = 0;
+    uint32_t    lastByteMs_ = 0;
+    uint32_t    currentBaud_ = 0;
 };

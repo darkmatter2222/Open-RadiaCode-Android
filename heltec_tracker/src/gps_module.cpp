@@ -18,6 +18,35 @@ int64_t daysFromCivil(int y, unsigned m, unsigned d) {
 
 void GpsModule::begin() {
     gpsSerial.begin(cfg::GPS_BAUD, SERIAL_8N1, cfg::GPS_RX_PIN, cfg::GPS_TX_PIN);
+    currentBaud_ = cfg::GPS_BAUD;
+
+    // Probe for incoming bytes for ~600ms. If silent, sweep the fallback
+    // bauds until something shows up. UC6580 modules in some revisions
+    // come up at 9600 even though the Heltec ref defaults to 115200.
+    const uint32_t probeUntil = millis() + 600;
+    while (millis() < probeUntil) {
+        if (gpsSerial.available()) { lastByteMs_ = millis(); return; }
+        delay(10);
+    }
+
+    for (uint32_t b : cfg::GPS_FALLBACK_BAUDS) {
+        if (b == cfg::GPS_BAUD) continue;
+        log_w("GPS: silent at %u baud, trying %u...", (unsigned)currentBaud_, (unsigned)b);
+        gpsSerial.end();
+        delay(50);
+        gpsSerial.begin(b, SERIAL_8N1, cfg::GPS_RX_PIN, cfg::GPS_TX_PIN);
+        currentBaud_ = b;
+        const uint32_t until = millis() + 600;
+        while (millis() < until) {
+            if (gpsSerial.available()) {
+                log_i("GPS: bytes flowing at %u baud", (unsigned)b);
+                lastByteMs_ = millis();
+                return;
+            }
+            delay(10);
+        }
+    }
+    log_w("GPS: no bytes seen on any baud (check VGNSS power, antenna, RX/TX wiring)");
 }
 
 void GpsModule::update() {
@@ -26,7 +55,36 @@ void GpsModule::update() {
         if (b < 0) break;
         gps_.encode((char)b);
         ++bytesIn_;
+        lastByteMs_ = millis();
     }
+}
+
+bool GpsModule::autoBaudIfSilent(uint32_t silenceMs) {
+    if (lastByteMs_ != 0 && (millis() - lastByteMs_) < silenceMs) return true;
+    // Re-run the begin() probe sequence.
+    log_w("GPS: %u ms of silence, re-probing bauds...", (unsigned)silenceMs);
+    begin();
+    return (lastByteMs_ != 0 && (millis() - lastByteMs_) < 1000);
+}
+
+void GpsModule::passthru(Stream& out, uint32_t secs) {
+    out.printf("[GPS-PASSTHRU] baud=%u for %u sec...\n", (unsigned)currentBaud_, (unsigned)secs);
+    const uint32_t until = millis() + secs * 1000UL;
+    uint32_t bytes = 0;
+    while ((int32_t)(millis() - until) < 0) {
+        while (gpsSerial.available()) {
+            int b = gpsSerial.read();
+            if (b < 0) break;
+            // Mirror to TinyGPS so the rest of the system stays consistent.
+            gps_.encode((char)b);
+            ++bytesIn_;
+            ++bytes;
+            lastByteMs_ = millis();
+            out.write((uint8_t)b);
+        }
+        yield();
+    }
+    out.printf("\n[GPS-PASSTHRU-END] bytes=%u\n", (unsigned)bytes);
 }
 
 uint64_t GpsModule::utcEpochMs() {

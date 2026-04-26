@@ -160,6 +160,21 @@ static void handleSerialCommand(const String& line) {
                       gStore.percentUsed(), gStore.sessionCount());
         return;
     }
+    if (upper.startsWith("GPASSTHRU")) {
+        // Pipe raw GPS UART bytes to USB serial for ground-truth diagnosis.
+        String args = line.substring(9); args.trim();
+        uint32_t secs = (args.length() > 0) ? (uint32_t)args.toInt() : 10;
+        if (secs == 0 || secs > 120) secs = 10;
+        gGps.passthru(Serial, secs);
+        return;
+    }
+    if (upper == "GREBAUD") {
+        Serial.println("[CMD] re-probing GPS bauds...");
+        gGps.begin();
+        Serial.printf("[GPS] now @ %u baud, lastByteMs=%u\n",
+                      (unsigned)gGps.baud(), (unsigned)gGps.lastByteMs());
+        return;
+    }
     if (upper.startsWith("WIPE")) {
         // Require the user to pass the current session count as a guard
         // against accidental invocation. `WIPE 0` will clear an empty fs;
@@ -262,6 +277,32 @@ static void handleSerialCommand(const String& line) {
         else              Serial.println("[CMD] auto-grab cleared");
         return;
     }
+    if (c == 'g') {
+        // GPS quick status. Use 'GPASSTHRU [secs]' for raw NMEA.
+        const uint32_t now = millis();
+        const uint32_t age = gGps.lastByteMs() ? (now - gGps.lastByteMs()) : 0;
+        Serial.printf("[GPS] baud=%u bytes=%u lastChar=%ums ago fix=%d sats=%u hdop=%.2f\n",
+                      (unsigned)gGps.baud(), (unsigned)gGps.bytesIn(),
+                      (unsigned)age, (int)gGps.hasFix(),
+                      (unsigned)gGps.satellites(), gGps.hdop());
+        Serial.printf("[GPS] checksum pass=%u fail=%u sentencesWithFix=%u\n",
+                      (unsigned)gGps.passedChecksum(), (unsigned)gGps.failedChecksum(),
+                      (unsigned)gGps.sentencesWithFix());
+        if (gGps.hasFix()) {
+            Serial.printf("[GPS] lat=%.7f lng=%.7f alt=%.1fm spd=%.1fkph\n",
+                          gGps.latitude(), gGps.longitude(),
+                          gGps.altitudeMeters(), gGps.speedKph());
+        } else if (gGps.bytesIn() == 0) {
+            Serial.println("[GPS] *** NO BYTES from module. Check VGNSS rail (GPIO3) "
+                           "and RX/TX wiring. Try GREBAUD or GPASSTHRU 5.");
+        } else if (gGps.passedChecksum() == 0 && gGps.bytesIn() > 100) {
+            Serial.println("[GPS] *** bytes arriving but no valid NMEA. Wrong baud? Try GREBAUD.");
+        } else {
+            Serial.println("[GPS] *** valid NMEA flowing but no fix yet. Move outdoors with clear sky view, "
+                           "cold-start may need 30-90 seconds.");
+        }
+        return;
+    }
     Serial.printf("[CMD] unknown '%s' (use ?)\n", line.c_str());
 }
 
@@ -352,10 +393,14 @@ void loop() {
     }
     if ((now - lastBeat) > cfg::HEARTBEAT_MS) {
         lastBeat = now;
-        Serial.printf("[HB] uptime=%lus fix=%d sats=%u rcState=%d rec=%d samples=%u\n",
+        Serial.printf("[HB] uptime=%lus fix=%d sats=%u hdop=%.2f gpsB=%u gpsAge=%ums baud=%u rcState=%d rec=%d samples=%u\n",
                       (unsigned long)(now / 1000),
                       (int)gGps.hasFix(),
                       (unsigned)gGps.satellites(),
+                      gGps.hdop(),
+                      (unsigned)gGps.bytesIn(),
+                      (unsigned)(gGps.lastByteMs() ? (now - gGps.lastByteMs()) : 0),
+                      (unsigned)gGps.baud(),
                       (int)gRadia.state(),
                       (int)gStore.isRecording(),
                       (unsigned)gStore.sampleCount());
