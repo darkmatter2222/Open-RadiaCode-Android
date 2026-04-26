@@ -1,0 +1,12 @@
+services:
+  vega-tracker-viewer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-tracker-viewer:latest
+    container_name: vega-tracker-viewer
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8031}:80"
+    environment:
+      API_BASE: ${API_BASE:-http://192.168.86.48:8030}
