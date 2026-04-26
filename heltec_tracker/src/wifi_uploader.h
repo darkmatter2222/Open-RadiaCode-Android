@@ -16,23 +16,29 @@
 // =============================================================================
 #pragma once
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 class SessionStore;
 
 class WifiUploader {
 public:
     void begin(SessionStore* store);
-    void tick();   // call every loop iteration
 
-    // Force an upload attempt on the next tick (e.g. when the user presses
-    // a "sync now" button or runs the SYNC serial command).
-    void requestNow() { forceNow_ = true; }
+    // Backwards-compatible no-op. The actual work runs on a dedicated
+    // FreeRTOS task so the main Arduino loop is never blocked by Wi-Fi
+    // connects or HTTP POSTs.
+    void tick() {}
 
-    // Manually run one full cycle right now (blocks for the duration of the
-    // upload). Returns the number of sessions successfully uploaded.
+    // Force an upload cycle as soon as possible. Safe to call from any task.
+    void requestNow();
+
+    // Run one full upload cycle synchronously on the calling task. Blocks.
+    // Use sparingly (e.g. from the SYNC serial command).
     uint32_t runOnce();
 
-    // Diagnostic accessors.
+    // Diagnostic accessors. Reads/writes of these 32-bit fields are atomic
+    // on Xtensa, so no lock is needed for diagnostics.
     bool      enabled()        const { return enabled_; }
     bool      busy()           const { return busy_; }
     uint32_t  uploadedCount()  const { return uploadedCount_; }
@@ -42,18 +48,20 @@ public:
     int       lastHttpStatus() const { return lastHttpStatus_; }
 
 private:
+    static void taskTrampoline(void* arg);
+    void taskLoop();
+
     bool connectWifi();
     void disconnectWifi();
     bool uploadOne(const String& sessionId, size_t expectedBytes, uint32_t expectedSamples);
-    String trackerId() const;
 
-    SessionStore* store_         = nullptr;
-    bool          enabled_       = false;
-    bool          busy_          = false;
-    bool          forceNow_      = false;
-    uint32_t      lastAttempt_   = 0;
-    uint32_t      lastSuccess_   = 0;
-    uint32_t      uploadedCount_ = 0;
-    uint32_t      failedCount_   = 0;
-    int           lastHttpStatus_ = 0;
+    SessionStore* store_          = nullptr;
+    TaskHandle_t  task_           = nullptr;
+    volatile bool enabled_        = false;
+    volatile bool busy_           = false;
+    volatile uint32_t lastAttempt_   = 0;
+    volatile uint32_t lastSuccess_   = 0;
+    volatile uint32_t uploadedCount_ = 0;
+    volatile uint32_t failedCount_   = 0;
+    volatile int      lastHttpStatus_ = 0;
 };

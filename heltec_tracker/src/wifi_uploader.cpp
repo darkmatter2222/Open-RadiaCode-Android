@@ -56,11 +56,27 @@ void WifiUploader::begin(SessionStore* store) {
     }
     enabled_ = true;
 
-    // Don't auto-connect at boot; the cadenced tick() will handle it.
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect(true, true);
+    // Park the radio so the cadenced task starts from a known state.
+    WiFi.mode(WIFI_OFF);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(false);
+
+    // Pin the worker to core 0; the Arduino loop runs on core 1, so HTTP
+    // POSTs and Wi-Fi connect timeouts can never freeze the UI/button polling.
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        &WifiUploader::taskTrampoline,
+        "wifi_up",
+        8192,           // stack: HTTPClient + TLS-free POST is well under this
+        this,
+        1,              // priority: lower than NimBLE/loop
+        &task_,
+        0);             // core 0
+    if (ok != pdPASS) {
+        Serial.println("[WIFI] FATAL: failed to spawn uploader task");
+        enabled_ = false;
+        task_ = nullptr;
+        return;
+    }
 
     Serial.printf("[WIFI] uploader armed; ssid='%s' url='%s' interval=%us trackerId=%s\n",
                   secrets::WIFI_SSID, secrets::INGEST_URL,
@@ -68,19 +84,46 @@ void WifiUploader::begin(SessionStore* store) {
                   chipIdString().c_str());
 }
 
+void WifiUploader::requestNow() {
+    if (task_) xTaskNotifyGive(task_);
+}
+
+void WifiUploader::taskTrampoline(void* arg) {
+    static_cast<WifiUploader*>(arg)->taskLoop();
+}
+
+void WifiUploader::taskLoop() {
+    // 15s post-boot grace so BLE/GPS finish coming up before we light Wi-Fi.
+    vTaskDelay(pdMS_TO_TICKS(15000));
+    for (;;) {
+        runOnce();
+        // Sleep until either the cadence elapses or requestNow() pokes us.
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(secrets::UPLOAD_INTERVAL_MS));
+    }
+}
+
 
 bool WifiUploader::connectWifi() {
     Serial.printf("[WIFI] connecting to '%s'...\n", secrets::WIFI_SSID);
+
+    // Hard reset radio state. After repeated connect failures (e.g. roaming
+    // out of and back into Wi-Fi range during a bike ride) the driver can
+    // get stuck unless we fully bounce the mode.
+    WiFi.disconnect(true, true);
+    WiFi.mode(WIFI_OFF);
+    vTaskDelay(pdMS_TO_TICKS(150));
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(true);
     WiFi.begin(secrets::WIFI_SSID, secrets::WIFI_PASSWORD);
 
     const uint32_t deadline = millis() + secrets::WIFI_CONNECT_TIMEOUT_MS;
-    while (WiFi.status() != WL_CONNECTED && millis() < deadline) {
-        delay(150);
+    while (WiFi.status() != WL_CONNECTED && (int32_t)(deadline - millis()) > 0) {
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
     if (WiFi.status() != WL_CONNECTED) {
         Serial.printf("[WIFI] connect timeout (status=%d)\n", (int)WiFi.status());
         WiFi.disconnect(true, true);
+        WiFi.mode(WIFI_OFF);
         return false;
     }
     Serial.printf("[WIFI] connected ip=%s rssi=%d dBm\n",
@@ -180,8 +223,8 @@ uint32_t WifiUploader::runOnce() {
         } else {
             ++failedCount_;
         }
-        // Yield between large uploads so BLE keeps running.
-        delay(50);
+        // Yield between large uploads so other tasks (BLE, loop) keep running.
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 
     disconnectWifi();
@@ -189,20 +232,4 @@ uint32_t WifiUploader::runOnce() {
     Serial.printf("[UPLOAD] cycle done; ok=%u/%u\n",
                   (unsigned)ok, (unsigned)sessions.size());
     return ok;
-}
-
-
-void WifiUploader::tick() {
-    if (!enabled_ || !store_ || busy_) return;
-    const uint32_t now = millis();
-    const uint32_t since = now - lastAttempt_;
-    if (!forceNow_ && lastAttempt_ != 0 && since < secrets::UPLOAD_INTERVAL_MS) {
-        return;
-    }
-    // First-call grace: wait 15s after boot before the very first attempt
-    // so the BLE/GPS subsystems can come up cleanly.
-    if (lastAttempt_ == 0 && now < 15000 && !forceNow_) return;
-
-    forceNow_ = false;
-    runOnce();
 }

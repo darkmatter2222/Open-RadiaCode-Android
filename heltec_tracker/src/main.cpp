@@ -190,9 +190,9 @@ static void handleSerialCommand(const String& line) {
             Serial.println("[SYNC] uploader disabled (set WIFI_SSID + INGEST_URL in secrets.h)");
             return;
         }
-        Serial.println("[SYNC] forcing upload cycle now...");
-        uint32_t ok = gWifi.runOnce();
-        Serial.printf("[SYNC] uploaded %u session(s)\n", (unsigned)ok);
+        Serial.println("[SYNC] kicking upload task...");
+        gWifi.requestNow();
+        Serial.println("[SYNC] (running in background; check WIFISTAT)");
         return;
     }
     if (upper == "WIFISTAT") {
