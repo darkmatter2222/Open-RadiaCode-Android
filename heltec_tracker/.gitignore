@@ -1,6 +1,13 @@
 # Wi-Fi / API credentials (committed as secrets.h.example)
 src/secrets.h
 
+# Local serial-capture / debug logs
+drop*.txt
+grab*.txt
+ride*.txt
+grab_watch.txt
+data/
+
 # Auto-generated PlatformIO build artifacts
 .pio/
 .pioenvs/
