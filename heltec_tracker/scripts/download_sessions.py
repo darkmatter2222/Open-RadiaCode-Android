@@ -9,8 +9,9 @@ Tracker firmware commands used (see main.cpp / session_store.cpp):
     STATFS              -> [STATFS] used=... total=... pct=... sessions=N
 
 Typical use:
-    python download_sessions.py                # download into ./sessions_dump/<timestamp>/
-    python download_sessions.py --wipe         # download then wipe device
+    python download_sessions.py                # download AND wipe device storage (default)
+    python download_sessions.py --no-wipe      # download but leave sessions on device
+    python download_sessions.py --confirm      # prompt before wiping
     python download_sessions.py --port COM7    # override port
     python download_sessions.py --list         # just print LS results
 
@@ -238,10 +239,16 @@ def main(argv: list[str]) -> int:
     p.add_argument("--out", default=None,
                    help="output directory (default: heltec_tracker/data/sessions_dump/<ts>)")
     p.add_argument("--list", action="store_true", help="just run LS and exit")
-    p.add_argument("--wipe", action="store_true",
-                   help="after a successful download, WIPE the device storage")
+    # Wipe-on-download is the default so the device is always ready for more data.
+    p.add_argument("--no-wipe", dest="wipe", action="store_false",
+                   help="keep sessions on the device after download (default: wipe)")
+    p.add_argument("--wipe", dest="wipe", action="store_true",
+                   help="WIPE device storage after download (default behavior)")
+    p.set_defaults(wipe=True)
     p.add_argument("--yes", action="store_true",
                    help="skip the interactive 'really wipe?' prompt")
+    p.add_argument("--confirm", action="store_true",
+                   help="force the interactive 'really wipe?' prompt")
     args = p.parse_args(argv)
 
     print(f"[drive] opening {args.port} @ {args.baud}")
@@ -301,7 +308,9 @@ def main(argv: list[str]) -> int:
         return 4
 
     if args.wipe:
-        if not args.yes:
+        # Default is wipe-without-prompting (download-then-clean).
+        # Use --confirm to force the prompt; --yes is kept for backwards compat.
+        if args.confirm and not args.yes:
             ans = input(f"Really wipe {len(sessions)} session(s) from device? [y/N] ").strip().lower()
             if ans not in ("y", "yes"):
                 print("Wipe cancelled.")
