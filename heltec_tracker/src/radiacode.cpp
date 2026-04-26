@@ -73,6 +73,12 @@ struct Internal {
     std::string       pendingConnectAddr;     // set by connectTo()
     uint8_t           pendingConnectAddrType = 0; // BLE_ADDR_PUBLIC by default
 
+    // When non-empty, ScanCb captures any adv matching this address into
+    // g.foundDev (regardless of name/svc match). Used by connectToAddress()
+    // so we can wait for a sleepy peer to actually beacon before connecting,
+    // and so we keep the BT5 ext-adv SID/PHY metadata from the adv event.
+    std::string       targetAddr;
+
     Preferences       prefs;
 };
 static Internal g;
@@ -273,10 +279,49 @@ public:
             return;
         }
 
+        // Targeted address mode: explicit connect-by-address waits for the
+        // peer to actually beacon, then captures the adv (incl. ext-adv
+        // SID/PHY) so we connect with full BT5 metadata.
+        if (!g.targetAddr.empty()) {
+            if (addr == g.targetAddr) {
+                // Legacy adv types: 0=ADV_IND (connectable+scannable+undirected),
+                // 1=ADV_DIRECT_IND, 2=ADV_SCAN_IND (non-connectable scannable),
+                // 3=ADV_NONCONN_IND (NON-CONNECTABLE), 4=SCAN_RSP. Only 0 and 1
+                // accept CONNECT_REQ. RadiaCode-110/102 sit in NONCONN mode
+                // until the user wakes them (button press) -- in that state
+                // sending CONNECT_REQ produces an inevitable status=13 timeout.
+                const uint8_t at = dev->getAdvType();
+                const bool connectable = (at == 0) || (at == 1);
+                log_i("Target seen: %s rssi=%d advType=%u (%s) primPhy=%u secPhy=%u sid=%u name=%s",
+                      addr.c_str(), rssi, (unsigned)at,
+                      connectable ? "connectable" : "NON-connectable",
+                      (unsigned)dev->getPrimaryPhy(), (unsigned)dev->getSecondaryPhy(),
+                      (unsigned)dev->getSetId(), name.c_str());
+                if (!connectable) {
+                    static uint32_t lastHint = 0;
+                    if (millis() - lastHint > 8000) {
+                        log_w("%s is in non-connectable mode -- press the button on the RadiaCode to wake it for pairing",
+                              addr.c_str());
+                        lastHint = millis();
+                    }
+                    return;  // do not capture, keep scanning for connectable adv
+                }
+                if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
+                    if (g.foundDev) delete g.foundDev;
+                    g.foundDev = new NimBLEAdvertisedDevice(*dev);
+                }
+            }
+            return;
+        }
+
         // Auto-mode: only consider true RadiaCode matches.
         if (!(nameMatch || svcMatch)) return;
-        log_i("Match: %s rssi=%d svcMatch=%d name=%s",
-              addr.c_str(), rssi, svcMatch, name.c_str());
+        const uint8_t at = dev->getAdvType();
+        const bool connectable = (at == 0) || (at == 1);
+        log_i("Match: %s rssi=%d svcMatch=%d advType=%u (%s) name=%s",
+              addr.c_str(), rssi, svcMatch, (unsigned)at,
+              connectable ? "connectable" : "non-connectable", name.c_str());
+        if (!connectable) return;  // never queue a non-connectable peer for auto-connect
         if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
             if (g.foundDev) delete g.foundDev;
             g.foundDev = new NimBLEAdvertisedDevice(*dev);
@@ -542,6 +587,25 @@ static bool finishConnect(NimBLEClient* client) {
     return true;
 }
 
+static void teardownClient() {
+    if (g.client) {
+        if (g.client->isConnected()) g.client->disconnect();
+        NimBLEDevice::deleteClient(g.client);
+        g.client = nullptr;
+    }
+}
+
+static void freshClient() {
+    teardownClient();
+    g.client = NimBLEDevice::createClient();
+    g.client->setClientCallbacks(&gClientCb, false);
+    // Slower interval (50-100 ms) aligns with RadiaCode's adv interval and
+    // greatly improves the chance the peer hears CONNECT_REQ. Old 15-30 ms
+    // intervals consistently produced status=13 timeouts.
+    g.client->setConnectionParams(40, 80, 0, 600);
+    g.client->setConnectTimeout(20);
+}
+
 static bool connectToFound() {
     if (!g.foundDev) return false;
 
@@ -550,37 +614,102 @@ static bool connectToFound() {
     g.rssi     = g.foundDev->getRSSI();
     setState(RadiaCode::State::Connecting);
 
-    if (!g.client) {
-        g.client = NimBLEDevice::createClient();
-        g.client->setClientCallbacks(&gClientCb, false);
-        g.client->setConnectionParams(12, 24, 0, 200);
-        g.client->setConnectTimeout(10);
-    }
+    NimBLEScan* sc = NimBLEDevice::getScan();
+    if (sc->isScanning()) sc->stop();
+    delay(40);
 
-    if (!g.client->connect(g.foundDev)) {
+    bool ok = false;
+    for (int attempt = 1; attempt <= 4; ++attempt) {
+        freshClient();
+        ok = g.client->connect(g.foundDev, /*deleteAttibutes=*/true);
+        if (ok) break;
+        log_w("connectToFound attempt %d failed", attempt);
+        delay(600);
+    }
+    if (!ok) {
         log_e("connect() failed");
         return false;
     }
     return finishConnect(g.client);
 }
 
+// Wait (scanning) up to waitMs for the peer to advertise. Returns true if
+// g.foundDev was populated with a matching adv. Sleepy peers (RadiaCode-110)
+// can have adv intervals of 1-3 minutes when idle, so we cannot rely on
+// NimBLE's internal connect-init scan timeout (max 30s).
+static bool waitForTargetAdv(const std::string& addr, uint32_t waitMs) {
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    if (scan->isScanning()) scan->stop();
+    if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
+    g.targetAddr = addr;
+    g.manualScanActive = false;
+
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
+    scan->setActiveScan(true);
+    scan->setInterval(100);
+    scan->setWindow(99);
+    scan->setDuplicateFilter(false);
+    scan->setMaxResults(0);
+    scan->start(0, nullptr, false);  // continuous
+
+    const uint32_t start = millis();
+    const uint32_t reportEvery = 5000;
+    uint32_t nextReport = start + reportEvery;
+    while (millis() - start < waitMs) {
+        if (g.foundDev) {
+            scan->stop();
+            log_i("Target adv captured after %lu ms", (unsigned long)(millis() - start));
+            g.targetAddr.clear();
+            return true;
+        }
+        if (millis() >= nextReport) {
+            log_i("Waiting for %s to advertise... %lu/%lu s",
+                  addr.c_str(),
+                  (unsigned long)((millis() - start) / 1000),
+                  (unsigned long)(waitMs / 1000));
+            nextReport += reportEvery;
+        }
+        delay(50);
+    }
+    scan->stop();
+    g.targetAddr.clear();
+    return false;
+}
+
 static bool connectToAddress(const std::string& addr, uint8_t addrType) {
+    (void)addrType;  // type comes from the captured adv now
     g.peerAddr = addr.c_str();
     g.peerName = "";
     g.rssi     = 0;
     setState(RadiaCode::State::Connecting);
 
-    if (!g.client) {
-        g.client = NimBLEDevice::createClient();
-        g.client->setClientCallbacks(&gClientCb, false);
-        g.client->setConnectionParams(12, 24, 0, 200);
-        g.client->setConnectTimeout(10);
-    }
+    NimBLEScan* sc = NimBLEDevice::getScan();
+    if (sc->isScanning()) sc->stop();
+    g.manualScanActive = false;
+    delay(40);
 
-    log_i("Connect %s (addrType=%u)", addr.c_str(), (unsigned)addrType);
-    NimBLEAddress target(addr, addrType);
-    if (!g.client->connect(target)) {
-        log_e("connect(addr) failed for %s type=%u", addr.c_str(), (unsigned)addrType);
+    // Sleepy RadiaCode peers can have very long advertising intervals when
+    // idle. Wait (scanning) up to 3 minutes per attempt for the peer to
+    // beacon, then connect with the captured adv (preserves BT5 ext-adv SID).
+    bool ok = false;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        log_i("Connect %s attempt %d/3 -- scanning for adv (up to 180 s)", addr.c_str(), attempt);
+        if (!waitForTargetAdv(addr, 180000)) {
+            log_w("attempt %d: peer never advertised", attempt);
+            continue;
+        }
+        log_i("attempt %d: adv seen, connecting", attempt);
+        freshClient();
+        ok = g.client->connect(g.foundDev, /*deleteAttibutes=*/true);
+        if (ok) {
+            log_i("connect ok on attempt %d", attempt);
+            break;
+        }
+        log_w("connect attempt %d failed for %s", attempt, addr.c_str());
+        delay(800);
+    }
+    if (!ok) {
+        log_e("connect(addr) failed for %s after retries", addr.c_str());
         setState(RadiaCode::State::Disconnected);
         return false;
     }
@@ -629,12 +758,29 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
 
     g.prefs.begin(PREFS_NS, false);
 
+    // Match Bluedroid's scan duplicate behaviour (per-device, not per-data).
+    // RadiaCode-110 uses BT5 chained ext-adv; default per-data filtering
+    // drops AUX packets and the controller never sees the full adv set.
+    // Must be called BEFORE NimBLEDevice::init().
+    NimBLEDevice::setScanFilterMode(CONFIG_BTDM_SCAN_DUPL_TYPE_DEVICE);
+    NimBLEDevice::setScanDuplicateCacheSize(200);
+
     NimBLEDevice::init("htit-tracker");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    // Force public own-address. NimBLE-Arduino defaults to random which
-    // a few peripherals (incl. some RadiaCode firmware revs) reject when
-    // they have no bond record for us.
-    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
+
+    // Max TX power on ALL power categories. Default setPower() only changes
+    // the "default" category; ADV/SCAN/CONN may still use lower power.
+    // The Heltec V3 board shares its 2.4GHz path with the LoRa front-end
+    // and benefits from explicit max power on the CONN category in
+    // particular -- low conn-TX power is a known cause of CONNECT_REQ
+    // not reaching the peer despite scan working fine.
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_SCAN);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_CONN_HDL0);
+
+    // Just-works pairing. RadiaCode does not require auth but having this
+    // configured lets the peer accept the LL channel without negotiation.
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
+    NimBLEDevice::setSecurityAuth(/*bonding=*/true, /*mitm=*/false, /*sc=*/false);
 
     // Silence chatty NimBLE info logs (per-packet adv updates) so the
     // serial console stays readable. Our own state/match/connect logs
