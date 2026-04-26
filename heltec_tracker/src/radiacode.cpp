@@ -1055,6 +1055,10 @@ void RadiaCode::loop() {
             // isManualScanComplete() to see we're done. Keep results.
             scan->stop();
             g.manualScanActive = false;
+            // Transition out of Scanning so auto-mode loop below can resume
+            // continuous scan / reconnect attempts. Without this the tracker
+            // sits idle (state stuck on Scanning) until the next user command.
+            setState(State::Disconnected);
         } else if (!scan->isScanning()) {
             // Restart scan -- previous burst finished but deadline not hit yet.
             // is_continue=true preserves the merged adv+scan-response table so
