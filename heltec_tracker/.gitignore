@@ -1,3 +1,6 @@
+# Wi-Fi / API credentials (committed as secrets.h.example)
+src/secrets.h
+
 # Auto-generated PlatformIO build artifacts
 .pio/
 .pioenvs/

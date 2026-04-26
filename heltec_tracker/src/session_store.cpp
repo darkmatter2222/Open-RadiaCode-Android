@@ -271,3 +271,13 @@ uint32_t SessionStore::wipeAll() {
     sampleCount_ = 0;
     return removed;
 }
+
+bool SessionStore::removeSession(const String& id) {
+    if (id.length() == 0) return false;
+    if (recording_ && activeId_ == id) return false;   // refuse to delete active
+    return LittleFS.remove(pathFor(id));
+}
+
+File SessionStore::openForRead(const String& id) const {
+    return LittleFS.open(pathFor(id), "r");
+}

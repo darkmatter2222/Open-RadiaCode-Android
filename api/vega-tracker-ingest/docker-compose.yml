@@ -1,0 +1,37 @@
+# Vega Tracker Ingest API
+#
+# Connects to an existing MongoDB container on the host. The default URI
+# assumes Mongo is reachable at host.docker.internal:27017 (works on
+# Docker Desktop and on Linux with --add-host=host.docker.internal:host-gateway,
+# which is set below). If your mongo container is on a named docker network,
+# join that network instead and set MONGO_URI=mongodb://<mongo-container-name>:27017.
+
+services:
+  vega-tracker-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vega-tracker-ingest:latest
+    container_name: vega-tracker-ingest
+    restart: unless-stopped
+
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://host.docker.internal:27017}
+      - MONGO_DB=${MONGO_DB:-radiacode}
+      - MONGO_SAMPLES_COLLECTION=${MONGO_SAMPLES_COLLECTION:-tracker_samples}
+      - MONGO_SESSIONS_COLLECTION=${MONGO_SESSIONS_COLLECTION:-tracker_sessions}
+      - MAX_BODY_BYTES=${MAX_BODY_BYTES:-8388608}
+      - INGEST_BATCH_SIZE=${INGEST_BATCH_SIZE:-1000}
+
+    ports:
+      - "${API_PORT:-8030}:8030"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8030/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

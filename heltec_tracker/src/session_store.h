@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <FS.h>
 #include <vector>
 
 // CSV session writer.
@@ -58,6 +59,17 @@ public:
     // Delete every CSV under /sessions. If the active session is open it
     // is stopped first. Returns number of files removed.
     uint32_t wipeAll();
+
+    // Delete one session by id. Returns true on success. The active session
+    // can NOT be removed (returns false); stop() it first.
+    bool removeSession(const String& id);
+
+    // True if `id` is the currently-recording active session.
+    bool isActive(const String& id) const { return recording_ && activeId_ == id; }
+
+    // Open a session file for reading. Caller owns the returned File.
+    // Empty File on failure (test with operator bool).
+    File openForRead(const String& id) const;
 
 private:
     bool   recording_   = false;

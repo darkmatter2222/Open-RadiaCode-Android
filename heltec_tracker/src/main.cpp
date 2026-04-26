@@ -11,13 +11,15 @@
 #include "radiacode.h"
 #include "session_store.h"
 #include "ui.h"
+#include "wifi_uploader.h"
 
 namespace {
-Button       gButton;
-GpsModule    gGps;
-RadiaCode    gRadia;
-SessionStore gStore;
-Ui           gUi;
+Button        gButton;
+GpsModule     gGps;
+RadiaCode     gRadia;
+SessionStore  gStore;
+Ui            gUi;
+WifiUploader  gWifi;
 } // namespace
 
 static int readBatteryPercent() {
@@ -77,6 +79,8 @@ void setup() {
         gStore.resumeIfActive();
     }
 
+    gWifi.begin(&gStore);
+
     gUi.setSources(&gGps, &gStore, &gRadia);
     gUi.setRadiaState(RadiaCode::State::Idle, String());
 
@@ -128,6 +132,11 @@ static void handleSerialCommand(const String& line) {
         Serial.println("[CMD]           DUMPALL             - stream all sessions");
         Serial.println("[CMD]           WIPE <count>        - delete all sessions (count must match LS)");
         Serial.println("[CMD]           STATFS              - show filesystem usage");
+        Serial.println("[CMD]           GPASSTHRU [secs]    - dump raw GPS NMEA");
+        Serial.println("[CMD]           GREBAUD             - re-probe GPS bauds");
+        Serial.println("[CMD]           g                   - GPS quick status");
+        Serial.println("[CMD]           SYNC                - force Wi-Fi upload now");
+        Serial.println("[CMD]           WIFISTAT            - Wi-Fi uploader status");
         return;
     }
 
@@ -173,6 +182,26 @@ static void handleSerialCommand(const String& line) {
         gGps.begin();
         Serial.printf("[GPS] now @ %u baud, lastByteMs=%u\n",
                       (unsigned)gGps.baud(), (unsigned)gGps.lastByteMs());
+        return;
+    }
+    if (upper == "SYNC") {
+        // Force an immediate Wi-Fi upload cycle, regardless of the cadence.
+        if (!gWifi.enabled()) {
+            Serial.println("[SYNC] uploader disabled (set WIFI_SSID + INGEST_URL in secrets.h)");
+            return;
+        }
+        Serial.println("[SYNC] forcing upload cycle now...");
+        uint32_t ok = gWifi.runOnce();
+        Serial.printf("[SYNC] uploaded %u session(s)\n", (unsigned)ok);
+        return;
+    }
+    if (upper == "WIFISTAT") {
+        Serial.printf("[WIFI] enabled=%d busy=%d uploaded=%u failed=%u "
+                      "lastAttempt=%ums lastSuccess=%ums lastHttp=%d\n",
+                      (int)gWifi.enabled(), (int)gWifi.busy(),
+                      (unsigned)gWifi.uploadedCount(), (unsigned)gWifi.failedCount(),
+                      (unsigned)gWifi.lastAttemptMs(), (unsigned)gWifi.lastSuccessMs(),
+                      gWifi.lastHttpStatus());
         return;
     }
     if (upper.startsWith("WIPE")) {
@@ -328,6 +357,7 @@ void loop() {
     pollSerialCommands();
     gGps.update();
     gRadia.loop();
+    gWifi.tick();
 
     // If a manual scan was kicked off and just completed, hand the results
     // to the UI so the picker is populated.
