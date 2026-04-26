@@ -627,10 +627,65 @@ static bool connectToFound() {
     return finishConnect(g.client);
 }
 
-// Wait (scanning) up to waitMs for the peer to advertise. Returns true if
-// g.foundDev was populated with a matching adv. Sleepy peers (RadiaCode-110)
-// can have adv intervals of 1-3 minutes when idle, so we cannot rely on
-// NimBLE's internal connect-init scan timeout (max 30s).
+// Wait (scanning) for the peer to advertise as CONNECTABLE. Returns true if
+// g.foundDev was populated with a connectable adv from the target. Sleepy
+// RadiaCode peers (and peers that are currently connected to another central)
+// often broadcast NONCONN_IND for long periods between brief connectable
+// windows. We only return success on a genuinely connectable adv so the
+// subsequent CONNECT_REQ has a real chance of being ACKed.
+static bool waitForConnectableAdv(const std::string& addr, uint32_t waitMs) {
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    if (scan->isScanning()) scan->stop();
+    if (g.foundDev) { delete g.foundDev; g.foundDev = nullptr; }
+    g.targetAddr = addr;
+    g.manualScanActive = false;
+
+    scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
+    scan->setActiveScan(true);
+    scan->setInterval(48);   // 30 ms
+    scan->setWindow(48);     // 100% duty cycle
+    scan->setDuplicateFilter(false);
+    scan->setMaxResults(0);
+    scan->start(0, nullptr, false);  // continuous
+
+    const uint32_t start = millis();
+    const uint32_t reportEvery = 10000;
+    uint32_t nextReport = start + reportEvery;
+    int sawNonConn = 0;
+    while (millis() - start < waitMs) {
+        if (g.foundDev) {
+            // ScanCb captures every adv from target. Check if THIS one is connectable.
+            if (g.foundDev->isConnectable()) {
+                scan->stop();
+                log_i("Connectable adv captured from %s after %lu ms",
+                      addr.c_str(), (unsigned long)(millis() - start));
+                g.targetAddr.clear();
+                return true;
+            }
+            // Non-connectable adv: discard and keep waiting.
+            delete g.foundDev;
+            g.foundDev = nullptr;
+            sawNonConn++;
+        }
+        if (millis() >= nextReport) {
+            log_i("Waiting for %s connectable adv... %lu/%lu s (saw %d non-conn)",
+                  addr.c_str(),
+                  (unsigned long)((millis() - start) / 1000),
+                  (unsigned long)(waitMs / 1000),
+                  sawNonConn);
+            nextReport += reportEvery;
+        }
+        delay(20);
+    }
+    scan->stop();
+    g.targetAddr.clear();
+    log_w("%s never went connectable in %lu s window (saw %d non-conn adv)",
+          addr.c_str(), (unsigned long)(waitMs / 1000), sawNonConn);
+    return false;
+}
+
+// Legacy entry: wait for ANY adv from address. Kept for callers that don't
+// require the peer to be connectable (e.g. picker UI showing presence).
 static bool waitForTargetAdv(const std::string& addr, uint32_t waitMs) {
     NimBLEScan* scan = NimBLEDevice::getScan();
     if (scan->isScanning()) scan->stop();
@@ -682,37 +737,48 @@ static bool connectToAddress(const std::string& addr, uint8_t addrType) {
     g.manualScanActive = false;
     delay(40);
 
-    // Forever-retry: keep cycling scan-then-connect until success or until
-    // the user issues a disconnect/cancel (sets state to Idle/Disconnected
-    // through some other code path). Sleepy RadiaCode peers can take many
-    // minutes to advertise; we never give up.
+    // Forever-retry strategy:
+    //  1. Wait (scanning) for the target to broadcast a CONNECTABLE adv. We
+    //     deliberately ignore non-connectable advertisements -- CONNECT_REQ
+    //     against a NONCONN_IND advertiser is guaranteed to time out
+    //     (status=13). RadiaCode peers that are already connected to a
+    //     phone broadcast NONCONN_IND continuously; we just keep waiting.
+    //  2. The instant we see ADV_IND / ADV_DIRECT_IND (or BT5 connectable
+    //     ext-adv), issue CONNECT_REQ with a SHORT timeout. The connectable
+    //     window from a sleepy peer is often brief; a short timeout lets us
+    //     fail fast and resume scanning.
+    //  3. On failure, brief client teardown + immediate re-scan.
     bool ok = false;
     int attempt = 0;
+    int connectableHits = 0;
     while (!ok) {
         attempt++;
-        log_i("Connect %s attempt %d -- scanning for adv (up to 240 s)", addr.c_str(), attempt);
-        if (!waitForTargetAdv(addr, 240000)) {
-            log_w("attempt %d: peer never advertised in window, retrying", attempt);
-            // Brief power cycle of the BLE host to clear any controller state.
+        log_i("Connect %s attempt %d -- waiting for connectable adv", addr.c_str(), attempt);
+        // Wait up to 5 minutes per cycle for a connectable adv.
+        if (!waitForConnectableAdv(addr, 300000)) {
+            log_w("attempt %d: no connectable adv in 5min window. The peer may be busy with another central (e.g. your phone). Retrying.", attempt);
             teardownClient();
-            delay(500);
+            delay(1000);
+            if (attempt >= 200) {
+                log_e("giving up on %s after %d attempts (~16 hours)", addr.c_str(), attempt);
+                break;
+            }
             continue;
         }
-        log_i("attempt %d: adv captured, issuing CONNECT_REQ", attempt);
+        connectableHits++;
+        log_i("attempt %d: connectable adv #%d captured, firing CONNECT_REQ", attempt, connectableHits);
         freshClient();
+        // Short connect timeout (5 s) -- the connectable window is brief; if
+        // CONNECT_REQ isn't ACKed quickly it never will be on this adv.
+        g.client->setConnectTimeout(5);
         ok = g.client->connect(g.foundDev, /*deleteAttibutes=*/true);
         if (ok) {
-            log_i("connect ok on attempt %d", attempt);
+            log_i("connect ok on attempt %d (connectable hit #%d)", attempt, connectableHits);
             break;
         }
-        log_w("connect attempt %d failed for %s, retrying", attempt, addr.c_str());
-        // Kick the host: full client teardown between attempts.
+        log_w("connect attempt %d failed for %s, resuming scan", attempt, addr.c_str());
         teardownClient();
-        // Exponential-ish backoff capped at 4 s.
-        const uint32_t backoff = (attempt < 5) ? (200u * attempt) : 4000u;
-        delay(backoff);
-        // Cap total attempts at 200 (~20 minutes worst case) just to avoid
-        // a runaway in case of a permanent fault.
+        delay(150);
         if (attempt >= 200) {
             log_e("giving up on %s after %d attempts", addr.c_str(), attempt);
             break;
