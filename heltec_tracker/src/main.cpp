@@ -107,7 +107,105 @@ void setup() {
     Serial.println("Setup complete");
 }
 
+// --- Serial command interface ----------------------------------------------
+// Lets the host PC drive the device without physical button presses:
+//   s         start a manual BLE scan (15s)
+//   l         list current scan results (with index, addrType, rssi, name)
+//   c <idx>   connect to scan-result index (uses captured addrType)
+//   x         cancel scan / disconnect
+//   f         forget last peer (and trigger rescan)
+//   ?         help
+static String  gCmdBuf;
+static bool    gManualScanArmedSerial = false;
+
+static void handleSerialCommand(const String& line) {
+    if (line.length() == 0) return;
+    const char c = line[0];
+    if (c == '?' || c == 'h') {
+        Serial.println("[CMD] commands: s, l, c <idx>, x, f, ?");
+        return;
+    }
+    if (c == 's') {
+        Serial.println("[CMD] starting manual scan (15s)");
+        gRadia.startManualScan(15000);
+        gManualScanArmedSerial = true;
+        return;
+    }
+    if (c == 'l') {
+        const auto& rs = gRadia.getScanResults();
+        Serial.printf("[CMD] %u scan results:\n", (unsigned)rs.size());
+        for (size_t i = 0; i < rs.size(); ++i) {
+            Serial.printf("  [%u] %s type=%u rssi=%d likely=%d name='%s'\n",
+                (unsigned)i, rs[i].address.c_str(), (unsigned)rs[i].addrType,
+                rs[i].rssi, rs[i].likelyMatch ? 1 : 0, rs[i].name.c_str());
+        }
+        return;
+    }
+    if (c == 'c') {
+        // c <idx>                    -> connect to scan result at index
+        // c <addr> <type>            -> connect to raw address with type
+        // c <addr>                   -> connect to raw address, type=1 (random)
+        String args = (line.length() > 2) ? line.substring(2) : String();
+        args.trim();
+        // Address contains colons; index does not.
+        if (args.indexOf(':') >= 0) {
+            int sp = args.indexOf(' ');
+            String addr = (sp > 0) ? args.substring(0, sp) : args;
+            uint8_t aType = 1;  // default random for raw connects (RadiaCode 110)
+            if (sp > 0) aType = (uint8_t) args.substring(sp + 1).toInt();
+            addr.toLowerCase();
+            std::string saddr(addr.c_str());
+            Serial.printf("[CMD] connecting to raw %s type=%u\n",
+                          saddr.c_str(), (unsigned)aType);
+            gRadia.connectTo(saddr, aType);
+            return;
+        }
+        int idx = args.toInt();
+        const auto& rs = gRadia.getScanResults();
+        if (idx < 0 || idx >= (int)rs.size()) {
+            Serial.printf("[CMD] bad idx %d (have %u)\n", idx, (unsigned)rs.size());
+            return;
+        }
+        const auto& r = rs[idx];
+        Serial.printf("[CMD] connecting to [%d] %s type=%u name='%s'\n",
+                      idx, r.address.c_str(), (unsigned)r.addrType, r.name.c_str());
+        gRadia.connectTo(r.address, r.addrType);
+        return;
+    }
+    if (c == 'x') {
+        Serial.println("[CMD] cancel scan / disconnect");
+        gRadia.cancelManualScan();
+        return;
+    }
+    if (c == 'f') {
+        Serial.println("[CMD] forget peer + rescan");
+        gRadia.disconnectAndForget();
+        gRadia.requestScan();
+        return;
+    }
+    Serial.printf("[CMD] unknown '%s' (use ?)\n", line.c_str());
+}
+
+static void pollSerialCommands() {
+    while (Serial.available() > 0) {
+        const int ci = Serial.read();
+        if (ci < 0) break;
+        const char ch = (char)ci;
+        if (ch == '\r') continue;
+        if (ch == '\n') {
+            String line = gCmdBuf;
+            gCmdBuf = "";
+            line.trim();
+            handleSerialCommand(line);
+        } else {
+            gCmdBuf += ch;
+            if (gCmdBuf.length() > 64) gCmdBuf = "";  // overflow guard
+        }
+    }
+}
+
 void loop() {
+    pollSerialCommands();
     gGps.update();
     gRadia.loop();
 

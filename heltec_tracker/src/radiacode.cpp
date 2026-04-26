@@ -3,6 +3,7 @@
 
 #include <NimBLEDevice.h>
 #include <Preferences.h>
+#include <esp_log.h>
 #include <algorithm>
 #include <time.h>
 
@@ -228,8 +229,9 @@ public:
                     svcStr += dev->getServiceUUID(i).toString();
                 }
                 const char* tag = firstSight ? "NEW" : (nameChanged ? "NAME" : "upd");
-                Serial.printf("[%s] %s rssi=%d name='%s' svcs=[%s] match=%d/%d\n",
-                              tag, addr.c_str(), rssi, name.c_str(), svcStr.c_str(),
+                Serial.printf("[%s] %s type=%u rssi=%d name='%s' svcs=[%s] match=%d/%d\n",
+                              tag, addr.c_str(), (unsigned)dev->getAddressType(),
+                              rssi, name.c_str(), svcStr.c_str(),
                               nameMatch ? 1 : 0, svcMatch ? 1 : 0);
             }
         }
@@ -629,6 +631,18 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
 
     NimBLEDevice::init("htit-tracker");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    // Force public own-address. NimBLE-Arduino defaults to random which
+    // a few peripherals (incl. some RadiaCode firmware revs) reject when
+    // they have no bond record for us.
+    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_PUBLIC);
+
+    // Silence chatty NimBLE info logs (per-packet adv updates) so the
+    // serial console stays readable. Our own state/match/connect logs
+    // still print at INFO level via log_i / Serial.printf.
+    esp_log_level_set("NimBLEScan",   ESP_LOG_WARN);
+    esp_log_level_set("NimBLEDevice", ESP_LOG_WARN);
+    esp_log_level_set("NimBLEClient", ESP_LOG_WARN);
+    esp_log_level_set("NimBLEAdvertisedDevice", ESP_LOG_WARN);
 
     setState(State::Idle);
 }
@@ -769,8 +783,12 @@ void RadiaCode::startManualScan(uint32_t durMs) {
 
     scan->setAdvertisedDeviceCallbacks(&gScanCb, /*wantDuplicates=*/true);
     scan->setActiveScan(true);
-    scan->setInterval(160);
-    scan->setWindow(160);    // 100% duty cycle
+    // window < interval so the BLE radio can switch advertising channels.
+    // window==interval prevents channel hopping and silently misses
+    // peripherals advertising on other channels (RadiaCode 110 was
+    // observed only by the auto-scan with these gentler params).
+    scan->setInterval(160);   // 100ms
+    scan->setWindow(99);      // ~62% duty, allows ch hop
     scan->setDuplicateFilter(false);   // get scan responses w/ names
     scan->start(0, nullptr, false);   // run until loop() stops it
 }
