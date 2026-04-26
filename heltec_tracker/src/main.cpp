@@ -126,8 +126,16 @@ static void handleSerialCommand(const String& line) {
         return;
     }
     if (c == 's') {
-        Serial.println("[CMD] starting manual scan (15s)");
-        gRadia.startManualScan(15000);
+        // Optional arg: duration in seconds (default 15)
+        uint32_t ms = 15000;
+        String sargs = (line.length() > 2) ? line.substring(2) : String();
+        sargs.trim();
+        if (sargs.length() > 0) {
+            int secs = sargs.toInt();
+            if (secs > 0 && secs < 600) ms = (uint32_t)secs * 1000;
+        }
+        Serial.printf("[CMD] starting manual scan (%ums)\n", (unsigned)ms);
+        gRadia.startManualScan(ms);
         gManualScanArmedSerial = true;
         return;
     }
