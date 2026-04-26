@@ -65,6 +65,8 @@ public:
     // Used as the default behaviour when there's no saved peer.
     void requestScan();
     void disconnectAndForget();
+    // Disconnect current peer but keep the pinned address so auto-reconnect resumes.
+    void disconnectKeepPin();
 
     State          state();
     const String&  peerAddress();

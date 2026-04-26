@@ -183,6 +183,11 @@ static void handleSerialCommand(const String& line) {
         gRadia.requestScan();
         return;
     }
+    if (c == 'D') {
+        Serial.println("[CMD] disconnect (keep pin)");
+        gRadia.disconnectKeepPin();
+        return;
+    }
     Serial.printf("[CMD] unknown '%s' (use ?)\n", line.c_str());
 }
 

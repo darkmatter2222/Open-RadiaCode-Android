@@ -1076,6 +1076,12 @@ void RadiaCode::disconnectAndForget() {
     if (g.client && g.client->isConnected()) g.client->disconnect();
 }
 
+void RadiaCode::disconnectKeepPin() {
+    log_i("disconnectKeepPin(): dropping link, pin retained (%s)", g.pinnedAddr.c_str());
+    if (g.client && g.client->isConnected()) g.client->disconnect();
+    setState(State::Disconnected);
+}
+
 RadiaCode::State  RadiaCode::state()       { return g.state; }
 const String&     RadiaCode::peerAddress() { return g.peerAddr; }
 const String&     RadiaCode::peerName()    { return g.peerName; }
