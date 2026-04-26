@@ -34,6 +34,7 @@ constexpr uint32_t REQ_TIMEOUT_EXCHANGE_MS = 25000;
 
 constexpr const char* PREFS_NS  = "rctracker";
 constexpr const char* PREFS_KEY_LAST_PEER = "last_peer";
+constexpr const char* PREFS_KEY_PINNED    = "pinned_peer";  // user-pinned target; auto-mode connects ONLY to this
 } // namespace
 
 // ----------------- internal state ---------------------------------------------
@@ -78,6 +79,12 @@ struct Internal {
     // so we can wait for a sleepy peer to actually beacon before connecting,
     // and so we keep the BT5 ext-adv SID/PHY metadata from the adv event.
     std::string       targetAddr;
+
+    // User-pinned address. When set, auto-mode (idle-loop scan-then-connect)
+    // ONLY accepts adv from this address. Prevents wasting time on imposter
+    // peers that happen to advertise the RadiaCode service UUID but aren't
+    // real RadiaCodes (service discovery fails after connect).
+    std::string       pinnedAddr;
 
     Preferences       prefs;
 };
@@ -310,6 +317,10 @@ public:
               addr.c_str(), rssi, svcMatch, (unsigned)at,
               dev->isLegacyAdvertisement(), isConn, name.c_str());
         if (!isConn) return;  // skip non-connectable peers in auto mode
+        // If user has pinned a specific target, ONLY auto-connect to that
+        // address. Prevents wasted connect attempts on imposter peers that
+        // happen to advertise the RadiaCode service UUID but fail svc disc.
+        if (!g.pinnedAddr.empty() && addr != g.pinnedAddr) return;
         if (!g.foundDev || dev->getRSSI() > g.foundDev->getRSSI()) {
             if (g.foundDev) delete g.foundDev;
             g.foundDev = new NimBLEAdvertisedDevice(*dev);
@@ -833,6 +844,16 @@ void RadiaCode::begin(ReadingCb onReading, StateCb onState) {
 
     g.prefs.begin(PREFS_NS, false);
 
+    // Restore pinned target. If set, auto-mode will only attempt to connect
+    // to this address. Cleared via the `forget` command.
+    {
+        String pinned = g.prefs.getString(PREFS_KEY_PINNED, "");
+        if (pinned.length()) {
+            g.pinnedAddr = std::string(pinned.c_str());
+            log_i("Pinned target restored from prefs: %s", g.pinnedAddr.c_str());
+        }
+    }
+
     // Match Bluedroid's scan duplicate behaviour (per-device, not per-data).
     // RadiaCode-110 uses BT5 chained ext-adv; default per-data filtering
     // drops AUX packets and the controller never sees the full adv set.
@@ -1028,6 +1049,11 @@ bool RadiaCode::connectTo(const std::string& address, uint8_t addrType) {
     g.pendingConnectAddr = address;
     g.pendingConnectAddrType = addrType;
     g.manualScanActive = false;
+    // Pin this address so auto-mode stops chasing imposter peers and a
+    // reboot continues trying the same target.
+    g.pinnedAddr = address;
+    g.prefs.putString(PREFS_KEY_PINNED, String(address.c_str()));
+    log_i("Pinned target -> %s", address.c_str());
     NimBLEDevice::getScan()->stop();
     setState(State::Disconnected);    // triggers loop() to honor pendingConnectAddr
     return true;
@@ -1045,6 +1071,8 @@ void RadiaCode::requestScan() {
 
 void RadiaCode::disconnectAndForget() {
     g.prefs.remove(PREFS_KEY_LAST_PEER);
+    g.prefs.remove(PREFS_KEY_PINNED);
+    g.pinnedAddr.clear();
     if (g.client && g.client->isConnected()) g.client->disconnect();
 }
 
