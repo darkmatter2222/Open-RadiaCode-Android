@@ -54,10 +54,30 @@ bool SessionStore::begin() {
 
         // Start at a conservative clock; jumper-wire setups rarely tolerate
         // 20MHz on first contact. We can raise it once mounted if we want.
-        bool mounted = SD.begin(cfg::SD_CS_PIN, gSdSpi, 1000000);
+        // Each attempt requires SD.end() between calls because the FATFS
+        // driver caches state from failed mounts.
+        auto tryMount = [&](uint32_t hz, bool formatIfEmpty) {
+            SD.end();
+            return SD.begin(cfg::SD_CS_PIN, gSdSpi, hz, "/sd", 5, formatIfEmpty);
+        };
+        bool mounted = tryMount(1000000, false);
         if (!mounted) {
             Serial.println("[SD] 1MHz init failed, retrying at 400kHz");
-            mounted = SD.begin(cfg::SD_CS_PIN, gSdSpi, 400000);
+            mounted = tryMount(400000, false);
+        }
+        if (!mounted) {
+            // Card may respond at SPI level but have an unreadable filesystem
+            // (unformatted, exFAT on SDXC, corrupted). Let FATFS reformat.
+            Serial.println("[SD] still failed, retrying at 400kHz with format-if-empty");
+            mounted = tryMount(400000, true);
+        }
+        if (!mounted) {
+            Serial.println("[SD] retrying at 1MHz with format-if-empty");
+            mounted = tryMount(1000000, true);
+        }
+        if (!mounted) {
+            Serial.println("[SD] retrying at 4MHz with format-if-empty");
+            mounted = tryMount(4000000, true);
         }
         if (mounted) {
             uint8_t cardType = SD.cardType();
