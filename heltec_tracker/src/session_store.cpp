@@ -8,9 +8,34 @@
 #include <time.h>
 
 namespace {
-// Dedicated SPI bus for the SD card (HSPI on the S3). The TFT lives on a
-// separate set of GPIOs (38-42), so the buses don't collide.
-SPIClass gSdSpi(HSPI);
+// Dedicated SPI bus for the SD card. On ESP32-S3 the FSPI controller (SPI2)
+// has IOMUX fast paths for low-numbered GPIOs (we're on 4-7), and tends to
+// be more reliable for SD-over-SPI than the GPIO-matrix-only HSPI (SPI3).
+// The TFT, when present, lives on GPIOs 38-42, so buses don't collide.
+SPIClass gSdSpi(FSPI);
+
+// Send the SD-spec power-up sequence: with CS held HIGH, clock at least 74
+// cycles so the card transitions from native-mode into SPI-mode. Many cheap
+// cards don't latch onto SPI mode reliably without this. We bit-bang it
+// since the SPI peripheral hasn't been configured for transactions yet.
+void sdBitBangWakeup(uint8_t sckPin, uint8_t mosiPin, uint8_t csPin) {
+    pinMode(sckPin,  OUTPUT);
+    pinMode(mosiPin, OUTPUT);
+    pinMode(csPin,   OUTPUT);
+    digitalWrite(csPin,  HIGH);
+    digitalWrite(mosiPin, HIGH);
+    digitalWrite(sckPin,  LOW);
+    delayMicroseconds(2000);  // Vdd ramp settle
+    // 100 cycles, well over the 74 required.
+    for (int i = 0; i < 100; ++i) {
+        digitalWrite(sckPin, HIGH);
+        delayMicroseconds(2);
+        digitalWrite(sckPin, LOW);
+        delayMicroseconds(2);
+    }
+    digitalWrite(csPin,  HIGH);
+    digitalWrite(mosiPin, HIGH);
+}
 String makeSessionId() {
     // YYYYMMDD_HHMMSS using system time, falling back to millis if unset.
     time_t now = time(nullptr);
@@ -46,18 +71,25 @@ bool SessionStore::begin() {
         // Cheap HW-125 modules + jumper wires often need an explicit pullup
         // on MISO so the line doesn't float when the card hasn't asserted it.
         pinMode(cfg::SD_MISO_PIN, INPUT_PULLUP);
+        // Spec-mandated SPI-mode power-up sequence: 74+ clocks with CS HIGH.
+        sdBitBangWakeup(cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
         gSdSpi.begin(cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
         // Drive CS high before the first transaction so the card sees a clean
         // CS edge on its very first command.
         pinMode(cfg::SD_CS_PIN, OUTPUT);
         digitalWrite(cfg::SD_CS_PIN, HIGH);
+        delay(50);  // Let Vdd settle and card finish its internal init.
 
         // Start at a conservative clock; jumper-wire setups rarely tolerate
         // 20MHz on first contact. We can raise it once mounted if we want.
         // Each attempt requires SD.end() between calls because the FATFS
-        // driver caches state from failed mounts.
+        // driver caches state from failed mounts. Re-issue the wakeup
+        // sequence between attempts to give the card a clean re-init.
         auto tryMount = [&](uint32_t hz, bool formatIfEmpty) {
             SD.end();
+            delay(50);
+            sdBitBangWakeup(cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
+            gSdSpi.begin(cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
             return SD.begin(cfg::SD_CS_PIN, gSdSpi, hz, "/sd", 5, formatIfEmpty);
         };
         bool mounted = tryMount(1000000, false);
