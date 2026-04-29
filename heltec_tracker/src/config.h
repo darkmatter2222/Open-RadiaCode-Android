@@ -58,6 +58,23 @@ constexpr const char* SESSIONS_DIR    = "/sessions";
 constexpr const char* ACTIVE_FILE     = "/active.txt";   // current session id
 constexpr size_t      MAX_LINE_BYTES  = 160;
 
+// ---------------- SD card (HW-125 micro-SD breakout, SPI mode) ----------------
+// Wiring (see heltec_tracker/AGENTS.md for the full table):
+//   HW-125 GND  -> Heltec GND
+//   HW-125 VCC  -> Heltec 3V3
+//   HW-125 MISO -> GPIO 4
+//   HW-125 MOSI -> GPIO 6
+//   HW-125 SCK  -> GPIO 5
+//   HW-125 CS   -> GPIO 7
+// Dedicated SPI bus (HSPI), independent from the TFT bus on GPIO 38-42.
+constexpr bool     SD_ENABLED   = true;
+// Wiring: HW-125 MISO -> GPIO 4, MOSI -> GPIO 6 (see heltec_tracker/AGENTS.md).
+constexpr uint8_t  SD_MISO_PIN  = 4;
+constexpr uint8_t  SD_MOSI_PIN  = 6;
+constexpr uint8_t  SD_SCK_PIN   = 5;
+constexpr uint8_t  SD_CS_PIN    = 7;
+constexpr uint32_t SD_SPI_HZ    = 20000000;     // 20 MHz; back off to 4 MHz on poor cards
+
 // ---------------- App ---------------------------------------------------------
 constexpr uint32_t UI_TICK_MS = 100;
 constexpr uint32_t HEARTBEAT_MS = 3000;

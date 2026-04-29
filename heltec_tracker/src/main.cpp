@@ -74,8 +74,15 @@ void setup() {
     gGps.begin();
 
     if (!gStore.begin()) {
-        Serial.println("LittleFS failed -- recording disabled");
+        Serial.println("[STORE] FATAL: no backend available -- recording disabled");
     } else {
+        Serial.printf("[STORE] backend=%s used=%u total=%u",
+                      gStore.backendName(),
+                      (unsigned)gStore.usedBytes(), (unsigned)gStore.totalBytes());
+        if (gStore.sdMounted()) {
+            Serial.printf(" cardSizeMB=%llu", (unsigned long long)gStore.cardSizeMb());
+        }
+        Serial.println();
         gStore.resumeIfActive();
     }
 
@@ -137,6 +144,7 @@ static void handleSerialCommand(const String& line) {
         Serial.println("[CMD]           g                   - GPS quick status");
         Serial.println("[CMD]           SYNC                - force Wi-Fi upload now");
         Serial.println("[CMD]           WIFISTAT            - Wi-Fi uploader status");
+        Serial.println("[CMD]           SDSTAT              - SD/LittleFS backend status");
         return;
     }
 
@@ -164,9 +172,21 @@ static void handleSerialCommand(const String& line) {
         return;
     }
     if (upper == "STATFS") {
-        Serial.printf("[STATFS] used=%u total=%u pct=%d sessions=%d\n",
+        Serial.printf("[STATFS] backend=%s used=%u total=%u pct=%d sessions=%d",
+                      gStore.backendName(),
                       (unsigned)gStore.usedBytes(), (unsigned)gStore.totalBytes(),
                       gStore.percentUsed(), gStore.sessionCount());
+        if (gStore.sdMounted()) {
+            Serial.printf(" cardSizeMB=%llu", (unsigned long long)gStore.cardSizeMb());
+        }
+        Serial.println();
+        return;
+    }
+    if (upper == "SDSTAT") {
+        Serial.printf("[SDSTAT] backend=%s mounted=%d cardSizeMB=%llu used=%u total=%u\n",
+                      gStore.backendName(), (int)gStore.sdMounted(),
+                      (unsigned long long)gStore.cardSizeMb(),
+                      (unsigned)gStore.usedBytes(), (unsigned)gStore.totalBytes());
         return;
     }
     if (upper.startsWith("GPASSTHRU")) {

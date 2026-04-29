@@ -10,7 +10,14 @@
 
 class SessionStore {
 public:
-    bool begin();   // mounts LittleFS (formats on first failure)
+    enum class Backend { None, LittleFs, Sd };
+
+    bool begin();   // mounts SD if enabled+detected, falls back to LittleFS
+
+    Backend       backend()     const { return backend_; }
+    const char*   backendName() const;
+    bool          sdMounted()   const { return backend_ == Backend::Sd; }
+    uint64_t      cardSizeMb()  const { return cardSizeMb_; }   // SD only; 0 otherwise
 
     bool isRecording() const { return recording_; }
     const String& activeId() const { return activeId_; }
@@ -75,4 +82,7 @@ private:
     bool   recording_   = false;
     String activeId_;
     uint32_t sampleCount_ = 0;
+    Backend  backend_     = Backend::None;
+    fs::FS*  fs_          = nullptr;     // -> SD or LittleFS, set in begin()
+    uint64_t cardSizeMb_  = 0;            // populated when SD mounts
 };
