@@ -1,0 +1,17 @@
+# ESP32-S3 partition table - Heltec HTIT-Tracker V2 (8MB flash, no SD card)
+#
+# Drops the OTA slot (app1) and shrinks app0 from 3MB to 2MB so LittleFS
+# can grow from 1.5MB to ~5.9MB. The V2 build is the no-SD variant, so
+# every byte of session storage matters. Current firmware uses ~1.25MB
+# of the 2MB app0 slot, leaving plenty of head-room.
+#
+# Capacity at ~70 B per CSV row, 1 Hz logging:
+#   1.5 MB ->  ~6 hours
+#   5.9 MB -> ~24 hours
+#
+# Name,   Type, SubType, Offset,   Size,    Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0x200000,
+littlefs, data, spiffs,  0x210000, 0x5E0000,
+coredump, data, coredump,0x7F0000, 0x10000,
