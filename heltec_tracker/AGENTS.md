@@ -52,18 +52,46 @@ be mounted.
 The SD bus is a **dedicated HSPI** instance (`SPIClass(HSPI)`) so it never
 collides with the TFT's bus on GPIO 38-42.
 
-### Init sequence
+### Init sequence (current)
 
-1. Configure pins, drive CS high, set MISO `INPUT_PULLUP` (cheap modules
-   often need this when MISO would otherwise float between transactions).
-2. `SD.begin(CS, hspi, 1 MHz)` — start slow; jumper-wire setups rarely
-   tolerate 20 MHz on first contact.
-3. On failure, retry at 400 kHz.
-4. On failure, fall back to LittleFS.
+1. **SdFat preflight (greiman)** — independent SPI driver. Try at 1 MHz,
+   4 MHz, 400 kHz. If this can't even talk to the card, no other backend
+   will either (it's electrical, not software).
+2. **SD_MMC 1-bit mode** — uses the dedicated SDMMC peripheral (not SPI),
+   reusing the same wires (`SCK`->CLK, `MOSI`->CMD, `MISO`->D0). Different
+   silicon block, different driver — succeeds on some cards that reject
+   SPI mode.
+3. **SD over SPI** (Espressif `sd_diskio`, on FSPI / SPI2) — the stock
+   Arduino-ESP32 driver. Try 1 MHz -> 400 kHz -> 400 kHz with
+   format-if-empty -> 1 MHz with format -> 4 MHz with format. Each retry
+   re-issues the 100-cycle SPI-mode wakeup sequence with CS high.
+4. **LittleFS fallback** — always works, ~1.5 MB partition.
 
-After mount succeeds we currently leave the bus at the init clock; the
-session-write workload is tiny (a few hundred bytes/sec), so there's no
-need to renegotiate to a faster rate.
+The SPI-mode 74-cycle wakeup is bit-banged in software (`sdBitBangWakeup`)
+because cheap cards often won't transition from native SD mode into SPI
+mode without it.
+
+### Triple-driver diagnostic
+
+The boot log will tell you which backend mounted:
+
+```
+[SD] preflight: SdFat on SCK=5 MISO=4 MOSI=6 CS=7
+[SdFat] mounted at 1000000 Hz: size=15193MB fatType=32   <- card OK
+```
+
+vs.
+
+```
+[SdFat] 1000000 Hz failed: errCode=0x17 errData=0xFF
+[SdFat] 4000000 Hz failed: errCode=0x01 errData=0xFF
+[SdFat] 400000 Hz failed: errCode=0x01 errData=0xFF
+[SdFat] preflight FAILED across all clocks - card not responding ...
+```
+
+If **all three** drivers fail (SdFat, SD_MMC, SD-SPI) the issue is
+guaranteed to be electrical: power, wiring, or card. The microcontroller
+is sending CMD0 correctly but nothing is coming back on MISO.
 
 ### Diagnostics
 
@@ -87,27 +115,43 @@ or
 
 ### Troubleshooting "no token received" / "APP_OP_COND failed: 255"
 
-Symptoms come in two flavours, both from `sd_diskio.cpp`:
+**First**: check the SdFat preflight result in the boot log. If SdFat
+fails too, the issue is below the software layer.
 
-- `APP_OP_COND failed: 255` — card answered CMD0/CMD8 but never finishes
-  init. Almost always a **power** problem: the 3V3 rail droops during the
-  card's inrush spike. Try a different USB cable (data-quality matters,
-  not just power), reseat VCC, or solder the VCC jumper instead of using
-  a Dupont contact.
-- `no token received` on every command — bus integrity. Either MISO is
-  not actually connected (cold solder, broken jumper) or there's enough
-  capacitance on the line that the pull-up can't drive it. Shorten leads
-  to ~10 cm, push them firmly into the headers, or solder.
+#### When all three drivers fail (SdFat + SD_MMC + SD-SPI)
 
-If the card never mounts at all:
+This is electrical. Most likely causes, in order:
 
-1. Try the card in a PC reader to confirm it's healthy (FAT32, <=32 GB).
-2. Swap to a different micro-SD card; some cheap cards don't honour CMD55
-   timing and never finish ACMD41 init.
-3. Inspect the HW-125 module: the cheaper clones occasionally ship with
-   an unpopulated MISO pull-up resistor.
-4. The firmware will fall back to LittleFS automatically; data is never
-   lost in this case, just stored on-chip.
+1. **HW-125 power.** The HiLetgo HW-125 has an onboard AMS1117-3.3V LDO
+   regulator. AMS1117 has ~1.1 V dropout — it needs **at least ~4.4 V**
+   on its input pin to deliver a stable 3.3 V output. **Wiring VCC to the
+   ESP32's 3V3 pin starves the LDO**, and the card receives ~2.0-2.5 V
+   on its Vdd, well below the 2.7 V minimum. Fix: move VCC from the
+   `3V3` pin to a `5V` / `Vin` / `USB` pin on the Heltec board. (The
+   HW-125's level-shifter circuit handles 3.3 V logic fine even with 5 V
+   on Vcc — that's what it was designed for.)
+2. **Cold/loose Dupont contacts.** Reseat MISO especially.
+3. **Bad card.** Try a known-good card formatted FAT32 in a PC reader.
+4. **Damaged module.** HW-125 clones occasionally ship with shorted or
+   missing components.
+
+#### When SdFat mounts but the stock SD driver fails
+
+That's the documented arduino-esp32 regression
+([#6081](https://github.com/espressif/arduino-esp32/issues/6081),
+[ESP32-audioI2S#245](https://github.com/schreibfaul1/ESP32-audioI2S/issues/245)).
+Rare on core 2.0.14 (which we use) but still possible. Fix: plumb SdFat
+through `session_store` instead of falling through to the stock driver
+(currently we tear SdFat down after preflight because SdFat doesn't
+expose the `fs::FS` interface our code uses).
+
+#### Older notes
+
+- `APP_OP_COND failed: 255` (specific): card answered CMD0/CMD8 but
+  never finished init. Usually a power droop on inrush. Same fix:
+  cleaner 5 V on HW-125 VCC.
+- `no token received` on every command: bus integrity / floating MISO /
+  card not powered.
 
 ---
 

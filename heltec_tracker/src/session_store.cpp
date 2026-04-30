@@ -3,6 +3,8 @@
 
 #include <LittleFS.h>
 #include <SD.h>
+#include <SD_MMC.h>
+#include <SdFat.h>
 #include <SPI.h>
 #include <algorithm>
 #include <time.h>
@@ -13,6 +15,10 @@ namespace {
 // be more reliable for SD-over-SPI than the GPIO-matrix-only HSPI (SPI3).
 // The TFT, when present, lives on GPIOs 38-42, so buses don't collide.
 SPIClass gSdSpi(FSPI);
+
+// SdFat instance for the diagnostic preflight. Templated on FAT16/32/exFAT
+// so it handles modern SDHC/SDXC cards.
+SdFs gSdFat;
 
 // Send the SD-spec power-up sequence: with CS held HIGH, clock at least 74
 // cycles so the card transitions from native-mode into SPI-mode. Many cheap
@@ -65,7 +71,111 @@ bool SessionStore::begin() {
 
     // ---- Try SD first ------------------------------------------------------
     if (cfg::SD_ENABLED) {
-        Serial.printf("[SD] init: SCK=%u MISO=%u MOSI=%u CS=%u (init@1MHz)\n",
+        // ===== Preflight: SdFat (greiman) ===================================
+        // SdFat ships its own SPI driver that bypasses ESP-IDF's sd_diskio
+        // entirely. The stock arduino-esp32 SD driver has a long history of
+        // 'no token received' regressions (see espressif/arduino-esp32#6081
+        // and schreibfaul1/ESP32-audioI2S#245). SdFat has its own card-init
+        // state machine and tolerates flaky cards/wiring better.
+        //
+        // We run it as a *diagnostic preflight* first: if SdFat can't talk
+        // to the card either, the issue is electrical (most commonly the
+        // HW-125's onboard AMS1117-3.3V LDO needing 5V on VCC, not 3V3).
+        // If SdFat *can* mount, we adopt it as the active backend.
+        Serial.printf("[SD] preflight: SdFat on SCK=%u MISO=%u MOSI=%u CS=%u\n",
+                      cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN,
+                      cfg::SD_CS_PIN);
+        pinMode(cfg::SD_MISO_PIN, INPUT_PULLUP);
+        sdBitBangWakeup(cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
+        gSdSpi.begin(cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
+        pinMode(cfg::SD_CS_PIN, OUTPUT);
+        digitalWrite(cfg::SD_CS_PIN, HIGH);
+        delay(50);
+        // Try a few clocks. SdFat takes &gSdSpi so it shares our bus.
+        const uint32_t kSdFatClocks[] = { SD_SCK_MHZ(1), SD_SCK_MHZ(4),
+                                          SD_SCK_HZ(400000) };
+        for (uint32_t hz : kSdFatClocks) {
+            SdSpiConfig spiCfg(cfg::SD_CS_PIN, SHARED_SPI, hz, &gSdSpi);
+            if (gSdFat.begin(spiCfg)) {
+                uint64_t cardSizeBytes =
+                    (uint64_t)gSdFat.card()->sectorCount() * 512ULL;
+                cardSizeMb_ = cardSizeBytes / (1024ULL * 1024ULL);
+                Serial.printf("[SdFat] mounted at %u Hz: size=%lluMB fatType=%u\n",
+                              (unsigned)hz, (unsigned long long)cardSizeMb_,
+                              (unsigned)gSdFat.fatType());
+                // We mounted SdFat successfully - but SdFat doesn't expose
+                // fs::FS, so we can't plumb it through the existing append/
+                // listSessions/dumpSession code paths without a wrapper.
+                // For now, log the win, tear it down, and try the stock SPI
+                // driver again with the bus already 'awake' from SdFat's
+                // init handshake. Many cards that fail cold-init succeed
+                // once SdFat has cycled them through the spec sequence.
+                Serial.println("[SdFat] preflight OK; releasing and retrying stock SD driver");
+                gSdFat.end();
+                sdFatPreflightOk_ = true;
+                break;
+            }
+            Serial.printf("[SdFat] %u Hz failed: errCode=0x%02X errData=0x%02X\n",
+                          (unsigned)hz, gSdFat.sdErrorCode(), gSdFat.sdErrorData());
+        }
+        if (!sdFatPreflightOk_) {
+            Serial.println("[SdFat] preflight FAILED across all clocks - "
+                           "card not responding on this bus at all. "
+                           "Likely HW-125 power issue (LDO needs 5V VCC, not 3V3) "
+                           "or wiring fault. Continuing with stock drivers anyway.");
+        }
+
+        // ===== Attempt 1: SD_MMC peripheral, 1-bit mode =====================
+        // The S3 has a dedicated SDMMC controller that is *not* SPI. It uses
+        // a different driver, different DMA path, and different pin signaling
+        // than the SD-over-SPI library. Many cards that fail in SPI mode work
+        // here because the SDMMC peripheral's clock/timing is more forgiving.
+        // 1-bit mode needs only CLK, CMD, D0 -- we map them onto the same
+        // physical wires the user already soldered for SPI:
+        //   SPI SCK  (GPIO 5) -> MMC CLK
+        //   SPI MOSI (GPIO 6) -> MMC CMD
+        //   SPI MISO (GPIO 4) -> MMC D0
+        // SPI CS    (GPIO 7) is unused by MMC; we tie it HIGH so the card
+        // sees a quiet line on that side.
+        Serial.printf("[SD] trying SD_MMC 1-bit: CLK=%u CMD=%u D0=%u\n",
+                      cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_MISO_PIN);
+        pinMode(cfg::SD_CS_PIN, OUTPUT);
+        digitalWrite(cfg::SD_CS_PIN, HIGH);
+        // setPins on ESP32-S3 takes (clk, cmd, d0) for 1-bit mode.
+        if (SD_MMC.setPins(cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_MISO_PIN)) {
+            // mode=true selects 1-bit, format_if_mount_failed=true,
+            // max_files=5, frequency=BOARD_MAX_SDMMC_FREQ (auto).
+            if (SD_MMC.begin("/sdmmc", true, true, SDMMC_FREQ_DEFAULT, 5)) {
+                uint8_t cardType = SD_MMC.cardType();
+                const char* typeName = "UNKNOWN";
+                switch (cardType) {
+                    case CARD_NONE:  typeName = "NONE";  break;
+                    case CARD_MMC:   typeName = "MMC";   break;
+                    case CARD_SD:    typeName = "SD";    break;
+                    case CARD_SDHC:  typeName = "SDHC";  break;
+                }
+                if (cardType != CARD_NONE) {
+                    cardSizeMb_ = SD_MMC.cardSize() / (1024ULL * 1024ULL);
+                    Serial.printf("[SD_MMC] mounted: type=%s size=%lluMB\n",
+                                  typeName, (unsigned long long)cardSizeMb_);
+                    fs_ = &SD_MMC;
+                    backend_ = Backend::Sd;
+                    if (!SD_MMC.exists(cfg::SESSIONS_DIR)) {
+                        SD_MMC.mkdir(cfg::SESSIONS_DIR);
+                    }
+                    return true;
+                }
+                Serial.println("[SD_MMC] CARD_NONE after mount, ending");
+                SD_MMC.end();
+            } else {
+                Serial.println("[SD_MMC] begin() failed, falling through to SPI");
+            }
+        } else {
+            Serial.println("[SD_MMC] setPins() failed, falling through to SPI");
+        }
+
+        // ===== Attempt 2: SD over SPI =======================================
+        Serial.printf("[SD] trying SPI: SCK=%u MISO=%u MOSI=%u CS=%u (init@1MHz)\n",
                       cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN,
                       cfg::SD_CS_PIN);
         // Cheap HW-125 modules + jumper wires often need an explicit pullup

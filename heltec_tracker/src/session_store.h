@@ -85,4 +85,8 @@ private:
     Backend  backend_     = Backend::None;
     fs::FS*  fs_          = nullptr;     // -> SD or LittleFS, set in begin()
     uint64_t cardSizeMb_  = 0;            // populated when SD mounts
+    bool     sdFatPreflightOk_ = false;   // true if SdFat managed to mount
+                                          // the card during the preflight
+                                          // diagnostic, even if the stock
+                                          // driver subsequently failed
 };
