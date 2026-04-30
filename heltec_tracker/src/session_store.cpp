@@ -75,14 +75,12 @@ bool SessionStore::begin() {
         // SdFat ships its own SPI driver that bypasses ESP-IDF's sd_diskio
         // entirely. The stock arduino-esp32 SD driver has a long history of
         // 'no token received' regressions (see espressif/arduino-esp32#6081
-        // and schreibfaul1/ESP32-audioI2S#245). SdFat has its own card-init
-        // state machine and tolerates flaky cards/wiring better.
-        //
-        // We run it as a *diagnostic preflight* first: if SdFat can't talk
-        // to the card either, the issue is electrical (most commonly the
-        // HW-125's onboard AMS1117-3.3V LDO needing 5V on VCC, not 3V3).
-        // If SdFat *can* mount, we adopt it as the active backend.
-        Serial.printf("[SD] preflight: SdFat on SCK=%u MISO=%u MOSI=%u CS=%u\n",
+        // and schreibfaul1/ESP32-audioI2S#245). On real-world testing both
+        // SD and SD_MMC fail on cards that SdFat handles fine, even with
+        // identical wiring and good 5V power. So SdFat is now the primary
+        // backend - if it mounts we adopt it directly and skip the broken
+        // stock drivers entirely.
+        Serial.printf("[SD] trying SdFat on SCK=%u MISO=%u MOSI=%u CS=%u\n",
                       cfg::SD_SCK_PIN, cfg::SD_MISO_PIN, cfg::SD_MOSI_PIN,
                       cfg::SD_CS_PIN);
         pinMode(cfg::SD_MISO_PIN, INPUT_PULLUP);
@@ -92,8 +90,10 @@ bool SessionStore::begin() {
         digitalWrite(cfg::SD_CS_PIN, HIGH);
         delay(50);
         // Try a few clocks. SdFat takes &gSdSpi so it shares our bus.
-        const uint32_t kSdFatClocks[] = { SD_SCK_MHZ(1), SD_SCK_MHZ(4),
-                                          SD_SCK_HZ(400000) };
+        // Once mounted we leave it at the mount clock; session writes are
+        // tiny so there's nothing to gain from a faster bus.
+        const uint32_t kSdFatClocks[] = { SD_SCK_MHZ(8), SD_SCK_MHZ(4),
+                                          SD_SCK_MHZ(1), SD_SCK_HZ(400000) };
         for (uint32_t hz : kSdFatClocks) {
             SdSpiConfig spiCfg(cfg::SD_CS_PIN, SHARED_SPI, hz, &gSdSpi);
             if (gSdFat.begin(spiCfg)) {
@@ -103,29 +103,23 @@ bool SessionStore::begin() {
                 Serial.printf("[SdFat] mounted at %u Hz: size=%lluMB fatType=%u\n",
                               (unsigned)hz, (unsigned long long)cardSizeMb_,
                               (unsigned)gSdFat.fatType());
-                // We mounted SdFat successfully - but SdFat doesn't expose
-                // fs::FS, so we can't plumb it through the existing append/
-                // listSessions/dumpSession code paths without a wrapper.
-                // For now, log the win, tear it down, and try the stock SPI
-                // driver again with the bus already 'awake' from SdFat's
-                // init handshake. Many cards that fail cold-init succeed
-                // once SdFat has cycled them through the spec sequence.
-                Serial.println("[SdFat] preflight OK; releasing and retrying stock SD driver");
-                gSdFat.end();
                 sdFatPreflightOk_ = true;
-                break;
+                backend_ = Backend::SdFat;
+                fs_ = nullptr;  // SdFat doesn't expose fs::FS
+                if (!gSdFat.exists(cfg::SESSIONS_DIR)) {
+                    gSdFat.mkdir(cfg::SESSIONS_DIR);
+                }
+                return true;
             }
             Serial.printf("[SdFat] %u Hz failed: errCode=0x%02X errData=0x%02X\n",
                           (unsigned)hz, gSdFat.sdErrorCode(), gSdFat.sdErrorData());
         }
-        if (!sdFatPreflightOk_) {
-            Serial.println("[SdFat] preflight FAILED across all clocks - "
-                           "card not responding on this bus at all. "
-                           "Likely HW-125 power issue (LDO needs 5V VCC, not 3V3) "
-                           "or wiring fault. Continuing with stock drivers anyway.");
-        }
+        Serial.println("[SdFat] mount FAILED across all clocks - "
+                       "card not responding on this bus. "
+                       "Likely HW-125 power issue (LDO needs 5V VCC, not 3V3) "
+                       "or wiring fault. Trying stock drivers as last resort.");
 
-        // ===== Attempt 1: SD_MMC peripheral, 1-bit mode =====================
+        // ===== Attempt 2: SD_MMC peripheral, 1-bit mode =====================
         // The S3 has a dedicated SDMMC controller that is *not* SPI. It uses
         // a different driver, different DMA path, and different pin signaling
         // than the SD-over-SPI library. Many cards that fail in SPI mode work
@@ -273,12 +267,44 @@ bool SessionStore::begin() {
 const char* SessionStore::backendName() const {
     switch (backend_) {
         case Backend::Sd:       return "SD";
+        case Backend::SdFat:    return "SdFat";
         case Backend::LittleFs: return "LittleFS";
         default:                return "none";
     }
 }
 
 bool SessionStore::resumeIfActive() {
+    if (backend_ == Backend::None) return false;
+    if (backend_ == Backend::SdFat) {
+        if (!gSdFat.exists(cfg::ACTIVE_FILE)) return false;
+        FsFile f = gSdFat.open(cfg::ACTIVE_FILE, O_RDONLY);
+        if (!f) return false;
+        char buf[64] = {0};
+        int n = f.read(buf, sizeof(buf) - 1);
+        f.close();
+        if (n <= 0) return false;
+        activeId_ = String(buf);
+        activeId_.trim();
+        if (!activeId_.length()) return false;
+        String path = pathFor(activeId_);
+        if (!gSdFat.exists(path.c_str())) {
+            gSdFat.remove(cfg::ACTIVE_FILE);
+            activeId_ = "";
+            return false;
+        }
+        recording_ = true;
+        FsFile data = gSdFat.open(path.c_str(), O_RDONLY);
+        if (data) {
+            sampleCount_ = 0;
+            char ch;
+            while (data.read(&ch, 1) == 1) {
+                if (ch == '\n') ++sampleCount_;
+            }
+            if (sampleCount_ > 0) --sampleCount_;
+            data.close();
+        }
+        return true;
+    }
     if (!fs_) return false;
     if (!fs_->exists(cfg::ACTIVE_FILE)) return false;
     File f = fs_->open(cfg::ACTIVE_FILE, "r");
@@ -309,10 +335,24 @@ bool SessionStore::resumeIfActive() {
 }
 
 bool SessionStore::start() {
-    if (!fs_) { log_e("start: no backend"); return false; }
+    if (backend_ == Backend::None) { log_e("start: no backend"); return false; }
     if (recording_) stop();
     activeId_ = makeSessionId();
     sampleCount_ = 0;
+
+    if (backend_ == Backend::SdFat) {
+        String path = pathFor(activeId_);
+        FsFile f = gSdFat.open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+        if (!f) { log_e("open session file failed"); activeId_ = ""; return false; }
+        f.println("timestampMs,uSvPerHour,cps,latitude,longitude,deviceId");
+        f.close();
+        FsFile a = gSdFat.open(cfg::ACTIVE_FILE, O_WRONLY | O_CREAT | O_TRUNC);
+        if (a) { a.print(activeId_); a.close(); }
+        recording_ = true;
+        log_i("Session started: %s", activeId_.c_str());
+        return true;
+    }
+    if (!fs_) { log_e("start: no backend"); return false; }
 
     File f = fs_->open(pathFor(activeId_), "w", true);
     if (!f) { log_e("open session file failed"); activeId_ = ""; return false; }
@@ -330,7 +370,11 @@ bool SessionStore::start() {
 bool SessionStore::stop() {
     if (!recording_) return false;
     recording_ = false;
-    if (fs_) fs_->remove(cfg::ACTIVE_FILE);
+    if (backend_ == Backend::SdFat) {
+        gSdFat.remove(cfg::ACTIVE_FILE);
+    } else if (fs_) {
+        fs_->remove(cfg::ACTIVE_FILE);
+    }
     log_i("Session stopped: %s (%u samples)", activeId_.c_str(), (unsigned)sampleCount_);
     return true;
 }
@@ -344,21 +388,35 @@ void SessionStore::append(uint32_t /*tsLow*/, uint64_t timestampMsFull,
                           float uSvPerHour, float cps,
                           bool hasGps, double lat, double lng,
                           const String& deviceId) {
-    if (!recording_ || !activeId_.length() || !fs_) return;
-
-    File f = fs_->open(pathFor(activeId_), "a");
-    if (!f) { log_w("append: open failed"); return; }
+    if (!recording_ || !activeId_.length()) return;
+    if (backend_ == Backend::None) return;
 
     char line[cfg::MAX_LINE_BYTES];
+    int len;
     if (hasGps) {
-        snprintf(line, sizeof(line), "%llu,%.6f,%.3f,%.7f,%.7f,%s\n",
-                 (unsigned long long)timestampMsFull,
-                 uSvPerHour, cps, lat, lng, deviceId.c_str());
+        len = snprintf(line, sizeof(line), "%llu,%.6f,%.3f,%.7f,%.7f,%s\n",
+                       (unsigned long long)timestampMsFull,
+                       uSvPerHour, cps, lat, lng, deviceId.c_str());
     } else {
-        snprintf(line, sizeof(line), "%llu,%.6f,%.3f,,,%s\n",
-                 (unsigned long long)timestampMsFull,
-                 uSvPerHour, cps, deviceId.c_str());
+        len = snprintf(line, sizeof(line), "%llu,%.6f,%.3f,,,%s\n",
+                       (unsigned long long)timestampMsFull,
+                       uSvPerHour, cps, deviceId.c_str());
     }
+    if (len <= 0) return;
+
+    if (backend_ == Backend::SdFat) {
+        String path = pathFor(activeId_);
+        FsFile f = gSdFat.open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND);
+        if (!f) { log_w("append: open failed"); return; }
+        f.write((const uint8_t*)line, (size_t)len);
+        f.close();
+        ++sampleCount_;
+        return;
+    }
+
+    if (!fs_) return;
+    File f = fs_->open(pathFor(activeId_), "a");
+    if (!f) { log_w("append: open failed"); return; }
     f.print(line);
     f.close();
     ++sampleCount_;
@@ -367,11 +425,17 @@ void SessionStore::append(uint32_t /*tsLow*/, uint64_t timestampMsFull,
 size_t SessionStore::totalBytes() const {
     // SD reports values much larger than 32 bits; we clamp to size_t for the UI.
     if (backend_ == Backend::Sd)       return (size_t)std::min<uint64_t>(SD.totalBytes(),       SIZE_MAX);
+    if (backend_ == Backend::SdFat)    return (size_t)std::min<uint64_t>(cardSizeMb_ * 1024ULL * 1024ULL, SIZE_MAX);
     if (backend_ == Backend::LittleFs) return LittleFS.totalBytes();
     return 0;
 }
 size_t SessionStore::usedBytes() const {
     if (backend_ == Backend::Sd)       return (size_t)std::min<uint64_t>(SD.usedBytes(),        SIZE_MAX);
+    if (backend_ == Backend::SdFat) {
+        // SdFat doesn't track free clusters cheaply; freeClusterCount() walks
+        // the FAT and is slow on large cards. Skip it -- UI just shows total.
+        return 0;
+    }
     if (backend_ == Backend::LittleFs) return LittleFS.usedBytes();
     return 0;
 }
@@ -383,6 +447,17 @@ int SessionStore::percentUsed() const {
 }
 
 int SessionStore::sessionCount() const {
+    if (backend_ == Backend::SdFat) {
+        FsFile dir = gSdFat.open(cfg::SESSIONS_DIR, O_RDONLY);
+        if (!dir || !dir.isDir()) return 0;
+        int n = 0;
+        FsFile child;
+        while (child.openNext(&dir, O_RDONLY)) {
+            if (!child.isDir()) ++n;
+            child.close();
+        }
+        return n;
+    }
     if (!fs_) return 0;
     File dir = fs_->open(cfg::SESSIONS_DIR);
     if (!dir || !dir.isDirectory()) return 0;
@@ -410,6 +485,35 @@ String fileBaseName(const String& path) {
 
 std::vector<SessionStore::SessionInfo> SessionStore::listSessions() const {
     std::vector<SessionInfo> out;
+    if (backend_ == Backend::SdFat) {
+        FsFile dir = gSdFat.open(cfg::SESSIONS_DIR, O_RDONLY);
+        if (!dir || !dir.isDir()) return out;
+        FsFile child;
+        while (child.openNext(&dir, O_RDONLY)) {
+            if (!child.isDir()) {
+                char nameBuf[64];
+                child.getName(nameBuf, sizeof(nameBuf));
+                String name(nameBuf);
+                if (name.endsWith(".csv")) {
+                    SessionInfo info;
+                    info.id        = stripCsvSuffix(name);
+                    info.sizeBytes = (size_t)child.size();
+                    info.samples   = 0;
+                    // Count newlines via a separate read pass on the same file.
+                    uint8_t buf[256];
+                    int n;
+                    child.seek(0);
+                    while ((n = child.read(buf, sizeof(buf))) > 0) {
+                        for (int i = 0; i < n; ++i) if (buf[i] == '\n') ++info.samples;
+                    }
+                    if (info.samples > 0) --info.samples;
+                    out.push_back(info);
+                }
+            }
+            child.close();
+        }
+        return out;
+    }
     if (!fs_) return out;
     File dir = fs_->open(cfg::SESSIONS_DIR);
     if (!dir || !dir.isDirectory()) return out;
@@ -443,6 +547,45 @@ std::vector<SessionStore::SessionInfo> SessionStore::listSessions() const {
 }
 
 bool SessionStore::dumpSession(const String& id, Stream& out) const {
+    if (backend_ == Backend::None) {
+        out.printf("[DUMP-ERR] id=%s reason=no-backend\n", id.c_str());
+        return false;
+    }
+    if (backend_ == Backend::SdFat) {
+        String path = String(cfg::SESSIONS_DIR) + "/" + id + ".csv";
+        FsFile f = gSdFat.open(path.c_str(), O_RDONLY);
+        if (!f) {
+            out.printf("[DUMP-ERR] id=%s reason=open-failed\n", id.c_str());
+            return false;
+        }
+        uint32_t bytes = (uint32_t)f.size();
+        // Count samples in a separate pass.
+        uint32_t samples = 0;
+        {
+            FsFile counter = gSdFat.open(path.c_str(), O_RDONLY);
+            if (counter) {
+                uint8_t cbuf[256];
+                int n;
+                while ((n = counter.read(cbuf, sizeof(cbuf))) > 0) {
+                    for (int i = 0; i < n; ++i) if (cbuf[i] == '\n') ++samples;
+                }
+                if (samples > 0) --samples;
+                counter.close();
+            }
+        }
+        out.printf("[DUMP-BEGIN] id=%s bytes=%u samples=%u\n",
+                   id.c_str(), (unsigned)bytes, (unsigned)samples);
+        uint8_t buf[256];
+        int n;
+        while ((n = f.read(buf, sizeof(buf))) > 0) {
+            out.write(buf, (size_t)n);
+            yield();
+        }
+        f.close();
+        out.print('\n');
+        out.printf("[DUMP-END] id=%s\n", id.c_str());
+        return true;
+    }
     if (!fs_) {
         out.printf("[DUMP-ERR] id=%s reason=no-backend\n", id.c_str());
         return false;
@@ -500,6 +643,31 @@ void SessionStore::dumpAll(Stream& out) const {
 
 uint32_t SessionStore::wipeAll() {
     if (recording_) stop();
+    if (backend_ == Backend::None) return 0;
+
+    if (backend_ == Backend::SdFat) {
+        gSdFat.remove(cfg::ACTIVE_FILE);
+        FsFile dir = gSdFat.open(cfg::SESSIONS_DIR, O_RDONLY);
+        if (!dir || !dir.isDir()) return 0;
+        std::vector<String> paths;
+        FsFile child;
+        while (child.openNext(&dir, O_RDONLY)) {
+            if (!child.isDir()) {
+                char nameBuf[64];
+                child.getName(nameBuf, sizeof(nameBuf));
+                paths.push_back(String(cfg::SESSIONS_DIR) + "/" + String(nameBuf));
+            }
+            child.close();
+        }
+        uint32_t removed = 0;
+        for (const auto& p : paths) {
+            if (gSdFat.remove(p.c_str())) ++removed;
+        }
+        activeId_    = "";
+        sampleCount_ = 0;
+        return removed;
+    }
+
     if (!fs_) return 0;
     fs_->remove(cfg::ACTIVE_FILE);
 
@@ -527,12 +695,41 @@ uint32_t SessionStore::wipeAll() {
 }
 
 bool SessionStore::removeSession(const String& id) {
-    if (id.length() == 0 || !fs_) return false;
+    if (id.length() == 0 || backend_ == Backend::None) return false;
     if (recording_ && activeId_ == id) return false;   // refuse to delete active
+    if (backend_ == Backend::SdFat) {
+        String path = pathFor(id);
+        return gSdFat.remove(path.c_str());
+    }
+    if (!fs_) return false;
     return fs_->remove(pathFor(id));
 }
 
-File SessionStore::openForRead(const String& id) const {
-    if (!fs_) return File();
-    return fs_->open(pathFor(id), "r");
+bool SessionStore::readSessionToString(const String& id, size_t maxBytes, String& out) const {
+    if (backend_ == Backend::None) return false;
+    String path = pathFor(id);
+    if (backend_ == Backend::SdFat) {
+        FsFile f = gSdFat.open(path.c_str(), O_RDONLY);
+        if (!f) return false;
+        size_t sz = (size_t)f.size();
+        if (sz > maxBytes) { f.close(); return false; }
+        out.reserve(sz);
+        uint8_t buf[256];
+        int n;
+        while ((n = f.read(buf, sizeof(buf))) > 0) {
+            for (int i = 0; i < n; ++i) out += (char)buf[i];
+        }
+        f.close();
+        return true;
+    }
+    if (!fs_) return false;
+    File f = fs_->open(path, "r");
+    if (!f) return false;
+    if (f.size() > maxBytes) { f.close(); return false; }
+    out.reserve((size_t)f.size());
+    while (f.available()) {
+        out += (char)f.read();
+    }
+    f.close();
+    return true;
 }

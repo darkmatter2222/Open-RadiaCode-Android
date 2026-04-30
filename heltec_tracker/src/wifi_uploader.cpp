@@ -26,18 +26,7 @@ String chipIdString() {
 // is larger than `maxBytes` (returns empty in that case so we don't blow
 // the heap on a runaway session).
 bool readWholeFile(SessionStore& store, const String& id, size_t maxBytes, String& out) {
-    File f = store.openForRead(id);
-    if (!f) return false;
-    if (f.size() > maxBytes) {
-        f.close();
-        return false;
-    }
-    out.reserve((size_t)f.size());
-    while (f.available()) {
-        out += (char)f.read();
-    }
-    f.close();
-    return true;
+    return store.readSessionToString(id, maxBytes, out);
 }
 
 } // namespace

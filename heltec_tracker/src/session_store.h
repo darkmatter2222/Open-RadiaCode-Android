@@ -10,13 +10,13 @@
 
 class SessionStore {
 public:
-    enum class Backend { None, LittleFs, Sd };
+    enum class Backend { None, LittleFs, Sd, SdFat };
 
     bool begin();   // mounts SD if enabled+detected, falls back to LittleFS
 
     Backend       backend()     const { return backend_; }
     const char*   backendName() const;
-    bool          sdMounted()   const { return backend_ == Backend::Sd; }
+    bool          sdMounted()   const { return backend_ == Backend::Sd || backend_ == Backend::SdFat; }
     uint64_t      cardSizeMb()  const { return cardSizeMb_; }   // SD only; 0 otherwise
 
     bool isRecording() const { return recording_; }
@@ -74,9 +74,9 @@ public:
     // True if `id` is the currently-recording active session.
     bool isActive(const String& id) const { return recording_ && activeId_ == id; }
 
-    // Open a session file for reading. Caller owns the returned File.
-    // Empty File on failure (test with operator bool).
-    File openForRead(const String& id) const;
+    // Read a session into a String. Returns false if the file is missing
+    // or larger than maxBytes. Backend-aware (SdFat / SD / LittleFS).
+    bool readSessionToString(const String& id, size_t maxBytes, String& out) const;
 
 private:
     bool   recording_   = false;
