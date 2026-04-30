@@ -84,6 +84,16 @@ constexpr size_t      MAX_LINE_BYTES  = 160;
 //   HW-125 SCK  -> GPIO 5
 //   HW-125 CS   -> GPIO 7
 // Dedicated SPI bus (HSPI), independent from the TFT bus on GPIO 38-42.
+//
+// V1.2 boards in the field have an HW-125 micro-SD breakout wired to
+// GPIO 4/5/6/7. V2 boards in this project ship without an SD breakout, so
+// we skip the SD probe entirely on V2 builds and go straight to the
+// on-chip LittleFS partition. Otherwise the boot stalls for ~60 s in the
+// SdFat retry loop before the UI ever paints.
+#if defined(TRACKER_HW_V2)
+constexpr bool     SD_ENABLED   = false;
+constexpr bool     SD_REQUIRED  = false;
+#else
 constexpr bool     SD_ENABLED   = true;
 // If true (default), the firmware REFUSES to fall back to on-chip LittleFS
 // when the SD card can't be mounted. Recording stays disabled and the UI
@@ -93,6 +103,7 @@ constexpr bool     SD_ENABLED   = true;
 // thinking the SD card was being written. Set to false only if you want
 // internal-only operation as a deliberate fallback.
 constexpr bool     SD_REQUIRED  = true;
+#endif
 // On cold-boot from battery the HW-125's onboard LDO sometimes needs a few
 // hundred ms longer than on USB power before the card responds. Retry the
 // SdFat mount up to this many times with a short gap between attempts.
