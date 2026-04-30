@@ -11,10 +11,18 @@
 namespace {
 // Subclass exposes the protected setColRowStart() helper so we can apply the
 // HTIT-Tracker mini panel's RAM offsets and kill the rainbow edges.
+// V1.2: setColRowStart(26, 1).  V2: setColRowStart(24, 0).  These are the
+// post-rotation memory addresses Heltec uses in their factory firmware.
 class Tracker_ST7735 : public Adafruit_ST7735 {
 public:
     using Adafruit_ST7735::Adafruit_ST7735;
-    void applyMiniOffsets() { setColRowStart(26, 1); }   // landscape rotation 1
+    void applyMiniOffsets() {
+#if defined(TRACKER_HW_V2)
+        setColRowStart(24, 0);
+#else
+        setColRowStart(26, 1);
+#endif
+    }
 };
 
 // HTIT-Tracker V1.2 SPI pins (custom HSPI, not default).
@@ -62,7 +70,10 @@ void Ui::begin() {
     tft.initR(INITR_MINI160x80);
     tft.setRotation(cfg::TFT_ROTATION);
     tft.applyMiniOffsets();               // kills rainbow edge pixels
-    tft.invertDisplay(true);              // black BG, light text
+    // V1.2 panels are inverted (so invertDisplay(true) gives black BG); V2
+    // panels are not. Mismatch == fully white screen, the symptom users see
+    // when V1.2 firmware boots on a V2 board.
+    tft.invertDisplay(cfg::TFT_INVERT);
     tft.fillScreen(COL_BG);
     tft.setTextWrap(false);
     tft.setTextColor(COL_FG, COL_BG);

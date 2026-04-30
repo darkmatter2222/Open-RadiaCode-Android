@@ -7,8 +7,15 @@
 
 namespace cfg {
 
-// ---------------- TFT (ST7735, 0.96" 160x80 on HTIT-Tracker V1.2) -------------
-// Pin map matches Heltec HT_st7735 defaults for this carrier board.
+// ---------------- Hardware revision -------------------------------------------
+// Selected by build_flags in platformio.ini.  Default to V1.2 if neither flag
+// is supplied so legacy build commands keep working.
+#if !defined(TRACKER_HW_V2) && !defined(TRACKER_HW_V1_2)
+#define TRACKER_HW_V1_2 1
+#endif
+
+// ---------------- TFT (ST7735, 0.96" 160x80) ---------------------------------
+// Same physical pins on both V1.2 and V2 -- only the panel init differs.
 constexpr uint8_t  TFT_CS    = 38;
 constexpr uint8_t  TFT_RST   = 39;
 constexpr uint8_t  TFT_DC    = 40;
@@ -17,8 +24,18 @@ constexpr uint8_t  TFT_MOSI  = 42;
 constexpr uint8_t  TFT_ROTATION = 1;       // landscape, ribbon at right
 constexpr uint16_t TFT_W = 160;
 constexpr uint16_t TFT_H = 80;
-constexpr uint8_t  TFT_X_OFFSET = 1;       // ST7735S 160x80 mini panel offset
+#if defined(TRACKER_HW_V2)
+// HTIT-Tracker V2: Heltec's HT_st7735.h sets XSTART=0/YSTART=24 and calls
+// st7735_invert_colors(false) when WIRELESS_TRACKER_V2 is defined.
+constexpr uint8_t  TFT_X_OFFSET = 0;
+constexpr uint8_t  TFT_Y_OFFSET = 24;
+constexpr bool     TFT_INVERT   = false;
+#else
+// HTIT-Tracker V1.2: 160x80 mini panel offsets, color inversion enabled.
+constexpr uint8_t  TFT_X_OFFSET = 1;
 constexpr uint8_t  TFT_Y_OFFSET = 26;
+constexpr bool     TFT_INVERT   = true;
+#endif
 
 // ---------------- GPS (UC6580 over UART2) -------------------------------------
 constexpr int      GPS_UART_NUM = 1;       // HardwareSerial(1)
