@@ -10,13 +10,18 @@
 
 class SessionStore {
 public:
-    enum class Backend { None, LittleFs, Sd, SdFat };
+    enum class Backend { None, LittleFs, Sd, SdFat, Failed };
 
     bool begin();   // mounts SD if enabled+detected, falls back to LittleFS
+                    // unless cfg::SD_REQUIRED -- in which case begin()
+                    // returns false and backend() is Backend::Failed.
 
     Backend       backend()     const { return backend_; }
     const char*   backendName() const;
     bool          sdMounted()   const { return backend_ == Backend::Sd || backend_ == Backend::SdFat; }
+    // True when SD was required but couldn't be initialized. Recording is
+    // refused; UI displays a "please reboot" message.
+    bool          storageFailed() const { return backend_ == Backend::Failed; }
     uint64_t      cardSizeMb()  const { return cardSizeMb_; }   // SD only; 0 otherwise
 
     bool isRecording() const { return recording_; }
@@ -79,6 +84,13 @@ public:
     bool readSessionToString(const String& id, size_t maxBytes, String& out) const;
 
 private:
+    // True iff a usable backend is mounted (excludes None and Failed).
+    bool hasUsableBackend() const {
+        return backend_ == Backend::SdFat
+            || backend_ == Backend::Sd
+            || backend_ == Backend::LittleFs;
+    }
+
     bool   recording_   = false;
     String activeId_;
     uint32_t sampleCount_ = 0;

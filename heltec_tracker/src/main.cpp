@@ -74,7 +74,13 @@ void setup() {
     gGps.begin();
 
     if (!gStore.begin()) {
-        Serial.println("[STORE] FATAL: no backend available -- recording disabled");
+        if (gStore.storageFailed()) {
+            Serial.println("[STORE] FATAL: SD card required but not detected.");
+            Serial.println("[STORE]        Recording is DISABLED until reboot.");
+            Serial.println("[STORE]        Reseat the card / check 5V on HW-125 VCC, then power-cycle.");
+        } else {
+            Serial.println("[STORE] FATAL: no backend available -- recording disabled");
+        }
     } else {
         Serial.printf("[STORE] backend=%s used=%u total=%u",
                       gStore.backendName(),

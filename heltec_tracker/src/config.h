@@ -68,6 +68,19 @@ constexpr size_t      MAX_LINE_BYTES  = 160;
 //   HW-125 CS   -> GPIO 7
 // Dedicated SPI bus (HSPI), independent from the TFT bus on GPIO 38-42.
 constexpr bool     SD_ENABLED   = true;
+// If true (default), the firmware REFUSES to fall back to on-chip LittleFS
+// when the SD card can't be mounted. Recording stays disabled and the UI
+// shows "STORAGE INIT FAILED -- REBOOT" until the user power-cycles. This
+// is the safe choice for field collection: a silent fallback to the 1.5MB
+// internal partition has historically caused users to lose hours of data
+// thinking the SD card was being written. Set to false only if you want
+// internal-only operation as a deliberate fallback.
+constexpr bool     SD_REQUIRED  = true;
+// On cold-boot from battery the HW-125's onboard LDO sometimes needs a few
+// hundred ms longer than on USB power before the card responds. Retry the
+// SdFat mount up to this many times with a short gap between attempts.
+constexpr uint8_t  SD_INIT_RETRIES = 6;
+constexpr uint16_t SD_INIT_RETRY_GAP_MS = 250;
 // Wiring: HW-125 MISO -> GPIO 4, MOSI -> GPIO 6 (see heltec_tracker/AGENTS.md).
 constexpr uint8_t  SD_MISO_PIN  = 4;
 constexpr uint8_t  SD_MOSI_PIN  = 6;

@@ -356,6 +356,21 @@ void Ui::renderStorage() {
     if (!store_) return;
     char buf[40];
 
+    // Hard-failure mode: SD was required and didn't mount. Show a single
+    // unambiguous message so the user knows recording is disabled and the
+    // device needs a power cycle. No half-measures.
+    if (store_->storageFailed()) {
+        if (forceFullRedraw_) {
+            tft.fillRect(0, HEADER_H, cfg::TFT_W, cfg::TFT_H - HEADER_H, COL_BG);
+        }
+        field(28, 4, 14, 156, 8, "STORAGE INIT FAILED", COL_RED, COL_BG, 1);
+        field(29, 4, 26, 156, 8, "SD card not detected", COL_AMBER, COL_BG, 1);
+        field(30, 4, 40, 156, 8, "Please reboot device", COL_FG, COL_BG, 1);
+        field(31, 4, 54, 156, 8, "Check card seat / power", COL_DIM, COL_BG, 1);
+        field(32, 4, 66, 156, 8, "Recording is DISABLED", COL_RED, COL_BG, 1);
+        return;
+    }
+
     const bool rec = store_->isRecording();
     const bool fix = gps_ && gps_->hasFix();
     field(30, 4, 14, 50, 8, "REC", COL_DIM, COL_BG, 1);

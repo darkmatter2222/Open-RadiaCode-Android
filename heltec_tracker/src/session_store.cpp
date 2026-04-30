@@ -94,30 +94,43 @@ bool SessionStore::begin() {
         // tiny so there's nothing to gain from a faster bus.
         const uint32_t kSdFatClocks[] = { SD_SCK_MHZ(8), SD_SCK_MHZ(4),
                                           SD_SCK_MHZ(1), SD_SCK_HZ(400000) };
-        for (uint32_t hz : kSdFatClocks) {
-            SdSpiConfig spiCfg(cfg::SD_CS_PIN, SHARED_SPI, hz, &gSdSpi);
-            if (gSdFat.begin(spiCfg)) {
-                uint64_t cardSizeBytes =
-                    (uint64_t)gSdFat.card()->sectorCount() * 512ULL;
-                cardSizeMb_ = cardSizeBytes / (1024ULL * 1024ULL);
-                Serial.printf("[SdFat] mounted at %u Hz: size=%lluMB fatType=%u\n",
-                              (unsigned)hz, (unsigned long long)cardSizeMb_,
-                              (unsigned)gSdFat.fatType());
-                sdFatPreflightOk_ = true;
-                backend_ = Backend::SdFat;
-                fs_ = nullptr;  // SdFat doesn't expose fs::FS
-                if (!gSdFat.exists(cfg::SESSIONS_DIR)) {
-                    gSdFat.mkdir(cfg::SESSIONS_DIR);
-                }
-                return true;
+        // On battery cold-boot the HW-125 LDO sometimes needs more than 50ms
+        // to ramp before the card responds. Retry the entire clock sweep a
+        // few times with a short gap so we don't give up too early.
+        for (uint8_t attempt = 0; attempt < cfg::SD_INIT_RETRIES; ++attempt) {
+            if (attempt > 0) {
+                Serial.printf("[SdFat] retry %u/%u after %ums\n",
+                              (unsigned)attempt,
+                              (unsigned)(cfg::SD_INIT_RETRIES - 1),
+                              (unsigned)cfg::SD_INIT_RETRY_GAP_MS);
+                delay(cfg::SD_INIT_RETRY_GAP_MS);
+                sdBitBangWakeup(cfg::SD_SCK_PIN, cfg::SD_MOSI_PIN, cfg::SD_CS_PIN);
             }
-            Serial.printf("[SdFat] %u Hz failed: errCode=0x%02X errData=0x%02X\n",
-                          (unsigned)hz, gSdFat.sdErrorCode(), gSdFat.sdErrorData());
+            for (uint32_t hz : kSdFatClocks) {
+                SdSpiConfig spiCfg(cfg::SD_CS_PIN, SHARED_SPI, hz, &gSdSpi);
+                if (gSdFat.begin(spiCfg)) {
+                    uint64_t cardSizeBytes =
+                        (uint64_t)gSdFat.card()->sectorCount() * 512ULL;
+                    cardSizeMb_ = cardSizeBytes / (1024ULL * 1024ULL);
+                    Serial.printf("[SdFat] mounted at %u Hz attempt=%u: size=%lluMB fatType=%u\n",
+                                  (unsigned)hz, (unsigned)attempt,
+                                  (unsigned long long)cardSizeMb_,
+                                  (unsigned)gSdFat.fatType());
+                    sdFatPreflightOk_ = true;
+                    backend_ = Backend::SdFat;
+                    fs_ = nullptr;  // SdFat doesn't expose fs::FS
+                    if (!gSdFat.exists(cfg::SESSIONS_DIR)) {
+                        gSdFat.mkdir(cfg::SESSIONS_DIR);
+                    }
+                    return true;
+                }
+                Serial.printf("[SdFat] %u Hz failed: errCode=0x%02X errData=0x%02X (attempt %u)\n",
+                              (unsigned)hz, gSdFat.sdErrorCode(), gSdFat.sdErrorData(),
+                              (unsigned)attempt);
+            }
         }
-        Serial.println("[SdFat] mount FAILED across all clocks - "
-                       "card not responding on this bus. "
-                       "Likely HW-125 power issue (LDO needs 5V VCC, not 3V3) "
-                       "or wiring fault. Trying stock drivers as last resort.");
+        Serial.println("[SdFat] mount FAILED across all clocks and retries - "
+                       "card not responding on this bus.");
 
         // ===== Attempt 2: SD_MMC peripheral, 1-bit mode =====================
         // The S3 has a dedicated SDMMC controller that is *not* SPI. It uses
@@ -247,6 +260,19 @@ bool SessionStore::begin() {
         }
     }
 
+    // ---- SD required gate -------------------------------------------------
+    // If the user requires SD (default), refuse to silently fall through to
+    // the on-chip 1.5MB LittleFS partition. They want a clear failure state
+    // they can react to (reboot / reseat the card) rather than logging
+    // hours of field data to a tiny internal partition by accident.
+    if (cfg::SD_ENABLED && cfg::SD_REQUIRED) {
+        Serial.println("[STORE] FATAL: SD_REQUIRED=true and SD did not mount. "
+                       "Recording will stay disabled until reboot.");
+        backend_ = Backend::Failed;
+        fs_ = nullptr;
+        return false;
+    }
+
     // ---- Fallback: LittleFS -----------------------------------------------
     // Our partition table labels the LittleFS partition "littlefs" (subtype
     // "spiffs" because LittleFS reuses the SPIFFS subtype on ESP-IDF). The
@@ -269,12 +295,13 @@ const char* SessionStore::backendName() const {
         case Backend::Sd:       return "SD";
         case Backend::SdFat:    return "SdFat";
         case Backend::LittleFs: return "LittleFS";
+        case Backend::Failed:   return "FAILED";
         default:                return "none";
     }
 }
 
 bool SessionStore::resumeIfActive() {
-    if (backend_ == Backend::None) return false;
+    if (!hasUsableBackend()) return false;
     if (backend_ == Backend::SdFat) {
         if (!gSdFat.exists(cfg::ACTIVE_FILE)) return false;
         FsFile f = gSdFat.open(cfg::ACTIVE_FILE, O_RDONLY);
@@ -335,7 +362,7 @@ bool SessionStore::resumeIfActive() {
 }
 
 bool SessionStore::start() {
-    if (backend_ == Backend::None) { log_e("start: no backend"); return false; }
+    if (!hasUsableBackend()) { log_e("start: no backend"); return false; }
     if (recording_) stop();
     activeId_ = makeSessionId();
     sampleCount_ = 0;
@@ -389,7 +416,7 @@ void SessionStore::append(uint32_t /*tsLow*/, uint64_t timestampMsFull,
                           bool hasGps, double lat, double lng,
                           const String& deviceId) {
     if (!recording_ || !activeId_.length()) return;
-    if (backend_ == Backend::None) return;
+    if (!hasUsableBackend()) return;
 
     char line[cfg::MAX_LINE_BYTES];
     int len;
@@ -547,7 +574,7 @@ std::vector<SessionStore::SessionInfo> SessionStore::listSessions() const {
 }
 
 bool SessionStore::dumpSession(const String& id, Stream& out) const {
-    if (backend_ == Backend::None) {
+    if (!hasUsableBackend()) {
         out.printf("[DUMP-ERR] id=%s reason=no-backend\n", id.c_str());
         return false;
     }
@@ -643,7 +670,7 @@ void SessionStore::dumpAll(Stream& out) const {
 
 uint32_t SessionStore::wipeAll() {
     if (recording_) stop();
-    if (backend_ == Backend::None) return 0;
+    if (!hasUsableBackend()) return 0;
 
     if (backend_ == Backend::SdFat) {
         gSdFat.remove(cfg::ACTIVE_FILE);
@@ -695,7 +722,7 @@ uint32_t SessionStore::wipeAll() {
 }
 
 bool SessionStore::removeSession(const String& id) {
-    if (id.length() == 0 || backend_ == Backend::None) return false;
+    if (id.length() == 0 || !hasUsableBackend()) return false;
     if (recording_ && activeId_ == id) return false;   // refuse to delete active
     if (backend_ == Backend::SdFat) {
         String path = pathFor(id);
@@ -706,7 +733,7 @@ bool SessionStore::removeSession(const String& id) {
 }
 
 bool SessionStore::readSessionToString(const String& id, size_t maxBytes, String& out) const {
-    if (backend_ == Backend::None) return false;
+    if (!hasUsableBackend()) return false;
     String path = pathFor(id);
     if (backend_ == Backend::SdFat) {
         FsFile f = gSdFat.open(path.c_str(), O_RDONLY);
