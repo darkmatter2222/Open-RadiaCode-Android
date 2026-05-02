@@ -69,6 +69,12 @@ private:
     int                vbatPct_ = -1;
 
     LongAction         pendingAction_ = ACTION_NONE;
+    // Stopping recording requires two consecutive long-presses within
+    // kConfirmStopTimeoutMs.  The first long-press arms this flag; the
+    // second actually executes the stop.  Prevents accidental mid-trip stops.
+    bool               confirmStopPending_ = false;
+    uint32_t           confirmStopArmMs_   = 0;
+    static constexpr uint32_t kConfirmStopTimeoutMs = 5000;
     bool               forceFullRedraw_ = true;
     Screen             lastDrawnScreen_ = SCREEN_NORMAL_COUNT;
 

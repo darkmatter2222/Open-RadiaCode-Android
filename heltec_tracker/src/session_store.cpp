@@ -391,6 +391,7 @@ bool SessionStore::start() {
 
     recording_ = true;
     log_i("Session started: %s", activeId_.c_str());
+    Serial.printf("[REC] START: id=%s backend=LittleFS\n", activeId_.c_str());
     return true;
 }
 
@@ -403,6 +404,8 @@ bool SessionStore::stop() {
         fs_->remove(cfg::ACTIVE_FILE);
     }
     log_i("Session stopped: %s (%u samples)", activeId_.c_str(), (unsigned)sampleCount_);
+    Serial.printf("[REC] STOP: id=%s samples=%u\n",
+                  activeId_.c_str(), (unsigned)sampleCount_);
     return true;
 }
 

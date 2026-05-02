@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse, re, sys, threading, time
 import serial
 
-PORT = "COM3"
+PORT = "COM4"
 BAUD = 115200
 
 def open_port() -> serial.Serial:

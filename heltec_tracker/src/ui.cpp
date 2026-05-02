@@ -98,6 +98,7 @@ void Ui::setSources(GpsModule* gps, SessionStore* store, RadiaCode* rc) {
 
 // ---------------------------------------------------------------------------
 void Ui::onShortPress() {
+    confirmStopPending_ = false;      // any screen navigation cancels pending stop
     if (screen_ == SCREEN_PICKER) {
         if (pickList_.empty()) return;
         // cursor 0..N-1 = device index, N = "Cancel"
@@ -116,7 +117,21 @@ void Ui::onLongPress() {
             pendingAction_ = ACTION_START_PICKER;
             break;
         case SCREEN_STORAGE:
-            pendingAction_ = ACTION_TOGGLE_REC;
+            if (store_ && store_->isRecording()) {
+                if (confirmStopPending_) {
+                    // Second long press within window: confirmed, actually stop
+                    confirmStopPending_ = false;
+                    pendingAction_ = ACTION_TOGGLE_REC;
+                } else {
+                    // First long press: arm confirmation, show prompt on screen
+                    confirmStopPending_ = true;
+                    confirmStopArmMs_ = millis();
+                    forceFullRedraw_ = true;
+                }
+            } else {
+                // Not recording: start immediately, no confirmation needed
+                pendingAction_ = ACTION_TOGGLE_REC;
+            }
             break;
         case SCREEN_PICKER:
             if (pickerCursor_ >= (int)pickList_.size()) {
@@ -207,6 +222,11 @@ void Ui::field(int idx, int x, int y, int w, int h,
 
 // ---------------------------------------------------------------------------
 void Ui::tick() {
+    // Expire the stop-recording confirmation if the user didn't confirm in time
+    if (confirmStopPending_ && (millis() - confirmStopArmMs_) >= kConfirmStopTimeoutMs) {
+        confirmStopPending_ = false;
+        forceFullRedraw_ = true;
+    }
     if (screen_ != lastDrawnScreen_) {
         tft.fillScreen(COL_BG);
         for (int i = 0; i < MAX_FIELDS; ++i) prevText_[i] = "";
@@ -420,10 +440,14 @@ void Ui::renderStorage() {
         prevPct = pct;
     }
 
-    snprintf(buf, sizeof(buf), "%s   Sess:%d",
-             rec ? "Hold: STOP" : "Hold: START",
-             store_->sessionCount());
-    field(35, 4, 66, 156, 8, buf, COL_DIM, COL_BG, 1);
+    if (confirmStopPending_) {
+        field(35, 4, 66, 156, 8, "HOLD AGAIN: STOP REC", COL_RED, COL_BG, 1);
+    } else {
+        snprintf(buf, sizeof(buf), "%s   Sess:%d",
+                 rec ? "Hold: STOP" : "Hold: START",
+                 store_->sessionCount());
+        field(35, 4, 66, 156, 8, buf, COL_DIM, COL_BG, 1);
+    }
 }
 
 // ---------------------------------------------------------------------------
