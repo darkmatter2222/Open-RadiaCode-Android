@@ -270,8 +270,12 @@ export default function App() {
           {sessions.map((s, i) => {
             const isSel = selected.has(s.sessionId);
             const c = sessionColor(i);
-            const dt = s.firstTsMs ? new Date(s.firstTsMs) : null;
-            const dur = (s.firstTsMs && s.lastTsMs)
+            // Guard against firstTsMs poisoned by pre-2020 millis()-since-boot
+            // timestamps from old firmware.  Show "(date unknown)" instead of 1970.
+            const firstOk = s.firstTsMs && s.firstTsMs >= MIN_VALID_TS_MS;
+            const dt = firstOk ? new Date(s.firstTsMs) : null;
+            const lastOk  = s.lastTsMs  && s.lastTsMs  >= MIN_VALID_TS_MS;
+            const dur = (firstOk && lastOk)
               ? Math.round((s.lastTsMs - s.firstTsMs) / 1000) : null;
             return (
               <li key={s.sessionId} className={isSel ? 'sel' : ''}>

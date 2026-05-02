@@ -42,6 +42,7 @@ import pymongo
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError, PyMongoError
 
@@ -53,9 +54,16 @@ MONGO_URI         = os.getenv("MONGO_URI", "mongodb://mongo:27017")
 MONGO_DB          = os.getenv("MONGO_DB", "radiacode")
 SAMPLES_COLL      = os.getenv("MONGO_SAMPLES_COLLECTION", "tracker_samples")
 SESSIONS_COLL     = os.getenv("MONGO_SESSIONS_COLLECTION", "tracker_sessions")
-API_VERSION       = "0.1.0"
+API_VERSION       = "0.2.0"
 MAX_BODY_BYTES    = int(os.getenv("MAX_BODY_BYTES", str(8 * 1024 * 1024)))   # 8 MB
 INGEST_BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "1000"))
+FIRMWARE_DIR      = os.getenv("FIRMWARE_DIR", "/firmware")
+
+# Reject any sample timestamp older than 2020-01-01 UTC.  The Heltec tracker
+# firmware used to fall back to millis()-since-boot (a few hundred ms to a
+# few days worth of ms) when GPS UTC was not yet acquired.  One such row is
+# enough to make firstTsMs look like 1970 and the session span 56 years.
+MIN_VALID_TS_MS = 1_577_836_800_000  # 2020-01-01 00:00:00 UTC
 
 
 @asynccontextmanager
@@ -96,6 +104,14 @@ app.add_middleware(
     allow_methods=["*"], allow_headers=["*"],
 )
 
+# Serve firmware binaries and version.json from FIRMWARE_DIR if it exists.
+# Trackers hit GET /firmware/version.json on boot to check for OTA updates.
+if os.path.isdir(FIRMWARE_DIR):
+    app.mount("/firmware", StaticFiles(directory=FIRMWARE_DIR), name="firmware")
+    log.info("firmware static files mounted from %s", FIRMWARE_DIR)
+else:
+    log.warning("FIRMWARE_DIR %s not found; /firmware/ endpoint disabled", FIRMWARE_DIR)
+
 
 # ---------- helpers ---------------------------------------------------------
 
@@ -122,8 +138,13 @@ def _safe_int(v: str) -> int | None:
 
 
 def _parse_csv(body: str, session_id: str, header_device_id: str | None,
-               tracker_id: str | None, firmware: str | None) -> list[dict[str, Any]]:
+               tracker_id: str | None, firmware: str | None
+               ) -> tuple[list[dict[str, Any]], int]:
     """Parse a CSV upload into Mongo-ready docs.
+
+    Returns (valid_docs, rejected_count).  Rows with timestampMs < MIN_VALID_TS_MS
+    (pre-2020, i.e. raw millis()-since-boot from old firmware) are counted but
+    never inserted -- they would poison firstTsMs and make sessions span 56 years.
 
     Schema (per row):
         sessionId, deviceId, trackerId, firmware,
@@ -131,6 +152,7 @@ def _parse_csv(body: str, session_id: str, header_device_id: str | None,
         latitude, longitude, loc {type:Point, coordinates:[lng,lat]}  (only if non-zero)
     """
     out: list[dict[str, Any]] = []
+    rejected = 0
     rdr = csv.reader(io.StringIO(body))
     for row in rdr:
         if not row:
@@ -149,6 +171,16 @@ def _parse_csv(body: str, session_id: str, header_device_id: str | None,
         dev  = row[5].strip() or (header_device_id or None)
 
         if ts is None:
+            rejected += 1
+            continue
+        # Server-side sanity gate: reject pre-2020 timestamps.  The firmware
+        # now filters these out before writing to SD card, but old session
+        # files created before that fix get uploaded verbatim and must be
+        # caught here to prevent session metadata corruption.
+        if ts < MIN_VALID_TS_MS:
+            rejected += 1
+            log.debug("ingest sessionId=%s rejecting row ts=%d (pre-2020)",
+                      session_id, ts)
             continue
         doc: dict[str, Any] = {
             "sessionId":  session_id,
@@ -164,7 +196,10 @@ def _parse_csv(body: str, session_id: str, header_device_id: str | None,
         if lat is not None and lng is not None and not (lat == 0.0 and lng == 0.0):
             doc["loc"] = {"type": "Point", "coordinates": [lng, lat]}
         out.append(doc)
-    return out
+    if rejected:
+        log.warning("ingest sessionId=%s rejected %d pre-2020 row(s) (old firmware artifact)",
+                    session_id, rejected)
+    return out, rejected
 
 
 def _bulk_insert(coll, docs: list[dict[str, Any]]) -> tuple[int, int]:
@@ -247,8 +282,9 @@ def list_sessions(limit: int = 200):
 
 
 @app.get("/sessions/{session_id}")
-def session_detail(session_id: str, limit: int = 1000, skip: int = 0):
-    """Return raw samples for a session (paged)."""
+def session_detail(session_id: str, limit: int = 5000, skip: int = 0):
+    """Return raw samples for a session (paged).  Default page size raised to
+    5000 to match the viewer's fetch page size and reduce round-trips."""
     cur = (app.state.samples
            .find({"sessionId": session_id}, sort=[("timestampMs", 1)])
            .skip(skip).limit(limit))
@@ -257,6 +293,59 @@ def session_detail(session_id: str, limit: int = 1000, skip: int = 0):
         d["_id"] = str(d["_id"])
         rows.append(d)
     return {"sessionId": session_id, "skip": skip, "limit": limit, "rows": rows}
+
+
+@app.post("/admin/recompute-sessions")
+def recompute_sessions():
+    """Recompute firstTsMs, lastTsMs, and samples for every session from actual
+    DB sample data (only counting rows with timestampMs >= MIN_VALID_TS_MS).
+    Also purges any sample rows with pre-2020 timestamps.
+
+    Call this once after upgrading the API to clear up sessions that were
+    poisoned by millis()-since-boot timestamps from old firmware.
+    """
+    samples = app.state.samples
+    sessions_coll = app.state.sessions
+
+    # 1. Delete all pre-2020 sample rows.
+    del_result = samples.delete_many({"timestampMs": {"$lt": MIN_VALID_TS_MS}})
+    purged = del_result.deleted_count
+    log.info("recompute-sessions: purged %d pre-2020 sample rows", purged)
+
+    # 2. Recompute per-session stats from remaining samples.
+    pipeline = [
+        {"$match": {"timestampMs": {"$gte": MIN_VALID_TS_MS}}},
+        {"$group": {
+            "_id":       "$sessionId",
+            "samples":   {"$sum": 1},
+            "firstTsMs": {"$min": "$timestampMs"},
+            "lastTsMs":  {"$max": "$timestampMs"},
+            "deviceId":  {"$last": "$deviceId"},
+            "trackerId": {"$last": "$trackerId"},
+            "firmware":  {"$last": "$firmware"},
+        }},
+    ]
+    updated = 0
+    for row in samples.aggregate(pipeline):
+        sid = row["_id"]
+        sessions_coll.update_one(
+            {"sessionId": sid},
+            {"$set": {
+                "samples":   row["samples"],
+                "firstTsMs": row["firstTsMs"],
+                "lastTsMs":  row["lastTsMs"],
+            }},
+            upsert=False,
+        )
+        updated += 1
+        log.info("recompute-sessions: %s -> samples=%d firstTs=%d lastTs=%d",
+                 sid, row["samples"], row["firstTsMs"], row["lastTsMs"])
+
+    return {
+        "purgedSampleRows": purged,
+        "sessionsUpdated":  updated,
+        "minValidTsMs":     MIN_VALID_TS_MS,
+    }
 
 
 @app.post("/ingest/csv")
@@ -273,18 +362,36 @@ async def ingest_csv(
     if len(body) > MAX_BODY_BYTES:
         raise HTTPException(status_code=413, detail=f"body > {MAX_BODY_BYTES} bytes")
 
+    log.info("ingest request sessionId=%s tracker=%s firmware=%s bodyBytes=%d",
+             x_session_id, x_tracker_id, x_firmware, len(body))
+
     text = body.decode("utf-8", errors="replace")
-    docs = _parse_csv(text, x_session_id, x_device_id, x_tracker_id, x_firmware)
+    docs, rejected = _parse_csv(text, x_session_id, x_device_id, x_tracker_id, x_firmware)
+
+    if not docs and rejected > 0:
+        log.error("ingest sessionId=%s ALL %d rows rejected (pre-2020 timestamps); "
+                  "old firmware artifact -- not inserting", x_session_id, rejected)
+        raise HTTPException(
+            status_code=400,
+            detail=f"All {rejected} rows have pre-2020 timestamps (old firmware artifact). "
+                   "Flash updated firmware to stop recording millis()-since-boot as timestamps.",
+        )
     if not docs:
         raise HTTPException(status_code=400, detail="no parseable rows")
 
     inserted, duplicates = _bulk_insert(app.state.samples, docs)
 
     now_ms = int(time.time() * 1000)
+    # first_ts/last_ts computed ONLY from the validated (>= MIN_VALID_TS_MS) docs.
+    # This is critical: using $min on raw rows lets one bad row permanently
+    # corrupt firstTsMs for the session.
     first_ts = min(d["timestampMs"] for d in docs)
     last_ts  = max(d["timestampMs"] for d in docs)
 
-    # Upsert session metadata.
+    # Upsert session metadata.  Use $min/$max only over valid timestamps.
+    # NOTE: firstTsMs uses $min which means a subsequent upload with a smaller
+    # but still-valid timestamp is fine (correct early boundary).  But we
+    # must never let pre-2020 values reach here -- filtered above.
     app.state.sessions.update_one(
         {"sessionId": x_session_id},
         {
@@ -303,11 +410,17 @@ async def ingest_csv(
         upsert=True,
     )
 
-    log.info("ingest sessionId=%s rows=%d inserted=%d dup=%d",
-             x_session_id, len(docs), inserted, duplicates)
+    log.info(
+        "ingest OK sessionId=%s received=%d valid=%d rejected=%d inserted=%d dup=%d "
+        "firstTsMs=%d lastTsMs=%d",
+        x_session_id, len(docs) + rejected, len(docs), rejected,
+        inserted, duplicates, first_ts, last_ts,
+    )
     return JSONResponse({
         "sessionId":   x_session_id,
-        "received":    len(docs),
+        "received":    len(docs) + rejected,
+        "valid":       len(docs),
+        "rejected":    rejected,
         "inserted":    inserted,
         "duplicates":  duplicates,
         "firstTsMs":   first_ts,

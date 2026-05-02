@@ -108,10 +108,19 @@ uint64_t GpsModule::bestEpochMs() {
         (lastUtcSyncMs_ == 0 || (now - lastUtcSyncMs_) >= 30000)) {
         const uint64_t fresh = utcEpochMs();
         if (fresh != 0) {
+            const bool firstAnchor = (utcAnchorMs_ == 0);
             // Account for the small age of the parsed sentence.
             utcAnchorMs_   = fresh;
             millisAnchor_  = now - gps_.time.age();
             lastUtcSyncMs_ = now;
+            if (firstAnchor) {
+                Serial.printf("[GPS] UTC anchor set: %llu ms (millis=%u age=%u)\n",
+                              (unsigned long long)utcAnchorMs_, now, gps_.time.age());
+            } else {
+                Serial.printf("[GPS] UTC anchor refreshed: %llu ms (drift %lld ms)\n",
+                              (unsigned long long)utcAnchorMs_,
+                              (long long)(fresh - (utcAnchorMs_ + (uint64_t)(now - millisAnchor_))));
+            }
         }
     }
     if (utcAnchorMs_ == 0) return 0;
