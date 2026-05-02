@@ -49,6 +49,8 @@ export default function App() {
   const [selected, setSelected]   = useState(new Set());
   const [doseMin, setDoseMin]     = useState(0);            // uSv/h
   const [doseMax, setDoseMax]     = useState(1.0);          // uSv/h
+  // Set true once the user manually edits min/max so we stop auto-fitting.
+  const [doseScaleManual, setDoseScaleManual] = useState(false);
   const [showPoints, setShowPoints] = useState(true);
   const [colorByDose, setColorByDose] = useState(true);
   const [nanoMode, setNanoMode]     = useState(false);
@@ -177,6 +179,29 @@ export default function App() {
     setFitTrigger(t => t + 1);
   }, [fitKey]);
 
+  // Auto-fit the dose color scale to the loaded data the first time rows
+  // arrive (and on every subsequent selection change) so the gradient maps
+  // usefully across the actual range. 5th/95th percentile clamps outliers.
+  // Stops once the user manually adjusts the scale.
+  useEffect(() => {
+    if (doseScaleManual) return;
+    const vals = [];
+    for (const id of selected) {
+      const rows = rowsBySession[id];
+      if (!rows) continue;
+      for (const r of rows) {
+        if (typeof r.uSv === 'number' && isFinite(r.uSv)) vals.push(r.uSv);
+      }
+    }
+    if (vals.length < 2) return;
+    vals.sort((a, b) => a - b);
+    const lo = vals[Math.floor(vals.length * 0.05)];
+    const hi = vals[Math.floor(vals.length * 0.95)];
+    if (!(hi > lo)) return;
+    setDoseMin(parseFloat(lo.toFixed(3)));
+    setDoseMax(parseFloat(hi.toFixed(3)));
+  }, [rowsBySession, selected, doseScaleManual]);
+
   // ---- play/pause
   useEffect(() => {
     if (!playing) { clearInterval(playRef.current); return; }
@@ -274,8 +299,8 @@ export default function App() {
 
           <h3>Dose color scale ({nanoMode ? 'nSv/h' : '\u00B5Sv/h'})</h3>
           <div className="row">
-            <label>min<input type="number" step="0.01" value={doseMin} onChange={e => setDoseMin(parseFloat(e.target.value) || 0)} /></label>
-            <label>max<input type="number" step="0.01" value={doseMax} onChange={e => setDoseMax(parseFloat(e.target.value) || 0.001)} /></label>
+            <label>min<input type="number" step="0.01" value={doseMin} onChange={e => { setDoseScaleManual(true); setDoseMin(parseFloat(e.target.value) || 0); }} /></label>
+            <label>max<input type="number" step="0.01" value={doseMax} onChange={e => { setDoseScaleManual(true); setDoseMax(parseFloat(e.target.value) || 0.001); }} /></label>
           </div>
           <div className="legend">
             <span style={{ background: doseColor(doseMin, doseMin, doseMax) }} />
@@ -330,10 +355,11 @@ export default function App() {
           {showPoints && filteredTraces.map(t => (
             <React.Fragment key={`${t.id}-pts`}>
               {t.filtered.map((p, i) => (
-                <CircleMarker key={i} center={[p.lat, p.lng]} radius={3}
+                <CircleMarker key={i} center={[p.lat, p.lng]} radius={4}
                   pathOptions={{
                     color: colorByDose ? doseColor(p.uSv, doseMin, doseMax) : t.color,
-                    fillOpacity: 0.9, weight: 1,
+                    fillColor: colorByDose ? doseColor(p.uSv, doseMin, doseMax) : t.color,
+                    fillOpacity: 0.95, weight: 1,
                   }}>
                   <Tooltip direction="top" offset={[0, -4]} opacity={0.9}>
                     <div style={{ fontSize: 12 }}>
