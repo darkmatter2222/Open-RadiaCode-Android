@@ -1,0 +1,87 @@
+:root {
+  --bg:        #0d0d0d;
+  --panel:    #1a1a1a;
+  --panel2:   #222;
+  --border:   #333;
+  --text:     #e6e6e6;
+  --muted:    #808080;
+  --accent:   #00e676;
+  --error:    #ff5252;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+
+.app { display: flex; height: 100vh; width: 100vw; }
+
+.sidebar {
+  width: 360px; min-width: 320px; max-width: 420px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar header {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.sidebar h1 { margin: 0; font-size: 18px; color: var(--accent); letter-spacing: 1px; }
+.muted { color: var(--muted); font-size: 12px; }
+.error { color: var(--error); padding: 8px 16px; font-size: 12px; }
+
+.row { display: flex; gap: 8px; padding: 8px 16px; align-items: center; }
+.row label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); flex: 1; }
+.row input[type=number] {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  padding: 4px 6px; border-radius: 4px; width: 100%;
+}
+
+button {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+button:hover { background: #2c2c2c; border-color: var(--accent); }
+
+.sessions {
+  list-style: none; margin: 0; padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+.sessions li {
+  padding: 8px 16px; border-bottom: 1px solid #222;
+}
+.sessions li.sel { background: #131; }
+.sessions label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-family: monospace; font-size: 12px; }
+.sessions .swatch { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 14px; }
+.sessions .sid { flex: 1; }
+.sessions .meta { padding-left: 22px; color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+.controls {
+  padding: 8px 16px 16px; overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.controls h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 12px 0 6px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+.legend { display: flex; gap: 0; height: 14px; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.legend span { flex: 1; }
+.stats { font-family: monospace; font-size: 12px; line-height: 1.6; }
+.stats b { color: var(--accent); font-weight: normal; }
+
+.map-pane { flex: 1; position: relative; }
+.map-pane > .leaflet-container { background: #111; }
+
+.scrubber {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(20, 20, 20, 0.92);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 14px;
+  z-index: 1000;
+}
+.scrubber .t-row { flex: 1; display: flex; align-items: center; gap: 10px; }
+.scrubber label { font-size: 11px; color: var(--muted); width: 50px; }
+.scrubber input[type=range] { flex: 1; }
+.scrubber .t-val { font-family: monospace; font-size: 11px; color: var(--accent); min-width: 160px; text-align: right; }
+
+.leaflet-tooltip { background: rgba(20,20,20,0.95) !important; color: var(--text) !important; border: 1px solid var(--border) !important; }

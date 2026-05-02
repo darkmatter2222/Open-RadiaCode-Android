@@ -1,108 +1,180 @@
-# HTIT-Tracker — RadiaCode Field Logger
+﻿# Heltec Tracker — RadiaCode Field Logger
 
-PlatformIO firmware for the **Heltec HTIT-Tracker V1.2** (Heltec WiFi LoRa 32 V3 + UC6580 GPS + ST7735 1.8" TFT).
+Standalone radiation logging system built around the **Heltec HTIT-Tracker V2** (ESP32-S3).
+No phone required. The device connects to a RadiaCode dosimeter via BLE, pairs each reading
+with a GPS fix, writes to SD card, and auto-uploads to a self-hosted API when on Wi-Fi.
 
-The phone is **not involved**. The board:
+---
 
-1. Scans BLE for a nearby RadiaCode dosimeter (auto-reconnects to the last-seen one).
-2. Performs the same `SET_EXCHANGE → SET_TIME → DEVICE_TIME=0` init that the Android app uses.
-3. Polls `RD_VIRT_STRING(VS_DATA_BUF)` at ~1 Hz, decodes the realtime record (CPS, dose rate, errors, battery, temperature) — same code path as the Android app.
-4. Reads UC6580 NMEA over UART2 (TinyGPSPlus).
-5. Logs each sample to **LittleFS** as CSV in the **identical schema** to the Android `SessionDataPoint`:
+## What This Repo Contains
 
-   ```
-   timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
-   ```
+| Directory | What it is |
+|-----------|-----------|
+| `src/` | ESP32-S3 firmware (C++, PlatformIO) |
+| `scripts/` | Python dev-tools: serial console, data download, map plotting |
+| `api/vega-tracker-ingest/` | FastAPI ingest service + MongoDB (Docker) |
+| `web/vega-tracker-viewer/` | React session map viewer (Docker/nginx) |
 
-   `timestampMs` is GPS UTC epoch ms once a fix is acquired; `millis()` since boot before that. `deviceId` is the RadiaCode's BLE MAC (no colons).
+---
 
-Wi-Fi/API offload is intentionally **not** implemented — see TODO at the bottom.
+## System Overview
+
+```
+RadiaCode dosimeter
+       | BLE
+       v
+Heltec HTIT-Tracker V2
+- polls dose rate + CPS at 1 Hz
+- pairs with GPS fix (UC6580 GNSS)
+- writes CSV to SD card
+- uploads over Wi-Fi when available
+       | HTTP POST /ingest/csv
+       v
+vega-tracker-ingest (FastAPI)    port 8030
+- validates timestamps (reject pre-2020)
+- writes to MongoDB (radiacode DB)
+- exposes session list + detail endpoints
+       |
+       v
+vega-tracker-viewer (React/nginx) port 8031
+- interactive session map (Leaflet)
+- dose rate heatmap, GPS track
+- session list with duration + sample count
+```
+
+---
+
+## Quick Start
+
+### 1. Firmware
+
+Install PlatformIO, then:
+
+```powershell
+# Copy secrets template and fill in your credentials
+cp src\secrets.h.example src\secrets.h
+# Edit src\secrets.h with your WiFi SSID/password and ingest URL
+
+# Build
+pio run -e heltec_tracker_v2
+
+# Flash (device appears as COM4 on this machine)
+pio run -e heltec_tracker_v2 -t upload --upload-port COM4
+
+# Watch serial output
+python scripts\drive.py listen 30
+```
+
+> **IMPORTANT:** Always use `-e heltec_tracker_v2`. The `v1_2` env inverts the display,
+> producing a solid white screen on V2 hardware.
+
+### 2. Ingest API
+
+```powershell
+cd api\vega-tracker-ingest
+
+# Copy and fill in credentials (see AGENTS.md for exact values)
+cp .env.example .env
+# Edit .env
+
+# Deploy to server
+.\deploy.ps1
+
+# Test
+curl http://192.168.86.48:8030/health
+curl http://192.168.86.48:8030/info
+```
+
+### 3. Web Viewer
+
+```powershell
+cd web\vega-tracker-viewer
+
+# Copy and fill in credentials
+cp .env.example .env
+# Edit .env
+
+# Deploy to server
+.\deploy.ps1
+# Then open: http://192.168.86.48:8031/
+```
 
 ---
 
 ## Hardware
 
-| Function | Pin | Notes |
-|---|---|---|
-| GPS UART RX (ESP RX) | 33 | from UC6580 TX |
-| GPS UART TX (ESP TX) | 34 | to UC6580 RX |
-| TFT CS | 5 | ST7735 |
-| TFT DC | 27 | |
-| TFT RST | 26 | |
-| TFT backlight | 21 | active HIGH |
-| GNSS+TFT power (VGNSS_CTRL) | 3 | active LOW |
-| VBat divider enable | 2 | active HIGH during read |
-| VBat ADC read | 1 | divider × 5.05 |
-| PRG button | 0 | active LOW |
-
-Pins mirror [darkmatter2222/External-GPS-Receiver-Heltec-HTIT-Tracker-V1.2](https://github.com/darkmatter2222/External-GPS-Receiver-Heltec-HTIT-Tracker-V1.2), which is verified working on this exact carrier.
+| Component | Part | Notes |
+|-----------|------|-------|
+| Tracker board | Heltec HTIT-Tracker V2 | ESP32-S3 + UC6580 GNSS + ST7735 TFT |
+| SD card module | HiLetgo HW-125 | VCC must be 5V, NOT 3V3 |
+| SD card | 16 GB Class 10 FAT32 | 70 B/row; years of capacity at 1 Hz |
+| Dosimeter | RadiaCode 102 | BLE MAC: 52:43:06:60:20:24 |
 
 ---
 
-## Build & flash
+## Server
 
-```powershell
-cd heltec_tracker
-pio run                    # build
-pio run -t upload          # flash
-pio device monitor -b 115200
-```
-
-First boot will format LittleFS automatically.
+- IP: `192.168.86.48`
+- SSH: `darkmatter2222@192.168.86.48` (key auth)
+- MongoDB on host at port 27017 (auth: see AGENTS.md)
+- API: `http://192.168.86.48:8030`
+- Viewer: `http://192.168.86.48:8031`
 
 ---
 
-## UI (single PRG button)
+## Firmware Version
 
-| Screen | Shows |
-|---|---|
-| **STATS** | Big nSv/h reading, CPS, error %, RC link state |
-| **GPS** | Fix, sats, HDOP, lat/lon, alt, speed |
-| **STORAGE** | Recording state, active session ID, sample count, disk %, session count |
+Current: **v0.2.0**
 
-Button mapping:
-
-- **Short press** → cycle to next screen.
-- **Long press (>800 ms)**:
-  - on STATS → force RadiaCode rescan.
-  - on STORAGE → toggle recording on/off.
-
-A red dot in the top-right header indicates recording is active.
-
-Header at top of every screen: current screen, `RC:<state>`, `GPS:OK/--`, battery %, recording dot.
+What changed in v0.2.0:
+- Double long-press required to stop recording (prevents accidental stops from vibration)
+- `[REC] START` / `[REC] STOP` serial log events
+- GPS UTC anchor logging
 
 ---
 
-## CSV file layout
+## Button Reference
 
-`/sessions/<YYYYMMDD_HHMMSS>.csv`:
+| Press | Screen | Action |
+|-------|--------|--------|
+| Short | any | Cycle to next screen |
+| Long | STATS | Force BLE rescan |
+| Long | STORAGE (not recording) | Start recording |
+| Long | STORAGE (recording) | Show confirmation prompt |
+| Long again (within 5s) | STORAGE (confirming) | Stop recording |
+| Short | STORAGE (confirming) | Cancel stop, keep recording |
+
+---
+
+## CSV Schema
 
 ```
 timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
-1745580001234,0.124000,42.500,40.7589123,-73.9851234,A1B2C3D4E5F6
-1745580002234,0.126000,43.100,40.7589188,-73.9851272,A1B2C3D4E5F6
+1746114660123,0.142,12.0,47.6062,-122.3321,5243066020F4
 ```
 
-This is byte-compatible with rows produced by the Android `SessionManager.SessionDataPoint.toCsv()`, so any future ingest endpoint will accept both sources.
+---
 
-`/active.txt` records the in-progress session ID so a power loss doesn't lose state — recording resumes on next boot.
+## Secrets
+
+Two secret files are gitignored — create them from the `.example` templates:
+
+| File | Template | Contains |
+|------|----------|---------|
+| `src/secrets.h` | `src/secrets.h.example` | WiFi credentials, ingest URL |
+| `api/vega-tracker-ingest/.env` | `api/vega-tracker-ingest/.env.example` | SSH creds, MongoDB URI |
+| `web/vega-tracker-viewer/.env` | `web/vega-tracker-viewer/.env.example` | SSH creds, API base URL |
+
+See `AGENTS.md` for the exact credential values.
 
 ---
 
-## RadiaCode protocol (matches Android)
+## Detailed Documentation
 
-- Service `e63215e5-7003-49d8-96b0-b024798fb901`
-- Write   `e63215e6-7003-49d8-96b0-b024798fb901` (write-without-response, 18-byte chunks)
-- Notify  `e63215e7-7003-49d8-96b0-b024798fb901` (length-prefixed reassembly)
-- Init: `SET_EXCHANGE 0x01 0xFF 0x12 0xFF` → `SET_TIME` → `WR_VIRT_SFR(VSFR_DEVICE_TIME=0)`
-- Poll: `RD_VIRT_STRING(0x0100 = VS_DATA_BUF)` → decode records (`gid=0` realtime, `gid=3` rare/battery, others skipped exactly like the Android decoder)
-- `uSvPerHour = doseRate * 10000.0f` — same conversion as Android.
-
----
-
-## TODO (not in v1)
-
-- Wi-Fi configuration screen + push CSVs to an HTTP endpoint when reachable, retain in LittleFS otherwise.
-- Session list / delete UI.
-- Mass-storage USB or BLE NUS export so files can be pulled without removing the board.
-- Configurable display units (currently fixed to nSv/h + CPS by spec).
+See [AGENTS.md](AGENTS.md) for:
+- Full hardware wiring tables and GPIO map
+- All subsystem internals (BLE, GPS, session store, TFT, uploader)
+- Serial console command reference
+- API endpoint reference
+- MongoDB admin commands
+- All lessons learned (SD power, GPS timestamp bugs, BT5 flags, etc.)

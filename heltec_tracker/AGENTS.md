@@ -1,629 +1,629 @@
-# Heltec HTIT-Tracker Agent Notes
+﻿# Heltec Tracker — Agent Operating Instructions
 
-Master reference for AI agents (and humans) working on the
-`heltec_tracker/` firmware. This is the long-form file: everything we
-have built, every dead end we hit, and every lesson learned. Read it
-before making changes here. The repo-wide [AGENTS.md](../AGENTS.md) is
-the short version.
+Full technical reference for AI agents working in this repo.
+Read this **before** making any changes.
 
-> **Last major update:** May 2026 — GPS timestamp reliability fixes
-> (pre-UTC sample skip, `bestEpochMs()` anchor for GPS-outage continuity);
-> default build env corrected to `heltec_tracker_v2`.
+This repo is self-contained: firmware, ingest API, and web viewer all live here.
 
 ---
 
-## 1. What this firmware does
-
-A standalone field tracker that:
-
-1. Connects (BLE central) to a RadiaCode dosimeter (101/102/103/103G/110).
-2. Polls dose rate + count rate at ~1 Hz.
-3. Pairs each reading with a UC6580 GNSS fix.
-4. Logs CSV samples to a micro-SD card (or LittleFS as an opt-in fallback).
-5. Renders a live status TFT (STATS / GPS / STORAGE / PICKER / FIX-MAP).
-6. Auto-uploads completed sessions to a `vega-tracker-ingest`
-   FastAPI service when a known Wi-Fi network is in range.
-
-It is the no-phone counterpart to the Android app: same CSV schema,
-same isotope ID pipeline, same map viewer.
-
----
-
-## 2. Hardware
-
-### 2.1 Board
-
-- **Heltec HTIT-Tracker V2** (ESP32-S3FN8 + SX1262 + UC6580 GNSS +
-  ST7735 0.96" 160×80 TFT)
-- PlatformIO env: **`heltec_tracker_v2`** (default; use this for all
-  build/flash commands — do NOT use `heltec_tracker_v1_2` as that sets
-  `TFT_INVERT = true` which produces a solid white screen on V2 hardware)
-- Panel offsets: `XSTART=0 / YSTART=24`, `invertDisplay(false)`
-- Arduino-ESP32 core: ESP-IDF 4.4 / Arduino-ESP32 2.0.14
-  (set by `platform = espressif32 @ ^6.7.0`)
-- Native USB-CDC on boot (`ARDUINO_USB_CDC_ON_BOOT=1`,
-  `ARDUINO_USB_MODE=1`)
-- Upload port: auto-detected (COM4 on this dev box)
-- Flash partition: custom `partitions_tracker_v2.csv`
-
-### 2.2 Reserved / in-use GPIOs (do **not** reuse)
-
-| Pin(s)         | Function                                |
-|----------------|-----------------------------------------|
-| 38, 39, 40, 41, 42 | TFT (CS / DC / RST / SCLK / MOSI; backlight on 21) |
-| 33, 34         | UC6580 GNSS UART RX / TX (UART1)        |
-| 3              | VTFT/VGNSS rail enable (HIGH = on)      |
-| 21             | TFT backlight (HIGH = on)               |
-| 2              | VBAT divider enable (HIGH only when sampling) |
-| 1              | VBAT ADC1_CH0                           |
-| 0              | USER button (active LOW)                |
-| 19, 20         | USB D+ / D-                             |
-| Internal       | SX1262 LoRa SPI                         |
-
-### 2.3 Free GPIOs we are using
-
-| Pin | Function                |
-|-----|-------------------------|
-| 4   | SD MISO                 |
-| 5   | SD SCK                  |
-| 6   | SD MOSI                 |
-| 7   | SD CS                   |
-
-That's it. There are still plenty of free pins (9-18, 35-37, 45-48 with
-caveats) for future expansion (e.g. a buzzer, a GPS PPS line).
-
-### 2.4 SD card module — HiLetgo HW-125
-
-- 4-bit SPI breakout with onboard **AMS1117-3.3V** LDO and
-  **74LVC125A** level-shifter.
-- **Wire VCC to the Heltec `5V`/`Vin`/`USB` pin, NOT `3V3`.** The
-  AMS1117 has ~1.1 V dropout; feeding it 3.3 V puts the card's Vdd
-  at ~2.0-2.5 V and it will not respond. This cost us a full debug
-  session — see [§7 Lessons Learned](#7-lessons-learned).
-- Wiring table:
-
-  | HW-125  | Heltec | Notes                              |
-  |---------|--------|------------------------------------|
-  | GND     | GND    |                                    |
-  | VCC     | 5V     | feeds the onboard LDO              |
-  | MISO    | GPIO 4 | data in (ESP <- card)              |
-  | MOSI    | GPIO 6 | data out (ESP -> card)             |
-  | SCK     | GPIO 5 | SPI clock                          |
-  | CS      | GPIO 7 | chip-select                        |
-
-- We use the **FSPI** controller (SPI2) because GPIOs 4-7 land on its
-  IOMUX fast path on the S3, which is more reliable than the
-  GPIO-matrix-only HSPI for SD-over-SPI. The TFT lives on a separate
-  bus at GPIO 38-42 so they never collide.
-
-### 2.5 Cards verified
-
-- **HiLetgo 16 GB Class 10**, FAT32 — mounts at 8 MHz on first try via
-  SdFat. Storage budget: ≈70 B per CSV row → ~7 years at 1 Hz.
-
----
-
-## 3. Source layout
+## Repository Structure
 
 ```
-heltec_tracker/
-├── platformio.ini              # build env, lib_deps
-├── partitions_tracker.csv      # custom flash layout (1.5 MB littlefs)
-├── AGENTS.md                   # this file
-├── README.md
-├── src/
-│   ├── main.cpp                # setup() / loop(), serial console
-│   ├── config.h                # ALL pin assignments, feature flags
-│   ├── secrets.h               # gitignored - WIFI_SSID / INGEST_URL etc.
-│   ├── secrets.h.example
-│   ├── button.{h,cpp}          # debounced GPIO 0 input + long-press
-│   ├── gps_module.{h,cpp}      # UC6580 + auto-baud + diagnostics
-│   ├── radiacode.{h,cpp}       # NimBLE central + protocol + reconnect
-│   ├── session_store.{h,cpp}   # SD/SdFat/LittleFS CSV writer
-│   ├── ui.{h,cpp}              # ST7735 screens + state machine
-│   └── wifi_uploader.{h,cpp}   # FreeRTOS task on core 0 for HTTP POST
-└── scripts/
-    ├── drive.py                # serial console wrapper (cmd/listen/REPL)
-    ├── download_sessions.py    # DUMPALL -> CSV files, with auto-wipe
-    ├── plot_session_map.py     # interactive folium map
-    └── overnight_watch.py      # log-tailing watchdog with reconnect
+heltec-tracker/                   <- repo root (was heltec_tracker/ in monorepo)
+├── .gitignore
+├── AGENTS.md                     # this file
+├── README.md                     # quick-start for humans
+├── platformio.ini                # PlatformIO build config
+├── partitions_tracker_v2.csv     # custom flash partition table
+├── src/                          # ESP32-S3 firmware (C++)
+│   ├── main.cpp                  # setup() / loop(), serial REPL
+│   ├── config.h                  # ALL pin assignments + feature flags
+│   ├── secrets.h                 # gitignored — WiFi/URL credentials
+│   ├── secrets.h.example         # template for secrets.h
+│   ├── button.{h,cpp}            # debounced GPIO 0 + long-press engine
+│   ├── gps_module.{h,cpp}        # UC6580 GNSS: auto-baud, bestEpochMs()
+│   ├── radiacode.{h,cpp}         # NimBLE central + RadiaCode protocol
+│   ├── session_store.{h,cpp}     # SD/SdFat CSV writer + LittleFS fallback
+│   ├── ui.{h,cpp}                # ST7735 TFT screens + button state machine
+│   └── wifi_uploader.{h,cpp}     # FreeRTOS uploader task (core 0)
+├── scripts/                      # Python dev-tools (serial, data, mapping)
+│   ├── drive.py                  # serial console wrapper: cmd/listen/REPL
+│   ├── download_sessions.py      # DUMPALL -> CSV files + optional wipe
+│   ├── plot_session_map.py       # interactive Folium map from CSV
+│   ├── overnight_watch.py        # log-tailing watchdog with reconnect
+│   └── capture_boot.py           # trigger ESP32 reset via DTR/RTS and capture boot log
+├── api/
+│   └── vega-tracker-ingest/      # FastAPI ingest service (Docker)
+│       ├── .env                  # real credentials — gitignored
+│       ├── .env.example          # template
+│       ├── tracker_ingest_api.py # main FastAPI app
+│       ├── deploy.ps1            # deploy to remote server over SSH
+│       ├── docker-compose.yml
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       └── client_sample.py
+└── web/
+    └── vega-tracker-viewer/      # React + Vite session map viewer (Docker/nginx)
+        ├── .env                  # real credentials — gitignored
+        ├── .env.example          # template
+        ├── src/                  # React source
+        ├── deploy.ps1            # deploy to remote server over SSH
+        ├── docker-compose.yml
+        ├── Dockerfile
+        ├── nginx.conf
+        └── package.json
 ```
-
-`heltec_tracker/data/` holds older spectrogram captures from before
-the BLE work and is unused at runtime.
 
 ---
 
-## 4. Subsystems
+## Server & Credentials
 
-### 4.1 BLE / RadiaCode protocol — `radiacode.{h,cpp}`
+### Target server
 
-- Uses **NimBLE-Arduino 1.4.x** (`h2zero/NimBLE-Arduino`).
-- Service UUID: `e63215e5-7003-49d8-96b0-b024798fb901`.
-- Connect cycle: `Idle → Scanning → Connecting → Connected → Streaming`.
-- **Critical build flags** (in `platformio.ini`) — without these the
-  RC-110 silently drops connect requests:
-  - `CONFIG_BT_NIMBLE_EXT_ADV=1` (BT5 extended advertising)
+| Item                  | Value                               |
+|-----------------------|-------------------------------------|
+| Server IP             | 192.168.86.48                       |
+| SSH user              | darkmatter2222                      |
+| SSH key               | ~/.ssh/id_rsa                       |
+| API port              | 8030 (vega-tracker-ingest)          |
+| Viewer port           | 8031 (vega-tracker-viewer)          |
+| MongoDB port          | 27017 (host-native, not in Docker)  |
+| MongoDB auth source   | admin                               |
+
+### MongoDB connection
+
+```
+mongodb://ryan:Welcome123%21@host.docker.internal:27017/?authSource=admin
+```
+
+- User: `ryan`
+- Password: `Welcome123!` (URL-encoded as `Welcome123%21`)
+- Database: `radiacode`
+- Collections: `tracker_samples`, `tracker_sessions`
+
+Credentials are stored in:
+- `api/vega-tracker-ingest/.env` (for the ingest API Docker container)
+- Credentials are gitignored — copy from `.env.example` on a new machine.
+
+### The .env files (gitignored, but committed credentials are below for setup)
+
+`api/vega-tracker-ingest/.env`:
+```
+SSH_USER=darkmatter2222
+SSH_HOST=192.168.86.48
+SSH_KEY_PATH=~/.ssh/id_rsa
+REMOTE_PATH=/home/darkmatter2222/vega-tracker-ingest
+API_PORT=8030
+MONGO_URI=mongodb://ryan:Welcome123%21@host.docker.internal:27017/?authSource=admin
+MONGO_DB=radiacode
+MONGO_SAMPLES_COLLECTION=tracker_samples
+MONGO_SESSIONS_COLLECTION=tracker_sessions
+```
+
+`web/vega-tracker-viewer/.env`:
+```
+SSH_USER=darkmatter2222
+SSH_HOST=192.168.86.48
+SSH_KEY_PATH=~/.ssh/id_rsa
+REMOTE_PATH=/home/darkmatter2222/vega-tracker-viewer
+WEB_PORT=8031
+API_BASE=http://192.168.86.48:8030
+```
+
+---
+
+## Hardware
+
+### Board: Heltec HTIT-Tracker V2
+
+- **MCU**: ESP32-S3FN8 + SX1262 LoRa + UC6580 GNSS + ST7735 0.96" TFT (160x80)
+- **PlatformIO env**: always `heltec_tracker_v2` — NEVER `heltec_tracker_v1_2`
+  (V1.2 env inverts the display; produces a solid white screen on V2 hardware)
+- **Panel offsets**: `XSTART=0 / YSTART=24`, `invertDisplay(false)`
+- **Upload port**: COM4 (this dev machine); auto-detected by PlatformIO
+- **Flash partition**: `partitions_tracker_v2.csv`
+
+### GPIO assignments (do NOT reuse these)
+
+| Pin(s)         | Function                                  |
+|----------------|-------------------------------------------|
+| 38,39,40,41,42 | TFT CS/DC/RST/SCLK/MOSI                  |
+| 21             | TFT backlight (HIGH = on)                 |
+| 33, 34         | UC6580 GNSS UART RX/TX (UART1)            |
+| 3              | VTFT/VGNSS rail enable (HIGH = on)        |
+| 2              | VBAT divider enable (HIGH only on sample) |
+| 1              | VBAT ADC1_CH0                             |
+| 0              | USER button (active LOW)                  |
+| 19, 20         | USB D+/D-                                 |
+| 4,5,6,7        | SD MISO/SCK/MOSI/CS (FSPI/SPI2)          |
+| Internal       | SX1262 LoRa SPI                           |
+
+### SD card: HiLetgo HW-125
+
+**Critical**: wire VCC to Heltec 5V, NOT 3V3. The onboard AMS1117-3.3V LDO
+needs at least 4.4 V input. At 3V3 the card gets ~2 V and will not respond.
+This burned a full debug session — see Lessons Learned.
+
+| HW-125 | Heltec | Notes              |
+|--------|--------|--------------------|
+| GND    | GND    |                    |
+| VCC    | 5V     | feeds onboard LDO  |
+| MISO   | GPIO 4 |                    |
+| MOSI   | GPIO 6 |                    |
+| SCK    | GPIO 5 |                    |
+| CS     | GPIO 7 |                    |
+
+---
+
+## Firmware Build & Flash
+
+```powershell
+# Always run from the repo root
+cd <repo-root>
+
+# Build
+pio run -e heltec_tracker_v2
+
+# Flash (device on COM4)
+pio run -e heltec_tracker_v2 -t upload
+
+# Flash with explicit port
+pio run -e heltec_tracker_v2 -t upload --upload-port COM4
+
+# Capture boot sequence (native USB-CDC needs this helper)
+python capture_boot.py
+
+# Live serial tail
+python scripts\drive.py listen 30
+
+# Interactive serial REPL
+python scripts\drive.py repl
+```
+
+**Firmware version**: tracked in `src/config.h` as `FW_VERSION`.
+Current: `0.2.0`.
+
+---
+
+## Secrets (Firmware)
+
+`src/secrets.h` is gitignored. Create it from `src/secrets.h.example`:
+
+```cpp
+namespace secrets {
+constexpr const char* WIFI_SSID        = "YourNetwork";
+constexpr const char* WIFI_PASS        = "YourPassword";
+constexpr const char* INGEST_URL       = "http://192.168.86.48:8030/ingest/csv";
+constexpr uint32_t    UPLOAD_INTERVAL_MS = 60000;
+}
+```
+
+Empty `WIFI_SSID` or `INGEST_URL` disables the Wi-Fi uploader silently.
+
+---
+
+## Firmware Subsystems
+
+### BLE / RadiaCode — `radiacode.{h,cpp}`
+
+- NimBLE-Arduino 1.4.x; service UUID `e63215e5-7003-49d8-96b0-b024798fb901`
+- States: `Idle → Scanning → Connecting → Connected → Streaming`
+- **Critical build flags** (in `platformio.ini`) for RC-110 BT5 extended advertising:
+  - `CONFIG_BT_NIMBLE_EXT_ADV=1`
   - `CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES=0`
   - `CONFIG_BT_NIMBLE_EXT_ADV_MAX_SIZE=255`
   - `CONFIG_BT_CTRL_SCAN_DUPL_TYPE_DATA_DEVICE=1`
-  - `CONFIG_BT_CTRL_SCAN_DUPL_TYPE=2` (per-device dedup, not per-data)
-- Pinned-target preference: once you `c <addr>` the address is stored
-  in NVS so the device only reconnects to that exact peer (avoids
-  pairing with whichever BT5 advertiser is loudest).
-- Long-press on PRG button = picker (lists nearby BLE peers by RSSI).
-- Quick-drop detection: if an RC-110 connects then disconnects within
-  the first 750 ms we tear the link down completely instead of letting
-  NimBLE keep the half-open state.
-- Use `secureConnection()` immediately after connect for the 110 — it
-  expects encryption before the first GATT read.
-- Write notifications: write-without-response on the data char.
+  - `CONFIG_BT_CTRL_SCAN_DUPL_TYPE=2`
+- Pinned-target address (NVS key `grab_pat`) prevents reconnect to wrong peer
+- Call `secureConnection()` immediately after connect for RC-110
 
-Serial console commands related to BLE (see `main.cpp`):
+### GPS — `gps_module.{h,cpp}`
 
-| Command         | Effect |
-|-----------------|--------|
-| `s [secs]`      | manual scan, default 8s, max ~60s |
-| `c <mac> [pin]` | connect (and pin in NVS for next boot) |
-| `D`             | disconnect but keep pinned target |
-| `X`             | disconnect AND clear pinned target |
+- UC6580 on UART1 (RX=33, TX=34); auto-baud sweep 115200→9600→38400→57600
+- **`bestEpochMs()`**: anchors UTC+millis pair on each GPS fix, advances
+  monotonically through GPS outages so timestamps never stall or duplicate
+- Samples skipped until `bestEpochMs() >= MIN_VALID_TS_MS` (2020-01-01)
+  to prevent `millis()`-since-boot from poisoning session timestamps
+- Serial log: `[GPS] UTC anchor set: ...` / `[GPS] UTC anchor refreshed: ... (drift Xms)`
 
-### 4.2 GPS — `gps_module.{h,cpp}`
+### Session Storage — `session_store.{h,cpp}`
 
-- **UC6580** chip on UART1 (RX=33, TX=34).
-- Auto-baud sweep: 115200 → 9600 → 38400 → 57600. Picks the first
-  baud that produces real NMEA bytes. The factory default is 115200
-  on this carrier but some refurb units come back at 9600.
-- TinyGPSPlus parses; we expose `hasFix()`, `lat()`, `lng()`,
-  `hdop()`, sat count, byte counter, age in ms.
-- Serial commands:
-  | Command           | Effect |
-  |-------------------|--------|
-  | `g <cmd>`         | send a raw NMEA `$P...` command |
-  | `GPASSTHRU [secs]`| pass-through GPS UART to USB-CDC |
-  | `GREBAUD <baud>`  | re-init at a specific baud and persist |
-- Heartbeat row every 3 s prints
-  `[HB] uptime=Xs fix=N sats=N hdop=H gpsB=N gpsAge=Xms baud=N rcState=N rec=0/1 samples=N`
-  — leave this on for any session where you suspect link issues.
+- Primary: SdFat on FSPI (GPIO 4-7)
+- Fallback: LittleFS (5.9 MB partition) — currently disabled
+  (`cfg::SD_REQUIRED = true`), failure is a hard error on screen
+- CSV schema: `timestampMs,uSvPerHour,cps,latitude,longitude,deviceId`
+- Sessions are append-only; `removeSession()` refuses to delete active session
+- Serial log on start/stop: `[REC] START: id=...` / `[REC] STOP: id=... samples=N`
 
-### 4.3 TFT UI — `ui.{h,cpp}`
+### TFT UI — `ui.{h,cpp}`
 
-- Adafruit ST7735 driver in **landscape** (rotation=1, ribbon at right).
-- 160×80 panel uses `TFT_X_OFFSET=1, TFT_Y_OFFSET=26` (mini panel).
-- Background `BLACK`, dose green `GREEN`, alarm `RED`, mute `DIM_GREY`.
-- Screens (cycled by short-press, in order):
-  1. **STATS**: dose rate, count rate, RC connection state, battery %
-  2. **GPS**: fix, sats, HDOP, lat/lng, baud, byte count
-  3. **STORAGE**: REC state, sample count, disk %, session count.
-     Shows a hard-fail screen instead when storage init failed.
-  4. **PICKER** (long-press): nearby BLE peers, sorted by RSSI
-- Long-press on STATS = toggle recording.
-- Forced-redraw flag avoids ST7735 flicker on per-frame redraws.
+- ST7735 landscape rotation=1; 160×80; colors: GREEN `#00E676`, RED, DIM_GREY
+- Screens cycled by short-press: STATS → GPS → STORAGE → PICKER (long-press)
+- **Stop-recording requires DOUBLE long-press** (added v0.2.0):
+  - First long-press on STORAGE while recording: shows red "HOLD AGAIN: STOP REC"
+  - Second long-press within 5 seconds: stops recording
+  - Single press, short press, or 5-second timeout cancels — recording continues
+  - Starting recording still requires only one long-press (no confirmation)
+- This prevents accidental stop from road vibration bumping the button
 
-### 4.4 Storage — `session_store.{h,cpp}`
+### Wi-Fi Uploader — `wifi_uploader.{h,cpp}`
 
-The most-iterated file in the tree. **Three** independent backends
-attempted in this order:
-
-1. **SdFat** (greiman/SdFat 2.2.x) — primary. Has its own SPI driver
-   that bypasses ESP-IDF's `sd_diskio`. Mount sweep: 8 MHz → 4 MHz →
-   1 MHz → 400 kHz, with a retry loop of `SD_INIT_RETRIES=6` and
-   `SD_INIT_RETRY_GAP_MS=250` for cold-boot LDO ramp.
-2. **SD_MMC 1-bit** — uses the dedicated SDMMC peripheral on the
-   same physical wires (`SCK→CLK, MOSI→CMD, MISO→D0`, CS tied HIGH).
-   Different driver, different DMA path. **Currently always fails on
-   our cards** (returns `0x107 ESP_ERR_TIMEOUT`); kept as fallback for
-   different cards / different breakouts.
-3. **SD-over-SPI** — Arduino-ESP32 stock `sd_diskio.cpp`. Multi-clock
-   retry with format-if-empty. Has the well-known
-   [arduino-esp32#6081](https://github.com/espressif/arduino-esp32/issues/6081)
-   "no token received" regression on some cards. Fails on ours.
-4. **LittleFS** — only if `cfg::SD_REQUIRED == false`. Default is
-   `true`, so a missing/dead SD card now produces a hard failure and
-   the user is told to reboot.
-
-Backends are exposed as `enum class Backend { None, LittleFs, Sd, SdFat, Failed }`.
-
-`hasUsableBackend()` is the single guard used by every storage method.
-When `backend_ == Failed`, recording is refused and the STORAGE screen
-shows a red "STORAGE INIT FAILED — please reboot" message.
-
-CSV row format (matches the Android app exactly):
-
-```
-timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
-```
-
-One file per session at `/sessions/<id>.csv`. `<id>` is
-`YYYYMMDD_HHMMSS` if the system time is set, else `boot_<millis>`.
-The `/active.txt` marker holds the active session id so we can resume
-through a power loss.
-
-#### Why SdFat exposes `FsFile` and not `fs::File`
-
-SdFat does not derive from `fs::FS`, so we cannot just hand it to the
-`fs::FS*` pointer the LittleFS path uses. Instead `session_store.cpp`
-branches on `backend_ == Backend::SdFat` everywhere it touches files.
-This is uglier than ideal but it works and we don't expect to add a
-fourth backend. If a fifth lands, write a thin `fs::FS` shim instead.
-
-#### Storage screen budget
-
-70 B/sample × 1 Hz × 16 GB ≈ **7 years of continuous recording** on
-the verified 16 GB card. Realistic per-day write volume is ≈6 MB.
-You will fill the battery 1000× before you fill the card.
-
-### 4.5 Wi-Fi uploader — `wifi_uploader.{h,cpp}`
-
-- Pinned to **core 0** so HTTP timeouts and Wi-Fi connect retries
-  cannot freeze the BLE stack or UI button polling on core 1.
-- Stack 8192 B; priority lower than NimBLE/loop.
-- Trigger: every `secrets::UPLOAD_INTERVAL_MS` (default 60 s) or via
-  `xTaskNotifyGive` (e.g. on session stop).
-- Reads each session as a single string via
-  `SessionStore::readSessionToString(id, MAX_BODY_BYTES, body)` so the
-  uploader is backend-agnostic.
-- POSTs to `secrets::INGEST_URL` (FastAPI service in `middleware/vega-tracker-ingest`).
-- Tracker id is derived from chip MAC: `esp32-aabbccddeeff`.
-
-### 4.6 Battery monitor — `main.cpp`
-
-- VBAT divider on GPIO 1, divider enable on GPIO 2 (HIGH only during
-  sample). 12-bit ADC, full scale ~3.3 V, multiplier `5.05` (empirical).
-- Segmented LiPo curve in `readBatteryPercent()` — not pretty but
-  matches the pack's discharge knee.
+- FreeRTOS task pinned to core 0 (keeps BLE/GPS on core 1 uninterrupted)
+- Uploads completed sessions via `POST /ingest/csv` every 60 seconds
+- Deletes session file from SD after successful 2xx response
+- Headers: `X-Session-Id`, `X-Device-Id`, `X-Tracker-Id`, `X-Firmware`
 
 ---
 
-## 5. Build / flash / test loop
-
-Always do this from the project root **first**:
-
-```powershell
-cd c:\Users\ryans\source\repos\RadiaCodeAndroidDataCollection\heltec_tracker
-```
-
-### Build
-
-```powershell
-pio run -e heltec_tracker_v2
-```
-
-Clean output ends with `[SUCCESS]`. Warnings about
-`CONFIG_BT_CTRL_SCAN_DUPL_TYPE` redefinition are expected and harmless.
-
-### Flash
-
-```powershell
-pio run -e heltec_tracker_v2 -t upload
-```
-
-**Always specify `-e heltec_tracker_v2` explicitly.** Flashing the
-V1.2 env on V2 hardware inverts the display and produces a white screen.
-
-The Heltec V3 uses native USB-CDC, so PlatformIO can flash without
-manual button presses.
-
-### Capture boot
-
-The native USB-CDC port does not respond to a plain RTS pulse the way
-classic ESP32 boards do. Use the helper:
-
-```powershell
-python capture_boot.py        # at heltec_tracker/
-```
-
-The script drives DTR low + RTS low to assert the EN pin's reset, then
-records 12 s of serial output.
-
-### Live console
-
-```powershell
-python scripts\drive.py listen 30          # 30 s tail
-python scripts\drive.py cmd "SDSTAT" --listen 4
-python scripts\drive.py repl               # interactive
-```
-
-### Pull sessions off the device
-
-```powershell
-python scripts\download_sessions.py        # dumps + WIPES card by default
-python scripts\download_sessions.py --no-wipe  # opt-out of the wipe
-```
-
-### Plot a captured session
-
-```powershell
-python scripts\plot_session_map.py path\to\session.csv
-```
-
-Opens an interactive Folium map (dose + count layers, heatmap,
-satellite tiles).
-
----
-
-## 6. Serial console reference
+## Serial Console Reference
 
 Connection: 115200 baud, USB-CDC. Type `?` or `HELP` for the live list.
 
-Boot banner (success):
+| Command          | Effect |
+|------------------|--------|
+| `?` / `HELP`     | command list |
+| `HB`             | force a heartbeat row |
+| `s [secs]`       | BLE scan (default 8s) |
+| `c <mac> [pin]`  | connect + pin target |
+| `D`              | disconnect, keep pin |
+| `X`              | disconnect, clear pin |
+| `START` / `STOP` | toggle recording |
+| `LS`             | list sessions |
+| `DUMP <id>`      | stream one CSV |
+| `DUMPALL`        | stream all CSVs |
+| `WIPE`           | delete all CSVs (refuses active) |
+| `RM <id>`        | delete one session |
+| `STATFS`         | storage stats |
+| `SDSTAT`         | SD card status |
+| `g <nmea>`       | inject NMEA command |
+| `GPASSTHRU [s]`  | GPS UART passthrough |
+| `GREBAUD <baud>` | switch GPS baud |
 
+Heartbeat format (every 3 s):
 ```
-HTIT-Tracker firmware v0.1.0 starting...
-[SD] trying SdFat on SCK=5 MISO=4 MOSI=6 CS=7
-[SdFat] mounted at 8000000 Hz attempt=0: size=15193MB fatType=32
-[STORE] backend=SdFat used=0 total=4294967295 cardSizeMB=15193
-[WIFI] uploader armed; ssid='...' url='...' interval=60s trackerId=esp32-...
-Setup complete
-[RC] state=1 addr=
+[HB] uptime=Xs fix=N sats=N hdop=H gpsB=N gpsAge=Xms baud=N rcState=N rec=0/1 samples=N
 ```
-
-Boot banner (storage failure):
-
-```
-[STORE] FATAL: SD card required but not detected.
-[STORE]        Recording is DISABLED until reboot.
-[STORE]        Reseat the card / check 5V on HW-125 VCC, then power-cycle.
-```
-
-| Command          | Subsystem | Effect |
-|------------------|-----------|--------|
-| `?` / `HELP`     | meta      | command list |
-| `HB`             | meta      | force a heartbeat row |
-| `s [secs]`       | BLE       | manual scan |
-| `c <mac> [pin]`  | BLE       | connect (and pin) |
-| `D`              | BLE       | disconnect, keep pin |
-| `X`              | BLE       | disconnect, clear pin |
-| `START` / `STOP` | session   | toggle recording |
-| `LS`             | session   | list session ids + sizes |
-| `DUMP <id>`      | session   | stream one CSV with begin/end markers |
-| `DUMPALL`        | session   | stream every CSV |
-| `WIPE`           | session   | delete every CSV (refuses active) |
-| `RM <id>`        | session   | delete one (refuses active) |
-| `STATFS`         | storage   | backend / used / total / pct / sessions |
-| `SDSTAT`         | storage   | backend / mounted / cardSizeMB |
-| `g <nmea>`       | GPS       | inject NMEA command |
-| `GPASSTHRU [s]`  | GPS       | passthrough mode |
-| `GREBAUD <baud>` | GPS       | switch baud and persist |
-
-The framing markers used by `DUMP*`:
-
-```
-[DUMP-BEGIN] id=<id> bytes=<n> samples=<m>
-<raw csv body>
-[DUMP-END] id=<id>
-[DUMP-ALL-BEGIN] count=<k>
-... per-session ...
-[DUMP-DONE] ok=<j> total=<k>
-```
-
-`scripts/download_sessions.py` parses these.
 
 ---
 
-## 7. Lessons learned
+## Deploy API (vega-tracker-ingest)
 
-In rough chronological order. All of these were paid for in real
-debug time; do not re-litigate them.
+```powershell
+cd api\vega-tracker-ingest
+.\deploy.ps1              # copy + build + start container
+.\deploy.ps1 -TestOnly    # health check only
+.\deploy.ps1 -SkipCopy    # rebuild container without re-copying files
+```
 
-### 7.1 BLE — RadiaCode-110
+What `deploy.ps1` does:
+1. Reads `.env` for SSH creds, remote path, port, Mongo URI
+2. `rsync`/`scp` source to `darkmatter2222@192.168.86.48:/home/darkmatter2222/vega-tracker-ingest`
+3. `docker compose up --build -d` on the remote
+4. Polls `GET /health` until healthy
 
-- **Symptom**: scan finds peer, `CONNECT_REQ` issued, never completes.
-  Serial logs show `status=13` from NimBLE.
-- **Root cause**: RC-110 advertises with **BT5 extended advertising**
-  on secondary channels. Stock NimBLE in our core won't follow the
-  `AUX_ADV_IND` pointers without `CONFIG_BT_NIMBLE_EXT_ADV=1`.
-- **Fix**: build flags listed in §4.1.
-- See [NimBLE issue #572](https://github.com/h2zero/NimBLE-Arduino/issues/572).
+Verify manually:
+```powershell
+ssh darkmatter2222@192.168.86.48 "curl -s http://localhost:8030/health"
+ssh darkmatter2222@192.168.86.48 "curl -s http://localhost:8030/info"
+```
 
-- **Symptom**: connect succeeds, then disconnects within ~750 ms.
-- **Root cause**: 110 expects `secureConnection()` immediately. Without
-  it the peer drops the half-open link.
-- **Fix**: call `secureConnection()` before any GATT read.
+### API Endpoints
 
-- **Symptom**: connect then immediately reconnects to a different
-  peer (an "imposter" advertiser on the same service UUID).
-- **Fix**: persistent pinned target in NVS (key `grab_pat`).
+| Method | Path                     | Description |
+|--------|--------------------------|-------------|
+| GET    | /health                  | liveness + mongo ping |
+| GET    | /info                    | version, collection counts, sample rate |
+| GET    | /sessions                | list sessions (id, device, samples, first/last ts) |
+| GET    | /session/{id}            | session detail (up to 5000 samples) |
+| POST   | /ingest/csv              | upload one session CSV |
+| POST   | /admin/recompute-sessions | purge pre-2020 rows, recompute all session metadata |
 
-### 7.2 GPS
+### Ingest CSV Headers
 
-- **Symptom**: GPS module silent.
-- **Root cause**: VTFT/VGNSS rail (GPIO 3) starts LOW after reset.
-- **Fix**: drive GPIO 3 HIGH in `enablePeripherals()`.
+```
+X-Session-Id    required   "boot_362620" or "20260426_104210"
+X-Device-Id     optional   RadiaCode BLE MAC without colons
+X-Tracker-Id    optional   ESP32 chip ID / MAC
+X-Firmware      optional   firmware version string
+```
 
-- **Symptom**: bytes flow but TinyGPSPlus parses nothing.
-- **Root cause**: factory default baud varies across UC6580 batches
-  (115200 vs 9600).
-- **Fix**: auto-baud sweep on first start, persist the working baud.
+### MIN_VALID_TS_MS
 
-- **Symptom**: session spans 177 million seconds (56 years). One row
-  with `timestampMs` in the low thousands poisons the session metadata.
-- **Root cause**: before GPS UTC was acquired, the code fell back to
-  `millis()` (e.g. 1777 ms since boot) as the timestamp. That tiny
-  value made the session's `firstTsMs` look like 1970.
-- **Fix** (`main.cpp`): skip samples entirely until `bestEpochMs()`
-  returns a value >= `MIN_VALID_TS_MS` (2020-01-01). Never use
-  `millis()` as a wall-clock fallback.
+All rows with `timestampMs < 1_577_836_800_000` (2020-01-01 UTC) are rejected
+by the API. Old firmware used `millis()`-since-boot (e.g. 1777) as timestamps
+before GPS UTC was acquired — these would corrupt session metadata.
 
-- **Symptom**: tracker shows "recording" and the sample counter
-  increments, but no new rows appear in the server database — especially
-  after walking indoors and losing GPS fix.
-- **Root cause**: TinyGPS++ **latches** the last good date/time from
-  the most recent NMEA sentence and never auto-advances those values.
-  `hasUtc()` returns `true` (latched values are still "valid"), but
-  `utcEpochMs()` returns the same frozen UTC for every sample. The
-  ingest API has a unique index on `{sessionId, timestampMs}` and
-  silently drops all duplicate-timestamp rows.
-- **Fix** (`gps_module.{h,cpp}`): added `bestEpochMs()`. It anchors
-  a `(utcAnchorMs_, millisAnchor_)` pair whenever a fresh GPS time fix
-  is available (re-anchors at most every 30 s) and returns
-  `utcAnchorMs_ + (millis() - millisAnchor_)` so timestamps keep
-  advancing monotonically through GPS outages. `main.cpp` calls
-  `bestEpochMs()` instead of `utcEpochMs()`.
+### MongoDB Admin
 
-### 7.3 V1.2 vs V2 panel — white-screen trap
+```powershell
+# Get a Mongo shell on the server
+ssh darkmatter2222@192.168.86.48
 
-- **Symptom**: after flashing, the device shows a solid white screen
-  (including the boot splash).
-- **Root cause**: the `heltec_tracker_v1_2` PlatformIO env sets
-  `TFT_INVERT = true` and panel offsets `XSTART=1/YSTART=26`. The V2
-  hardware needs `TFT_INVERT = false` and `XSTART=0/YSTART=24`. Flashing
-  V1.2 firmware on V2 hardware produces a fully white display.
-- **Fix**: always use `-e heltec_tracker_v2`. The `platformio.ini`
-  `default_envs` is now set to `heltec_tracker_v2` to prevent accidents.
-- **Diagnostic**: if you see a white screen, first ask "did I flash the
-  right env?" before touching any firmware code.
+# Mongo shell (server-side)
+mongosh "mongodb://ryan:Welcome123!@localhost:27017/?authSource=admin"
 
-### 7.4 SD card — the big one
+# Useful queries
+use radiacode
+db.tracker_sessions.find().sort({firstTsMs:-1}).limit(10).pretty()
+db.tracker_samples.countDocuments({sessionId:"boot_362620"})
+db.tracker_samples.find({sessionId:"boot_362620"}).sort({timestampMs:1}).limit(5)
 
-A multi-day debug. The full triage:
-
-1. **First wired up the HW-125 with VCC → 3V3.** Got
-   `APP_OP_COND failed: 255` and later `no token received`.
-2. **Tried swapping MISO/MOSI** in software. New errors (`crc error`,
-   `GO_IDLE_STATE failed`) — original wiring was correct, reverted.
-3. **Tried slower SPI clocks** (1 MHz, 400 kHz) and `INPUT_PULLUP`
-   on MISO. Same failure pattern.
-4. **Switched HSPI → FSPI bus.** No change.
-5. **Added 100-cycle SPI-mode wakeup bit-bang** with CS HIGH (per the
-   SD spec's 74-cycle init). No change.
-6. **Multi-retry loop with format-if-empty.** No change.
-7. **Tried SD_MMC 1-bit mode** (different peripheral entirely). New
-   error: `sdmmc_init_ocr: send_op_cond returned 0x107` (timeout).
-8. **Web search led to** [arduino-esp32#6081](https://github.com/espressif/arduino-esp32/issues/6081)
-   and [ESP32-audioI2S#245](https://github.com/schreibfaul1/ESP32-audioI2S/issues/245).
-   Documented workaround: `greiman/SdFat` library V2.
-9. **Added SdFat preflight** with its own SPI driver. **Same
-   failure**: `errCode=0x17` (CARD_INIT_NOT_RESPONSIVE).
-10. **Conclusion**: three independent driver implementations on two
-    different ESP32-S3 hardware peripherals all failing to receive
-    a single byte means the issue is not software. It is electrical.
-11. **Root cause (finally)**: the HW-125's **AMS1117-3.3V LDO has
-    ~1.1 V dropout**. Wired VCC → 3V3 means the LDO input is 3.3 V
-    and the output is ~2.0-2.5 V — well below the 2.7 V SD spec
-    minimum. The card cannot run.
-12. **Fix (one wire move, no soldering)**: VCC → **5V** on the Heltec.
-    SdFat mounts at 8 MHz on the first try.
-
-Lessons:
-- **If three independent SPI/SDMMC drivers all fail to get any byte
-  back from the card, stop debugging software.** The MCU is not the
-  problem; the card is not powered or not wired right.
-- **Always check the breakout's onboard regulator.** The HW-125
-  *looks* like a passive 3.3 V module but it has an LDO that needs
-  5 V input to do its job. Same goes for many cheap modules with
-  AMS1117 / LM1117 / MIC5219 footprints.
-- **Trust the boot logs over the schematic.** The boot log told us
-  three different drivers were not seeing any response on MISO. That
-  is the signature of "card not powered", not "software bug".
-
-Then once SdFat worked but we still had cold-boot intermittence on
-battery:
-
-13. **Symptom**: USB boots fine, battery cold-boot drops to LittleFS.
-14. **Root cause**: HW-125 LDO ramp on cold-start sometimes exceeds
-    the original 50 ms `delay()` between `gSdSpi.begin()` and
-    `gSdFat.begin()`.
-15. **Fix**: outer retry loop (`SD_INIT_RETRIES=6, gap=250 ms`).
-
-And a UX wart we fixed:
-
-16. **Symptom**: when SD failed, the device silently used the 1.5 MB
-    LittleFS partition. Users assumed they were writing to the SD
-    card and lost hours of data.
-17. **Fix**: `cfg::SD_REQUIRED = true` (default). Storage failure is
-    now a hard error with an unmistakable red on-screen message.
-
-### 7.5 Wi-Fi uploader
-
-- **Symptom**: BLE link gets jittery during uploads.
-- **Root cause**: HTTPClient blocks core 1 (the Arduino loop core)
-  while POSTing.
-- **Fix**: pin uploader to core 0 with `xTaskCreatePinnedToCore`.
-
-### 7.6 PlatformIO / build
-
-- **C++14 digit separators** (`20'000'000`) failed to compile on this
-  toolchain. Use plain integers.
-- **Default LittleFS label** is `spiffs`, but our partition is
-  labelled `littlefs` (despite using the SPIFFS subtype because that
-  is how Arduino-ESP32 maps the LittleFS driver). Pass the explicit
-  label: `LittleFS.begin(true, "/littlefs", 10, "littlefs")`.
-- **`monitor_speed = 115200`** must match `Serial.begin()`. The
-  PlatformIO monitor can be flaky with native USB-CDC; prefer
-  `scripts/drive.py listen` which we control end-to-end.
+# Recompute sessions after data fix
+curl -X POST http://192.168.86.48:8030/admin/recompute-sessions
+```
 
 ---
 
-## 8. Configuration knobs
+## Deploy Web Viewer (vega-tracker-viewer)
 
-All in `src/config.h` under `namespace cfg`. Don't override these
-elsewhere; tweak them here and recompile.
+```powershell
+cd web\vega-tracker-viewer
+.\deploy.ps1              # copy + build Docker image + start container
+.\deploy.ps1 -TestOnly    # check container health only
+.\deploy.ps1 -SkipCopy    # rebuild image without re-copying source
+```
+
+The React app is built inside the Docker image at build time (Vite build).
+`API_BASE` env var is injected at container runtime via `nginx.conf`
+substitution so the compiled JS references the right API URL.
+
+Viewer URL: `http://192.168.86.48:8031/`
+
+---
+
+## Python Dev Tools (scripts/)
+
+```powershell
+# Tail serial for 30 seconds
+python scripts\drive.py listen 30
+
+# Send a command and tail output
+python scripts\drive.py cmd "LS" --listen 4
+
+# Interactive REPL
+python scripts\drive.py repl
+
+# Download all sessions from device to local CSVs
+python scripts\download_sessions.py
+python scripts\download_sessions.py --no-wipe   # keep files on SD card
+
+# Plot a session on an interactive map
+python scripts\plot_session_map.py path\to\session.csv
+
+# Watch overnight logging
+python scripts\overnight_watch.py
+
+# Trigger device reset and capture the first 12 seconds of boot output
+python scripts\capture_boot.py
+```
+
+---
+
+## Data Schema
+
+CSV on device (and what gets POSTed to the API):
+```
+timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
+1746114660123,0.142,12.0,47.6062,-122.3321,5243066020F4
+```
+
+- `timestampMs`: Unix epoch ms (GPS-derived via `bestEpochMs()`)
+- `uSvPerHour`: dose rate in micro-Sieverts per hour (raw from RadiaCode)
+- `cps`: counts per second (raw from RadiaCode)
+- `latitude` / `longitude`: decimal degrees (0.0,0.0 = no GPS fix)
+- `deviceId`: RadiaCode BLE MAC without colons (e.g. `5243066020F4`)
+
+MongoDB stores the same fields plus:
+- `sessionId`: from `X-Session-Id` header
+- `trackerId`: from `X-Tracker-Id` header
+- `firmware`: from `X-Firmware` header
+- `loc`: GeoJSON Point `{type:"Point", coordinates:[lng,lat]}` (non-zero GPS only)
+
+---
+
+## Configuration Knobs
+
+All in `src/config.h` under `namespace cfg`. Edit here and recompile.
+
+| Knob                    | Default  | Notes |
+|-------------------------|----------|-------|
+| `SD_ENABLED`            | `true`   | master SD on/off switch |
+| `SD_REQUIRED`           | `true`   | refuse LittleFS fallback; make failure visible |
+| `SD_INIT_RETRIES`       | `6`      | cold-boot retries (LDO ramp time) |
+| `SD_INIT_RETRY_GAP_MS`  | `250`    | ms between SD init retries |
+| `RADIACODE_POLL_MS`     | `1000`   | ~1 Hz BLE poll; keeps RC-110 link alive |
+| `RADIACODE_SCAN_MS`     | `8000`   | default BLE scan duration |
+| `UI_TICK_MS`            | `100`    | TFT redraw cadence |
+| `HEARTBEAT_MS`          | `3000`   | `[HB]` serial heartbeat cadence |
+
+---
+
+## Code Style Rules
+
+- **No emojis** — anywhere (comments, serial logs, UI strings, docs)
+- No C++14 digit separators (`20'000'000`) — this toolchain rejects them
+- Comments explain *why*, not *what*; lean toward "for posterity" on weird knobs
+- Serial output is the only debug surface — be loud and unambiguous at boot
+- One subsystem per `.h`/`.cpp` pair; keep `main.cpp` thin
+
+---
+
+## Stop Conditions (when to ask the user)
+
+Pause and ask only if:
+1. Credentials / secrets are needed that are not in `.env` or `secrets.h`
+2. Production impact — live services that receive real device data
+3. Destructive operations — session data is append-only, never delete rows from MongoDB
+4. Ambiguous requirements
+
+Otherwise, iterate to completion.
+
+---
+
+## Lessons Learned — Do Not Re-Litigate
+
+### BLE — RadiaCode-110
+
+- **Silent connect failures**: RC-110 needs `CONFIG_BT_NIMBLE_EXT_ADV=1`
+  (BT5 extended advertising on secondary channels). Without this flag the
+  device scans but never connects. See `platformio.ini` build_flags.
+- **Disconnect within 750ms**: RC-110 requires `secureConnection()` immediately
+  after connect or the peer drops the link.
+- **Reconnects to wrong peer**: use NVS-pinned target MAC (`grab_pat` NVS key).
+
+### GPS Timestamps
+
+- **millis()-since-boot as timestamp**: if GPS UTC has not been acquired yet,
+  old code used raw `millis()` (e.g. 177 ms) as the timestamp. One such row
+  makes `firstTsMs` look like 1970 and the session span 56 years.
+  Fix: `MIN_VALID_TS_MS` gate (2020-01-01) in both firmware and API;
+  `bestEpochMs()` projects forward via `millis()` delta until GPS locks.
+- **TinyGPS++ latches last fix**: `utcEpochMs()` returns the same frozen
+  timestamp when GPS signal is lost indoors. All rows become identical
+  timestamps and get deduplicated by the unique index on `{sessionId, timestampMs}`.
+  Fix: `bestEpochMs()` advances via `millis()` delta through GPS outages so
+  each row gets a unique, monotonically increasing timestamp.
+
+### Double Long-Press Stop (v0.2.0)
+
+- Road vibration while cycling: a bump would short-press to STORAGE screen,
+  then a sustained bounce = long-press = recording silently stopped.
+  The Wi-Fi uploader uploads and deletes the session file within ~60 seconds.
+  Fix: first long-press shows "HOLD AGAIN: STOP REC" confirmation (5-second
+  window). Second long-press stops. Any other input or timeout cancels.
+
+### V1.2 vs V2 Panel
+
+- Flashing the `heltec_tracker_v1_2` environment on V2 hardware inverts the
+  display and produces a solid white screen. Always use `heltec_tracker_v2`.
+  `default_envs = heltec_tracker_v2` is set in `platformio.ini`.
+
+### SD Card Power (the big one)
+
+- HW-125 SD module VCC must be **5V**, not 3V3. The AMS1117 LDO on the module
+  has ~1.1V dropout; at 3V3 input the card gets ~2V and will not respond to
+  any SPI command. Three different driver implementations all failed for the
+  same root cause.
+  Fix: one wire moved from the 3V3 pin to the 5V pin.
+- Cold-boot intermittence: retry loop (6 attempts, 250ms gap) handles LDO
+  power-rail ramp time.
+- `SD_REQUIRED=true` makes storage failure a hard, visible error on the TFT
+  instead of a silent downgrade to LittleFS.
+
+### Wi-Fi Uploader Jitter
+
+- Running `HTTPClient` on the Arduino loop core (core 1) caused BLE packet
+  jitter, dropping RadiaCode readings.
+  Fix: pin the uploader `xTaskCreatePinnedToCore` to core 0.
+
+---
+
+## Data Schema
+
+CSV on device (and what gets POSTed to the API):
+```
+timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
+1746114660123,0.142,12.0,47.6062,-122.3321,5243066020F4
+```
+
+- `timestampMs`: Unix epoch ms (GPS-derived via `bestEpochMs()`)
+- `uSvPerHour`: dose rate in micro-Sieverts per hour (raw from RadiaCode)
+- `cps`: counts per second (raw from RadiaCode)
+- `latitude` / `longitude`: decimal degrees (0.0,0.0 = no GPS fix)
+- `deviceId`: RadiaCode BLE MAC without colons (e.g. `5243066020F4`)
+
+MongoDB stores the same fields plus:
+- `sessionId`: from `X-Session-Id` header
+- `trackerId`: from `X-Tracker-Id` header
+- `firmware`: from `X-Firmware` header
+- `loc`: GeoJSON Point `{type:"Point", coordinates:[lng,lat]}` (if non-zero)
+
+---
+
+## Configuration Knobs
+
+All in `src/config.h` under `namespace cfg`. Edit here and recompile.
 
 | Knob                    | Default     | Notes |
 |-------------------------|-------------|-------|
 | `SD_ENABLED`            | `true`      | master SD switch |
 | `SD_REQUIRED`           | `true`      | refuse LittleFS fallback |
 | `SD_INIT_RETRIES`       | `6`         | cold-boot retries |
-| `SD_INIT_RETRY_GAP_MS`  | `250`       | gap between retries |
-| `SD_SPI_HZ`             | `20000000`  | unused right now (SdFat sweeps) |
-| `RADIACODE_POLL_MS`     | `1000`      | 110 needs <=1 Hz to keep link alive |
-| `RADIACODE_SCAN_MS`     | `8000`      | default `s` duration |
-| `RADIACODE_RECONNECT_MS`| `5000`      | post-disconnect wait |
-| `UI_TICK_MS`            | `100`       | UI redraw tick |
+| `SD_INIT_RETRY_GAP_MS`  | `250`       | ms between retries |
+| `RADIACODE_POLL_MS`     | `1000`      | ~1 Hz keeps RC-110 link alive |
+| `RADIACODE_SCAN_MS`     | `8000`      | default scan duration |
+| `UI_TICK_MS`            | `100`       | TFT redraw tick |
 | `HEARTBEAT_MS`          | `3000`      | `[HB]` log cadence |
 
-`secrets.h` is gitignored. See `secrets.h.example` for the schema:
+---
 
-```cpp
-namespace secrets {
-constexpr const char* WIFI_SSID = "...";
-constexpr const char* WIFI_PASS = "...";
-constexpr const char* INGEST_URL = "http://host:8030/ingest/csv";
-constexpr uint32_t    UPLOAD_INTERVAL_MS = 60000;
-}
-```
+## Code Style Rules
 
-Empty `WIFI_SSID` or empty `INGEST_URL` disables the Wi-Fi uploader
-silently.
+- **No emojis** — anywhere (comments, logs, UI strings, docs)
+- No C++14 digit separators (`20'000'000`) — toolchain bites
+- Comments explain *why*, not *what*; lean toward "for posterity" on weird knobs
+- Serial output is the only debug surface — be loud and unambiguous at boot
+- One subsystem per .h/.cpp pair; keep `main.cpp` thin
 
 ---
 
-## 9. Code style
+## Stop Conditions (when to ask the user)
 
-- **No emojis** anywhere (UI, comments, logs).
-- **No C++14 digit separators** — toolchain bites.
-- Comments explain *why*, not *what*. Lean toward "for posterity"
-  comments on weird build flags or hardware quirks.
-- Serial output is the only debug surface — be loud and unambiguous
-  at boot about what backend / link state we are in.
-- One subsystem per file pair (`*.h` + `*.cpp`); keep `main.cpp` thin.
-- Free GPIOs are precious — document any new pin in this file's
-  §2.2 and §2.3 tables.
+Pause and ask only if:
+1. Credentials / secrets are needed that are not in `.env` or `secrets.h`
+2. Production impact — live services that receive real device data
+3. Destructive operations — session data is append-only, never delete rows from MongoDB
+4. Ambiguous requirements
+
+Otherwise, iterate to completion.
 
 ---
 
-## 10. Repo / Git
+## Lessons Learned — Do Not Re-Litigate
 
-- Feature branch in active development: `feature/heltec-tracker`.
-- Atomic commits with short summary and bullet body.
-- **Always push after a working change.** Cold-start work has lost
-  state to crashed laptops; never leave a working firmware
-  uncommitted.
-- Never merge to `main` without explicit instruction.
+### BLE — RadiaCode-110
 
----
+- **connect silently fails**: needs `CONFIG_BT_NIMBLE_EXT_ADV=1`
+  (BT5 extended adv on secondary channels). See build flags above.
+- **disconnect within 750ms**: RC-110 requires `secureConnection()` immediately.
+- **reconnects to wrong peer**: use NVS pinned target (`grab_pat`).
 
-## 11. When you get stuck
+### GPS Timestamps
 
-1. **Read the boot log first.** It tells you backend, BLE state,
-   GPS baud, Wi-Fi state in 5 lines.
-2. **Read this file's §7 Lessons Learned.** A surprising fraction
-   of "new" bugs are repeats.
-3. **If three independent drivers/peripherals fail the same way,
-   stop coding and check the wires/power.**
-4. **If a stock arduino-esp32 driver has the bug, check whether
-   the upstream library author has a workaround** (SdFat ↔ SD,
-   NimBLE ↔ ESP-BLE, etc.).
-5. **Reach for `scripts/drive.py` early.** A 5 s `listen` is cheaper
-   than 50 lines of guess-edit-flash-pray.
+- **millis()-since-boot as timestamp**: if GPS UTC not yet acquired the old
+  code used `millis()` (e.g. 177 ms) as the timestamp. One such row makes
+  `firstTsMs` look like 1970 and the session span 56 years.
+  Fix: `MIN_VALID_TS_MS` gate in firmware + API; `bestEpochMs()` projects forward.
+- **TinyGPS++ latches last fix**: `utcEpochMs()` returns the same frozen
+  timestamp when GPS is lost indoors. All rows get identical timestamps,
+  deduplicated by the unique index on `{sessionId, timestampMs}` in MongoDB.
+  Fix: `bestEpochMs()` advances via `millis()` delta through outages.
+
+### Double Long-Press Stop (v0.2.0)
+
+- Road vibration while cycling: short-press scrolled to STORAGE screen,
+  then sustained bump = long-press = session silently stopped.
+  The WiFi uploader uploads and deletes the file within 60 seconds.
+  Fix: first long-press shows "HOLD AGAIN: STOP REC" (5-second window).
+  Second long-press actually stops. Any other input cancels.
+
+### V1.2 vs V2 Panel
+
+- Flashing `heltec_tracker_v1_2` env on V2 hardware = solid white screen.
+  Always use `heltec_tracker_v2`. `default_envs` in `platformio.ini` is set.
+
+### SD Card Power (the big one)
+
+- HW-125 VCC must be 5V, not 3V3. AMS1117 LDO has ~1.1V dropout.
+  At 3V3 input the card gets ~2V and will not respond to any driver.
+  Three different driver implementations all failed for the same reason.
+  Fix: one wire move from 3V3 pin to 5V pin.
+- Cold-boot intermittence: retry loop (6 attempts, 250ms gap) handles LDO ramp time.
+- Silent LittleFS fallback surprises users: `SD_REQUIRED=true` makes
+  storage failure a hard, visible error instead of a silent downgrade.
+
+### Wi-Fi Uploader Jitter
+
+- HTTPClient on the Arduino loop core (core 1) caused BLE jitter.
+  Fix: pin uploader task to core 0 with `xTaskCreatePinnedToCore`.

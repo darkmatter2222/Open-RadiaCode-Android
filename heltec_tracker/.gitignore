@@ -1,14 +1,33 @@
-# Wi-Fi / API credentials (committed as secrets.h.example)
+# =============================================================================
+# Heltec Tracker — .gitignore
+# =============================================================================
+# SECRETS: never commit credentials. Keep .env and secrets.h local only.
+# Populate from .env.example / secrets.h.example when setting up a new clone.
+# =============================================================================
+
+# ----- Firmware secrets -----
 src/secrets.h
 
-# Local serial-capture / debug logs
+# ----- API / web .env files (contain real credentials) -----
+api/**/.env
+web/**/.env
+# catch any .env at any level
+**/.env
+# BUT NOT .env.example — those are safe templates
+!**/.env.example
+
+# ----- Local serial-capture / debug logs -----
 drop*.txt
 grab*.txt
 ride*.txt
+scan_dump.txt
+overnight*.log
 grab_watch.txt
+
+# ----- Raw device data (not source) -----
 data/
 
-# Auto-generated PlatformIO build artifacts
+# ----- PlatformIO build artifacts -----
 .pio/
 .pioenvs/
 .piolibdeps/
@@ -18,3 +37,23 @@ data/
 .vscode/ipch/
 *.bin
 *.elf
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# ----- Node / npm (web viewer dev builds) -----
+node_modules/
+dist/
+.cache/
+
+# ----- OS / editor noise -----
+.DS_Store
+Thumbs.db
+*.swp
+*~
