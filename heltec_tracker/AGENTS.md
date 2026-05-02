@@ -208,7 +208,7 @@ Empty `WIFI_SSID` or `INGEST_URL` disables the Wi-Fi uploader silently.
 ### BLE / RadiaCode — `radiacode.{h,cpp}`
 
 - NimBLE-Arduino 1.4.x; service UUID `e63215e5-7003-49d8-96b0-b024798fb901`
-- States: `Idle → Scanning → Connecting → Connected → Streaming`
+- States: `Idle → Scanning → Connecting → Initializing → Ready → Disconnected`
 - **Critical build flags** (in `platformio.ini`) for RC-110 BT5 extended advertising:
   - `CONFIG_BT_NIMBLE_EXT_ADV=1`
   - `CONFIG_BT_NIMBLE_MAX_EXT_ADV_INSTANCES=0`
@@ -258,27 +258,36 @@ Empty `WIFI_SSID` or `INGEST_URL` disables the Wi-Fi uploader silently.
 
 ## Serial Console Reference
 
-Connection: 115200 baud, USB-CDC. Type `?` or `HELP` for the live list.
+Connection: 115200 baud, USB-CDC. Type `?` for the live list on device.
 
-| Command          | Effect |
-|------------------|--------|
-| `?` / `HELP`     | command list |
-| `HB`             | force a heartbeat row |
-| `s [secs]`       | BLE scan (default 8s) |
-| `c <mac> [pin]`  | connect + pin target |
-| `D`              | disconnect, keep pin |
-| `X`              | disconnect, clear pin |
-| `START` / `STOP` | toggle recording |
-| `LS`             | list sessions |
-| `DUMP <id>`      | stream one CSV |
-| `DUMPALL`        | stream all CSVs |
-| `WIPE`           | delete all CSVs (refuses active) |
-| `RM <id>`        | delete one session |
-| `STATFS`         | storage stats |
-| `SDSTAT`         | SD card status |
-| `g <nmea>`       | inject NMEA command |
-| `GPASSTHRU [s]`  | GPS UART passthrough |
-| `GREBAUD <baud>` | switch GPS baud |
+| Command           | Effect |
+|-------------------|--------|
+| `?`               | command list |
+| `s [secs]`        | BLE scan (default 15s; `RADIACODE_SCAN_MS` only governs auto-reconnect) |
+| `l`               | list scan results (index, address, addrType, RSSI, name) |
+| `c <idx>`         | connect to scan result by index |
+| `c <addr> <type>` | connect to raw BLE address with type (0=public, 1=random) |
+| `x`               | cancel scan / disconnect |
+| `f`               | forget saved peer + trigger immediate rescan |
+| `D`               | disconnect, keep pinned peer |
+| `t <pattern>`     | set auto-grab name pattern (e.g. `t RadiaCode`); bare `t` clears |
+| `g`               | GPS quick status (baud, fix, sats, hdop, age) |
+| `LS`              | list sessions (id, bytes, samples) |
+| `DUMP <id>`       | stream one session CSV to serial |
+| `DUMPALL`         | stream all session CSVs |
+| `WIPE <count>`    | delete all sessions; count must match `LS` output (safety guard) |
+| `STATFS`          | filesystem usage (bytes used/total, session count) |
+| `SDSTAT`          | SD / LittleFS backend status |
+| `GPASSTHRU [s]`   | pipe raw GPS NMEA to serial (default 10s) |
+| `GREBAUD`         | re-probe GPS baud rates |
+| `SYNC`            | force immediate Wi-Fi upload cycle |
+| `WIFISTAT`        | Wi-Fi uploader diagnostics (enabled, busy, counts, last HTTP status) |
+
+Commands that **do not exist** (do not add them):
+- `HB` — heartbeat is automatic every 3s, no serial trigger
+- `START` / `STOP` — recording is button-only, no serial toggle
+- `RM <id>` — `removeSession()` is internal, not serial-exposed
+- `WIPE` (no count) — prints usage; count arg is mandatory
 
 Heartbeat format (every 3 s):
 ```
@@ -381,12 +390,16 @@ python scripts\drive.py listen 30
 # Send a command and tail output
 python scripts\drive.py cmd "LS" --listen 4
 
-# Interactive REPL
-python scripts\drive.py repl
+# Scan for RadiaCode devices, then auto-connect to the best candidate
+python scripts\drive.py auto-connect 18
 
-# Download all sessions from device to local CSVs
+# Download all sessions from device to local CSVs (default port COM3)
 python scripts\download_sessions.py
 python scripts\download_sessions.py --no-wipe   # keep files on SD card
+
+# Port note: drive.py defaults to COM4; download_sessions.py defaults to COM3.
+# Both are hardcoded. Change the PORT / DEFAULT_PORT constant at the top of
+# each script to match your machine, or pass --port on the command line.
 
 # Plot a session on an interactive map
 python scripts\plot_session_map.py path\to\session.csv
@@ -426,16 +439,18 @@ MongoDB stores the same fields plus:
 
 All in `src/config.h` under `namespace cfg`. Edit here and recompile.
 
-| Knob                    | Default  | Notes |
-|-------------------------|----------|-------|
-| `SD_ENABLED`            | `true`   | master SD on/off switch |
-| `SD_REQUIRED`           | `true`   | refuse LittleFS fallback; make failure visible |
-| `SD_INIT_RETRIES`       | `6`      | cold-boot retries (LDO ramp time) |
-| `SD_INIT_RETRY_GAP_MS`  | `250`    | ms between SD init retries |
-| `RADIACODE_POLL_MS`     | `1000`   | ~1 Hz BLE poll; keeps RC-110 link alive |
-| `RADIACODE_SCAN_MS`     | `8000`   | default BLE scan duration |
-| `UI_TICK_MS`            | `100`    | TFT redraw cadence |
-| `HEARTBEAT_MS`          | `3000`   | `[HB]` serial heartbeat cadence |
+| Knob                    | V2 default | V1.2 default | Notes |
+|-------------------------|------------|--------------|-------|
+| `SD_ENABLED`            | `false`    | `true`       | V2 uses internal LittleFS; SD disabled |
+| `SD_REQUIRED`           | `false`    | `true`       | V1.2: hard error on SD failure rather than silent LittleFS fallback |
+| `SD_INIT_RETRIES`       | 6          | 6            | cold-boot retries (LDO ramp time) |
+| `SD_INIT_RETRY_GAP_MS`  | 250 ms     | 250 ms       | ms between SD init retries |
+| `RADIACODE_POLL_MS`     | 1000 ms    | 1000 ms      | ~1 Hz BLE poll; keeps RC-110 link alive |
+| `RADIACODE_SCAN_MS`     | 8000 ms    | 8000 ms      | auto-reconnect scan duration (manual `s` default is 15s) |
+| `UI_TICK_MS`            | 100 ms     | 100 ms       | TFT redraw cadence |
+| `HEARTBEAT_MS`          | 3000 ms    | 3000 ms      | `[HB]` serial heartbeat cadence |
+
+> **Note:** `default_envs = heltec_tracker_v2` — for V2 builds SD is skipped entirely at boot.
 
 ---
 

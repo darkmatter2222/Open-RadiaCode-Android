@@ -1,6 +1,7 @@
-// Heltec HTIT-Tracker V1.2 board config.
-// Pin assignments mirror darkmatter2222/External-GPS-Receiver-Heltec-HTIT-Tracker-V1.2,
-// which is a known-working layout for this exact carrier board.
+// Heltec HTIT-Tracker board config (supports V1.2 and V2 via build flags).
+// Pin assignments mirror darkmatter2222/External-GPS-Receiver-Heltec-HTIT-Tracker-V1.2
+// for the V1.2 layout (known-working reference). V2-specific overrides are
+// selected by TRACKER_HW_V2 in platformio.ini.
 
 #pragma once
 #include <Arduino.h>
@@ -78,7 +79,8 @@ constexpr size_t      MAX_LINE_BYTES  = 160;
 // ---------------- SD card (HW-125 micro-SD breakout, SPI mode) ----------------
 // Wiring (see heltec_tracker/AGENTS.md for the full table):
 //   HW-125 GND  -> Heltec GND
-//   HW-125 VCC  -> Heltec 3V3
+//   HW-125 VCC  -> Heltec 5V   (NOT 3V3 -- AMS1117 LDO needs 5V input;
+//                                card gets ~2V at 3V3 and will not respond)
 //   HW-125 MISO -> GPIO 4
 //   HW-125 MOSI -> GPIO 6
 //   HW-125 SCK  -> GPIO 5

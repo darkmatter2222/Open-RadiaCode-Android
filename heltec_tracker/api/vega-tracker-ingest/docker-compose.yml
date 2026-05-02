@@ -26,11 +26,6 @@ services:
     ports:
       - "${API_PORT:-8030}:8030"
 
-    volumes:
-      # Mount the local firmware/ directory so you can drop new .bin files
-      # and update version.json without rebuilding the image.
-      - ./firmware:/firmware:ro
-
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

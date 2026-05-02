@@ -42,7 +42,6 @@ import pymongo
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError, PyMongoError
 
@@ -57,7 +56,6 @@ SESSIONS_COLL     = os.getenv("MONGO_SESSIONS_COLLECTION", "tracker_sessions")
 API_VERSION       = "0.2.0"
 MAX_BODY_BYTES    = int(os.getenv("MAX_BODY_BYTES", str(8 * 1024 * 1024)))   # 8 MB
 INGEST_BATCH_SIZE = int(os.getenv("INGEST_BATCH_SIZE", "1000"))
-FIRMWARE_DIR      = os.getenv("FIRMWARE_DIR", "/firmware")
 
 # Reject any sample timestamp older than 2020-01-01 UTC.  The Heltec tracker
 # firmware used to fall back to millis()-since-boot (a few hundred ms to a
@@ -103,14 +101,6 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=False,
     allow_methods=["*"], allow_headers=["*"],
 )
-
-# Serve firmware binaries and version.json from FIRMWARE_DIR if it exists.
-# Trackers hit GET /firmware/version.json on boot to check for OTA updates.
-if os.path.isdir(FIRMWARE_DIR):
-    app.mount("/firmware", StaticFiles(directory=FIRMWARE_DIR), name="firmware")
-    log.info("firmware static files mounted from %s", FIRMWARE_DIR)
-else:
-    log.warning("FIRMWARE_DIR %s not found; /firmware/ endpoint disabled", FIRMWARE_DIR)
 
 
 # ---------- helpers ---------------------------------------------------------

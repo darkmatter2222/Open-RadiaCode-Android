@@ -1,7 +1,9 @@
 // HTIT-Tracker firmware entry point.
-// - Heltec WiFi LoRa 32 V3 (ESP32-S3) on the HTIT-Tracker V1.2 carrier.
+// - Heltec WiFi LoRa 32 V3 (ESP32-S3) on the HTIT-Tracker V1.2 or V2 carrier
+//   (selected at compile time via TRACKER_HW_V1_2 / TRACKER_HW_V2 build flags).
 // - Connects (BLE central) to a RadiaCode dosimeter.
-// - Logs CSV samples to LittleFS in the same schema as the Android app:
+// - Logs CSV samples to LittleFS (V2, internal flash) or SD card (V1.2, HW-125)
+//   in the same schema as the Android app:
 //     timestampMs,uSvPerHour,cps,latitude,longitude,deviceId
 
 #include <Arduino.h>
