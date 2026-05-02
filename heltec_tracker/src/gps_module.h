@@ -22,6 +22,12 @@ public:
     // UTC epoch milliseconds, computed from GPS date+time. 0 if no fix.
     uint64_t utcEpochMs();
 
+    // Best-effort wall-clock time in epoch milliseconds. Once GPS UTC has been
+    // seen at least once, this returns (utcAnchor + (millis() - millisAnchor))
+    // so timestamps keep advancing monotonically during GPS outages (e.g.
+    // indoors). Returns 0 only if UTC has never been acquired this boot.
+    uint64_t bestEpochMs();
+
     uint32_t bytesIn() const { return bytesIn_; }
     uint32_t sentencesWithFix() { return gps_.sentencesWithFix(); }
     uint32_t passedChecksum()  { return gps_.passedChecksum(); }
@@ -42,4 +48,11 @@ private:
     uint32_t    bytesIn_ = 0;
     uint32_t    lastByteMs_ = 0;
     uint32_t    currentBaud_ = 0;
+
+    // Anchor that converts ESP32 millis() into wall-clock UTC ms. Set the
+    // first time UTC is seen and re-synced periodically while a fix is live
+    // so we don't accumulate drift from millis() over long sessions.
+    uint64_t utcAnchorMs_  = 0;   // UTC ms at the moment of the anchor
+    uint32_t millisAnchor_ = 0;   // millis() value at the moment of the anchor
+    uint32_t lastUtcSyncMs_ = 0;  // last time we re-anchored from a fresh fix
 };

@@ -110,7 +110,14 @@ void setup() {
             // collapse the timeline (e.g. a row with ts=1777ms makes the
             // session span 56 years on the server). Skipping the first few
             // samples is far better than poisoning the session.
-            const uint64_t ts = gGps.utcEpochMs();
+            //
+            // bestEpochMs() projects forward from the last GPS UTC anchor
+            // using millis(), so timestamps keep advancing (and stay unique
+            // against the server's {sessionId,timestampMs} index) even when
+            // GPS is lost indoors. Without this, every sample during an
+            // outage gets the *same* frozen UTC and is silently dropped as
+            // a duplicate by the ingest API.
+            const uint64_t ts = gGps.bestEpochMs();
             // Sanity floor: ignore anything older than 2020-01-01 UTC, which
             // catches a NEMA parser glitch that occasionally yields tiny ts.
             constexpr uint64_t MIN_VALID_TS_MS = 1577836800000ULL;

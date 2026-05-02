@@ -98,3 +98,24 @@ uint64_t GpsModule::utcEpochMs() {
                  + (int64_t)gps_.time.second();
     return (uint64_t)secs * 1000ULL + (uint64_t)gps_.time.centisecond() * 10ULL;
 }
+
+uint64_t GpsModule::bestEpochMs() {
+    // Re-anchor while we have a *fresh* GPS time fix (age < 5s). This keeps
+    // long sessions accurate against millis() drift. We cap re-anchors to
+    // once per 30s so we don't churn the anchor on every NMEA sentence.
+    const uint32_t now = millis();
+    if (hasUtc() && gps_.time.age() < 5000 &&
+        (lastUtcSyncMs_ == 0 || (now - lastUtcSyncMs_) >= 30000)) {
+        const uint64_t fresh = utcEpochMs();
+        if (fresh != 0) {
+            // Account for the small age of the parsed sentence.
+            utcAnchorMs_   = fresh;
+            millisAnchor_  = now - gps_.time.age();
+            lastUtcSyncMs_ = now;
+        }
+    }
+    if (utcAnchorMs_ == 0) return 0;
+    // Project forward using the monotonic millis() clock so timestamps keep
+    // advancing during GPS outages (indoors, tunnels, etc.).
+    return utcAnchorMs_ + (uint64_t)(now - millisAnchor_);
+}
