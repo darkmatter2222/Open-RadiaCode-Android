@@ -39,6 +39,24 @@ function boundsKey(b) {
   return `${sw.lat.toFixed(4)},${sw.lng.toFixed(4)},${ne.lat.toFixed(4)},${ne.lng.toFixed(4)}`;
 }
 
+// Anything older than 2020-01-01 UTC is treated as garbage (e.g. a sample
+// written before the device acquired UTC time, where ts collapses to
+// `millis()` since boot -- a few hundred ms). One such row in a session is
+// enough to make the session span ~56 years and collapse the time slider.
+const MIN_VALID_TS_MS = 1577836800000;
+
+function compactRows(raw) {
+  return raw
+    .filter(r => r.timestampMs != null && r.timestampMs >= MIN_VALID_TS_MS)
+    .map(r => ({
+      ts:  r.timestampMs,
+      lat: r.latitude,
+      lng: r.longitude,
+      uSv: r.uSvPerHour,
+      cps: r.cps,
+    }));
+}
+
 // ---- main app --------------------------------------------------------------
 
 export default function App() {
@@ -77,16 +95,7 @@ export default function App() {
       if (!rowsBySession[id]) {
         try {
           const raw = await fetchSessionRows(id);
-          const compact = raw
-            .filter(r => r.timestampMs != null)
-            .map(r => ({
-              ts:  r.timestampMs,
-              lat: r.latitude,
-              lng: r.longitude,
-              uSv: r.uSvPerHour,
-              cps: r.cps,
-            }));
-          setRows(prev => ({ ...prev, [id]: compact }));
+          setRows(prev => ({ ...prev, [id]: compactRows(raw) }));
         } catch (e) {
           setError(String(e));
         }
@@ -105,16 +114,7 @@ export default function App() {
     for (const id of next) {
       if (!rowsBySession[id]) {
         fetchSessionRows(id).then(raw => {
-          const compact = raw
-            .filter(r => r.timestampMs != null)
-            .map(r => ({
-              ts:  r.timestampMs,
-              lat: r.latitude,
-              lng: r.longitude,
-              uSv: r.uSvPerHour,
-              cps: r.cps,
-            }));
-          setRows(prev => ({ ...prev, [id]: compact }));
+          setRows(prev => ({ ...prev, [id]: compactRows(raw) }));
         }).catch(e => setError(String(e)));
       }
     }
