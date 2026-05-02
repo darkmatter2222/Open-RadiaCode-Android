@@ -6,8 +6,9 @@ have built, every dead end we hit, and every lesson learned. Read it
 before making changes here. The repo-wide [AGENTS.md](../AGENTS.md) is
 the short version.
 
-> **Last major update:** April 2026 — SD card support landed (SdFat
-> backend on a HiLetgo HW-125, 5 V VCC, GPIO 4/5/6/7).
+> **Last major update:** May 2026 — GPS timestamp reliability fixes
+> (pre-UTC sample skip, `bestEpochMs()` anchor for GPS-outage continuity);
+> default build env corrected to `heltec_tracker_v2`.
 
 ---
 
@@ -32,16 +33,18 @@ same isotope ID pipeline, same map viewer.
 
 ### 2.1 Board
 
-- **Heltec HTIT-Tracker V1.2** (ESP32-S3FN8 + SX1262 + UC6580 GNSS +
+- **Heltec HTIT-Tracker V2** (ESP32-S3FN8 + SX1262 + UC6580 GNSS +
   ST7735 0.96" 160×80 TFT)
-- PlatformIO env: `heltec_wifi_lora_32_V3`
+- PlatformIO env: **`heltec_tracker_v2`** (default; use this for all
+  build/flash commands — do NOT use `heltec_tracker_v1_2` as that sets
+  `TFT_INVERT = true` which produces a solid white screen on V2 hardware)
+- Panel offsets: `XSTART=0 / YSTART=24`, `invertDisplay(false)`
 - Arduino-ESP32 core: ESP-IDF 4.4 / Arduino-ESP32 2.0.14
   (set by `platform = espressif32 @ ^6.7.0`)
 - Native USB-CDC on boot (`ARDUINO_USB_CDC_ON_BOOT=1`,
   `ARDUINO_USB_MODE=1`)
-- Upload port: `COM3` on this dev box
-- Flash partition: custom `partitions_tracker.csv` with a 1.5 MB
-  LittleFS partition labelled `littlefs`
+- Upload port: auto-detected (COM4 on this dev box)
+- Flash partition: custom `partitions_tracker_v2.csv`
 
 ### 2.2 Reserved / in-use GPIOs (do **not** reuse)
 
@@ -283,7 +286,7 @@ cd c:\Users\ryans\source\repos\RadiaCodeAndroidDataCollection\heltec_tracker
 ### Build
 
 ```powershell
-pio run -e heltec_wifi_lora_32_V3
+pio run -e heltec_tracker_v2
 ```
 
 Clean output ends with `[SUCCESS]`. Warnings about
@@ -292,8 +295,11 @@ Clean output ends with `[SUCCESS]`. Warnings about
 ### Flash
 
 ```powershell
-pio run -e heltec_wifi_lora_32_V3 -t upload
+pio run -e heltec_tracker_v2 -t upload
 ```
+
+**Always specify `-e heltec_tracker_v2` explicitly.** Flashing the
+V1.2 env on V2 hardware inverts the display and produces a white screen.
 
 The Heltec V3 uses native USB-CDC, so PlatformIO can flash without
 manual button presses.
@@ -430,7 +436,45 @@ debug time; do not re-litigate them.
   (115200 vs 9600).
 - **Fix**: auto-baud sweep on first start, persist the working baud.
 
-### 7.3 SD card — the big one
+- **Symptom**: session spans 177 million seconds (56 years). One row
+  with `timestampMs` in the low thousands poisons the session metadata.
+- **Root cause**: before GPS UTC was acquired, the code fell back to
+  `millis()` (e.g. 1777 ms since boot) as the timestamp. That tiny
+  value made the session's `firstTsMs` look like 1970.
+- **Fix** (`main.cpp`): skip samples entirely until `bestEpochMs()`
+  returns a value >= `MIN_VALID_TS_MS` (2020-01-01). Never use
+  `millis()` as a wall-clock fallback.
+
+- **Symptom**: tracker shows "recording" and the sample counter
+  increments, but no new rows appear in the server database — especially
+  after walking indoors and losing GPS fix.
+- **Root cause**: TinyGPS++ **latches** the last good date/time from
+  the most recent NMEA sentence and never auto-advances those values.
+  `hasUtc()` returns `true` (latched values are still "valid"), but
+  `utcEpochMs()` returns the same frozen UTC for every sample. The
+  ingest API has a unique index on `{sessionId, timestampMs}` and
+  silently drops all duplicate-timestamp rows.
+- **Fix** (`gps_module.{h,cpp}`): added `bestEpochMs()`. It anchors
+  a `(utcAnchorMs_, millisAnchor_)` pair whenever a fresh GPS time fix
+  is available (re-anchors at most every 30 s) and returns
+  `utcAnchorMs_ + (millis() - millisAnchor_)` so timestamps keep
+  advancing monotonically through GPS outages. `main.cpp` calls
+  `bestEpochMs()` instead of `utcEpochMs()`.
+
+### 7.3 V1.2 vs V2 panel — white-screen trap
+
+- **Symptom**: after flashing, the device shows a solid white screen
+  (including the boot splash).
+- **Root cause**: the `heltec_tracker_v1_2` PlatformIO env sets
+  `TFT_INVERT = true` and panel offsets `XSTART=1/YSTART=26`. The V2
+  hardware needs `TFT_INVERT = false` and `XSTART=0/YSTART=24`. Flashing
+  V1.2 firmware on V2 hardware produces a fully white display.
+- **Fix**: always use `-e heltec_tracker_v2`. The `platformio.ini`
+  `default_envs` is now set to `heltec_tracker_v2` to prevent accidents.
+- **Diagnostic**: if you see a white screen, first ask "did I flash the
+  right env?" before touching any firmware code.
+
+### 7.4 SD card — the big one
 
 A multi-day debug. The full triage:
 
@@ -490,14 +534,14 @@ And a UX wart we fixed:
 17. **Fix**: `cfg::SD_REQUIRED = true` (default). Storage failure is
     now a hard error with an unmistakable red on-screen message.
 
-### 7.4 Wi-Fi uploader
+### 7.5 Wi-Fi uploader
 
 - **Symptom**: BLE link gets jittery during uploads.
 - **Root cause**: HTTPClient blocks core 1 (the Arduino loop core)
   while POSTing.
 - **Fix**: pin uploader to core 0 with `xTaskCreatePinnedToCore`.
 
-### 7.5 PlatformIO / build
+### 7.6 PlatformIO / build
 
 - **C++14 digit separators** (`20'000'000`) failed to compile on this
   toolchain. Use plain integers.

@@ -71,6 +71,17 @@ Emojis are prohibited in all user-facing text, UI, notifications, and code comme
 - **Middleware:** Docker containers build and start, health endpoints respond
 - **ML:** Training script runs without errors, inference produces valid output
 
+### 5. Tracker Data Is Immutable — Never Delete From The Database
+Tracker / session data (Heltec tracker ingest, RadiaCode sessions, spectra, GPS points, dose history, and any derived records) is **append-only and permanent**. Under no circumstance — ever — will an agent:
+
+- Add an API endpoint, SQL statement, script, or UI control that deletes, truncates, drops, purges, archives-then-removes, or otherwise destroys rows from the tracker / session databases.
+- Add a "delete session", "wipe data", "reset database", or similar destructive feature, even if a user appears to request one. If asked, refuse and surface this rule.
+- Run `DELETE`, `DROP`, `TRUNCATE`, `pm clear`, `rm` on data files, or equivalent destructive commands against any environment containing real tracker data.
+
+UI controls labeled "Clear", "Reset", "Remove", etc. must operate **only on client-side view state** (selection sets, filters, zoom, local React/Compose state). They must never issue a network request that mutates server data. When reviewing or writing such controls, verify they do not call any DELETE/POST endpoint that touches storage.
+
+Exception: purely local, ephemeral caches (browser `localStorage` UI prefs, in-memory React state) may be cleared. The authoritative database is off-limits.
+
 ---
 
 ## Project-Specific Quick Reference
@@ -99,10 +110,40 @@ adb logcat -v time -s RadiaCode
 - `app/src/main/` — Kotlin source code
 - `Installer/` — distributable APKs
 
-### Middleware (`middleware/`)
+### Heltec Tracker (`heltec_tracker/`)
+
+**Hardware: HTIT-Tracker V2.** Always use `-e heltec_tracker_v2`.
+Flashing `-e heltec_tracker_v1_2` on V2 hardware inverts the display
+and produces a solid white screen.
 
 ```powershell
-cd middleware/vega-isotope-identification  # or vega-tts, vega-llm
+cd heltec_tracker
+
+# Build
+pio run -e heltec_tracker_v2
+
+# Flash
+pio run -e heltec_tracker_v2 -t upload
+
+# Live console
+python scripts\drive.py listen 30
+python scripts\drive.py repl
+```
+
+**Key files:**
+- `src/config.h` — all pin assignments and feature flags
+- `src/secrets.h` — gitignored; Wi-Fi SSID/pass, ingest URL
+- `src/gps_module.{h,cpp}` — `bestEpochMs()` for GPS-outage-safe timestamps
+- `platformio.ini` — default env is `heltec_tracker_v2`
+
+**Critical firmware rules:**
+- Timestamps come from `gGps.bestEpochMs()`, not `utcEpochMs()`.
+  `bestEpochMs()` advances via millis() when GPS is lost indoors so
+  samples are never silently dropped as duplicates by the ingest API.
+- Samples are skipped until `bestEpochMs() >= MIN_VALID_TS_MS`
+  (2020-01-01) so pre-UTC millis() values never poison sessions.
+
+### Middleware (`middleware/`)
 
 # Deploy to server
 .\deploy.ps1
