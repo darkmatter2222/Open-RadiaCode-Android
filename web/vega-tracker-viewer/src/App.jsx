@@ -30,6 +30,15 @@ function FitBoundsOnce({ bounds, dep }) {
   return null;
 }
 
+// Build a stable, low-precision key from a LatLngBounds so we only re-fit
+// when the visible footprint actually changes (not on every render).
+function boundsKey(b) {
+  if (!b || !b.isValid()) return '';
+  const sw = b.getSouthWest();
+  const ne = b.getNorthEast();
+  return `${sw.lat.toFixed(4)},${sw.lng.toFixed(4)},${ne.lat.toFixed(4)},${ne.lng.toFixed(4)}`;
+}
+
 // ---- main app --------------------------------------------------------------
 
 export default function App() {
@@ -89,6 +98,8 @@ export default function App() {
     const next = new Set(sessions.map(s => s.sessionId));
     setSelected(next);
     // Lazy-fetch any rows we haven't loaded yet.
+    // NOTE: do NOT bump fitTrigger here -- the map auto-refits via the
+    // boundsKey effect below as soon as rows actually land.
     for (const id of next) {
       if (!rowsBySession[id]) {
         fetchSessionRows(id).then(raw => {
@@ -105,7 +116,6 @@ export default function App() {
         }).catch(e => setError(String(e)));
       }
     }
-    setFitTrigger(t => t + 1);
   }
   function selectNone() { setSelected(new Set()); }
 
@@ -152,6 +162,20 @@ export default function App() {
     for (const t of traces) if (t.points) for (const p of t.points) all.push(p);
     return bboxFromPoints(all);
   }, [traces]);
+
+  // Auto-refit the map whenever the bbox actually changes (e.g. a session's
+  // rows finish loading, or the selection changes). This is what makes the
+  // viewer "draw all the way out" -- previously the map was zoomed before
+  // rows arrived, so the polyline rendered outside the viewport and looked
+  // truncated.
+  const fitKey = boundsKey(fitBounds);
+  const lastFitKeyRef = useRef('');
+  useEffect(() => {
+    if (!fitKey) return;
+    if (fitKey === lastFitKeyRef.current) return;
+    lastFitKeyRef.current = fitKey;
+    setFitTrigger(t => t + 1);
+  }, [fitKey]);
 
   // ---- play/pause
   useEffect(() => {
