@@ -1,3 +1,7 @@
+> **Support my work**
+>
+> If this project has helped you, consider supporting my work on [**Buy Me a Coffee**](https://buymeacoffee.com/j6oiubzfnh).
+
 # RadiaCode Data Collection & Isotope Identification
 
 A complete system for radiation detection, data collection, and AI-powered isotope identification using RadiaCode scintillation detectors.
